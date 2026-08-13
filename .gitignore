@@ -1,0 +1,8 @@
+venv/
+state.json
+__pycache__/
+*.pyc
+.DS_Store
+*.jpg
+*.png
+static/sample.csv
