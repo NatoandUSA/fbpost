@@ -46,7 +46,6 @@ def add_account():
     # Generate unique ID
     acc_id = str(uuid.uuid4())[:8]
     
-    # If type is local and profile_id is not specified, use a default folder name
     if acc_type == 'local' and not profile_id:
         profile_id = f"local_profile_{acc_id}"
         
@@ -117,8 +116,11 @@ def run_script():
     account_id = data.get('accountId')
     gpm_api = data.get('gpmApiUrl')
     
+    # Feeling and checkin settings
+    feeling = data.get('feeling', False)
+    checkin = data.get('checkin', False)
+    
     def generate():
-        # Build base command with optional arguments
         base_cmd = [sys.executable, "main.py"]
         if account_id:
             base_cmd.extend(["--account-id", account_id])
@@ -182,6 +184,10 @@ def run_script():
             content = task.get('content', '').strip()
             image = task.get('image', None)
             
+            # Extract task-specific parameters, falling back to global ones
+            task_feeling = task.get('feeling', feeling)
+            task_checkin = task.get('checkin', checkin)
+            
             if not target:
                 continue
                 
@@ -191,6 +197,10 @@ def run_script():
             full_cmd = base_cmd + [cmd, target, content]
             if image:
                 full_cmd.extend(["--image", image])
+            if task_feeling:
+                full_cmd.append("--feeling")
+            if task_checkin:
+                full_cmd.append("--checkin")
                 
             process = subprocess.Popen(
                 full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
@@ -199,7 +209,6 @@ def run_script():
                 yield line
             process.wait()
             
-            # If there are more tasks, wait to avoid spam detection
             if i < total - 1:
                 delay = random.randint(30, 60)
                 yield f"\n[Anti-Spam] Waiting {delay} seconds before next post...\n"

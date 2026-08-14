@@ -1085,4 +1085,100 @@ body {
   }
 }
 
+/* ============================================
+   Diverse Post Settings & Posted Links Card
+   ============================================ */
+
+.diverse-post-settings {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: var(--fb-input-bg);
+  border-radius: var(--fb-radius);
+  border: 1px solid var(--fb-divider);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fb-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label input {
+  cursor: pointer;
+}
+
+.posted-links-card {
+  background-color: var(--fb-card);
+  border-radius: var(--fb-radius);
+  box-shadow: var(--fb-shadow);
+  border: 1px solid var(--fb-divider);
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.posted-links-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--fb-divider);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.posted-links-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.posted-links-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fb-text);
+  margin: 0;
+}
+
+.posted-links-list {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.posted-link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background-color: var(--fb-input-bg);
+  border-radius: 6px;
+  border: 1px solid var(--fb-divider);
+  gap: 12px;
+}
+
+.posted-link-url {
+  font-size: 13px;
+  color: var(--fb-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+}
+
+.posted-link-item .btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+
 

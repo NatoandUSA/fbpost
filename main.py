@@ -3,7 +3,6 @@ import argparse
 import os
 
 def check_state():
-    # If using local profile, state.json is not required globally, so we skip check_state for specific profiles.
     pass
 
 def main():
@@ -21,12 +20,16 @@ def main():
     group_parser.add_argument("url", help="The full URL of the Facebook Group")
     group_parser.add_argument("content", help="The text content of your post")
     group_parser.add_argument("--image", help="Absolute path to an image file", default=None)
+    group_parser.add_argument("--feeling", action="store_true", help="Add a random feeling to the post")
+    group_parser.add_argument("--checkin", action="store_true", help="Add a random check-in location to the post")
     
     # Page command
     page_parser = subparsers.add_parser("page", help="Post to a Facebook Page you manage")
     page_parser.add_argument("url", help="The full URL of the Facebook Page")
     page_parser.add_argument("content", help="The text content of your post")
     page_parser.add_argument("--image", help="Absolute path to an image file", default=None)
+    page_parser.add_argument("--feeling", action="store_true", help="Add a random feeling to the post")
+    page_parser.add_argument("--checkin", action="store_true", help="Add a random check-in location to the post")
     
     # Thread command
     thread_parser = subparsers.add_parser("thread", help="Send a message to a Messenger Thread")
@@ -47,15 +50,14 @@ def main():
     args = parser.parse_args()
     
     if args.command == "auth":
-        # Launch headed auth for the specific account
         from fb_auth import login_account
         login_account(args.account_id, args.gpm_api)
     elif args.command == "group":
         from fb_group import post_to_group
-        post_to_group(args.url, args.content, args.image, args.account_id, args.gpm_api)
+        post_to_group(args.url, args.content, args.image, args.account_id, args.gpm_api, args.feeling, args.checkin)
     elif args.command == "page":
         from fb_page import post_to_page
-        post_to_page(args.url, args.content, args.image, args.account_id, args.gpm_api)
+        post_to_page(args.url, args.content, args.image, args.account_id, args.gpm_api, args.feeling, args.checkin)
     elif args.command == "thread":
         from fb_thread import send_message
         send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)

@@ -60,12 +60,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const accProxy = document.getElementById('acc-proxy');
     const accountsTableBody = document.getElementById('accounts-table-body');
 
+    // Diverse Posting Options & Saved Links Card
+    const diversePostSettingsBar = document.getElementById('diverse-post-settings-bar');
+    const postFeelingOpt = document.getElementById('post-feeling-opt');
+    const postCheckinOpt = document.getElementById('post-checkin-opt');
+    const postedLinksCard = document.getElementById('posted-links-card');
+    const postedLinksList = document.getElementById('posted-links-list');
+    const clearLinksBtn = document.getElementById('clear-links-btn');
+
     let currentMode = 'group'; // group, page, thread, interact, scrape
     let isCsvMode = false;
     let isRunning = false;
     let logHasContent = false;
     let currentScrapedData = [];
     let accountsList = [];
+    let savedPostLinks = [];
 
     // ---- Toast Notifications ----
     function showToast(message, type = 'success') {
@@ -103,6 +112,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ---- Saved Links Handling ----
+    function loadSavedLinks() {
+        try {
+            const links = localStorage.getItem('fb_posted_links');
+            savedPostLinks = links ? JSON.parse(links) : [];
+            renderSavedLinks();
+        } catch (e) {
+            savedPostLinks = [];
+        }
+    }
+
+    function saveLink(url) {
+        if (!savedPostLinks.includes(url)) {
+            savedPostLinks.unshift(url); // Add to beginning of array
+            localStorage.setItem('fb_posted_links', JSON.stringify(savedPostLinks));
+            renderSavedLinks();
+        }
+    }
+
+    function renderSavedLinks() {
+        postedLinksList.innerHTML = '';
+        if (savedPostLinks.length === 0) {
+            postedLinksCard.classList.add('hidden');
+            return;
+        }
+        
+        savedPostLinks.forEach(link => {
+            const item = document.createElement('div');
+            item.className = 'posted-link-item';
+            item.innerHTML = `
+                <span class="posted-link-url" title="${link}">${link}</span>
+                <a href="${link}" target="_blank" class="btn btn-secondary btn-sm">🔗 Mở link</a>
+            `;
+            postedLinksList.appendChild(item);
+        });
+        postedLinksCard.classList.remove('hidden');
+    }
+
+    clearLinksBtn.addEventListener('click', () => {
+        savedPostLinks = [];
+        localStorage.setItem('fb_posted_links', JSON.stringify(savedPostLinks));
+        renderSavedLinks();
+        showToast('Đã xóa danh sách liên kết!');
+    });
+
     // ---- Load and Render Accounts ----
     async function loadAccounts() {
         try {
@@ -118,7 +172,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
                 accountSelector.appendChild(opt);
             });
-            // Restore selection if existed
             if (selectedVal) accountSelector.value = selectedVal;
             
             // Render accounts table
@@ -322,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
             modeToggleContainer.classList.add('hidden');
             addToPostBar.classList.add('hidden');
             composerDividerBar.classList.add('hidden');
+            diversePostSettingsBar.classList.add('hidden');
 
             if (currentMode === 'interact') {
                 interactSection.classList.remove('hidden');
@@ -335,6 +389,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 addToPostBar.classList.remove('hidden');
                 composerDividerBar.classList.remove('hidden');
                 postBtn.textContent = 'Đăng bài ngay';
+                
+                // Show diverse settings for post methods only
+                if (currentMode === 'group' || currentMode === 'page') {
+                    diversePostSettingsBar.classList.remove('hidden');
+                }
                 
                 if (isCsvMode) {
                     csvSection.classList.remove('hidden');
@@ -366,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const t = text.toLowerCase();
         if (t.includes('error') || t.includes('❌') || t.includes('fail')) {
             line.classList.add('error');
-        } else if (t.includes('success') || t.includes('✅') || t.includes('completed') || t.includes('[batch') || t.includes('hoàn tất')) {
+        } else if (t.includes('success') || t.includes('✅') || t.includes('completed') || t.includes('[batch') || t.includes('hoàn tất') || t.includes('posted_link:')) {
             line.classList.add('success');
         } else if (t.includes('warning') || t.includes('anti-spam') || t.includes('waiting') || t.includes('chờ')) {
             line.classList.add('warning');
@@ -467,6 +526,12 @@ document.addEventListener('DOMContentLoaded', () => {
             payload.gpmApiUrl = gpmApi;
         }
 
+        // Add Feeling and Check-in parameters if checking Group or Page commands
+        if (command === 'group' || command === 'page') {
+            payload.feeling = postFeelingOpt.checked;
+            payload.checkin = postCheckinOpt.checked;
+        }
+
         try {
             const response = await fetch('/api/run', {
                 method: 'POST',
@@ -493,6 +558,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             renderScrapedTable(data);
                         } catch (err) {
                             appendLog(`Lỗi xử lý bảng dữ liệu: ${err.message}`);
+                        }
+                    } else if (cleanLine.startsWith('POSTED_LINK:')) {
+                        const postUrl = cleanLine.substring('POSTED_LINK:'.length).trim();
+                        if (postUrl && postUrl.startsWith('http')) {
+                            saveLink(postUrl);
+                            appendLog(`🔗 Đã lấy được link bài đăng: ${postUrl}`);
                         }
                     } else if (cleanLine) {
                         appendLog(cleanLine);
@@ -612,7 +683,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ---- Initial Check ----
+    // ---- Initial Check & Loads ----
     checkStatus();
     loadAccounts();
+    loadSavedLinks();
 });
