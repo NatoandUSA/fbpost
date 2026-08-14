@@ -20,6 +20,65 @@ def get_status():
     is_authenticated = os.path.exists(STATE_FILE)
     return jsonify({"authenticated": is_authenticated})
 
+# ---- REST APIs for Account Management ----
+
+@app.route('/api/accounts', methods=['GET'])
+def get_accounts():
+    from utils import load_accounts
+    return jsonify(load_accounts())
+
+@app.route('/api/accounts', methods=['POST'])
+def add_account():
+    from utils import load_accounts, save_accounts
+    import uuid
+    
+    data = request.json or {}
+    name = data.get('name', '').strip()
+    acc_type = data.get('type', 'local').strip()
+    profile_id = data.get('profile_path_or_id', '').strip()
+    proxy = data.get('proxy', '').strip()
+    
+    if not name:
+        return jsonify({"error": "Vui lòng nhập tên tài khoản!"}), 400
+        
+    accounts = load_accounts()
+    
+    # Generate unique ID
+    acc_id = str(uuid.uuid4())[:8]
+    
+    # If type is local and profile_id is not specified, use a default folder name
+    if acc_type == 'local' and not profile_id:
+        profile_id = f"local_profile_{acc_id}"
+        
+    new_acc = {
+        "id": acc_id,
+        "name": name,
+        "type": acc_type,
+        "profile_path_or_id": profile_id,
+        "proxy": proxy,
+        "status": "Chưa xác thực"
+    }
+    
+    accounts.append(new_acc)
+    if save_accounts(accounts):
+        return jsonify(new_acc)
+    else:
+        return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
+
+@app.route('/api/accounts/<id>', methods=['DELETE'])
+def delete_account(id):
+    from utils import load_accounts, save_accounts
+    accounts = load_accounts()
+    
+    filtered_accounts = [a for a in accounts if a["id"] != id]
+    if len(filtered_accounts) == len(accounts):
+        return jsonify({"error": "Không tìm thấy tài khoản để xóa!"}), 404
+        
+    if save_accounts(filtered_accounts):
+        return jsonify({"success": True})
+    else:
+        return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
+
 @app.route('/api/2fa', methods=['POST'])
 def generate_2fa():
     data = request.json or {}
@@ -34,7 +93,6 @@ def generate_2fa():
         import base64
         import struct
         
-        # Pad base64 key
         missing_padding = len(secret) % 8
         if missing_padding:
             secret += '=' * (8 - missing_padding)
@@ -56,10 +114,19 @@ def run_script():
     
     data = request.json or {}
     cmd = data.get('command')
+    account_id = data.get('accountId')
+    gpm_api = data.get('gpmApiUrl')
     
     def generate():
+        # Build base command with optional arguments
+        base_cmd = [sys.executable, "main.py"]
+        if account_id:
+            base_cmd.extend(["--account-id", account_id])
+        if gpm_api:
+            base_cmd.extend(["--gpm-api", gpm_api])
+
         if cmd == 'auth':
-            full_cmd = [sys.executable, "main.py", "auth"]
+            full_cmd = base_cmd + ["auth"]
             process = subprocess.Popen(
                 full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
             )
@@ -71,7 +138,7 @@ def run_script():
         if cmd == 'interact':
             limit = data.get('limit', 5)
             comments = data.get('comments', '')
-            full_cmd = [sys.executable, "main.py", "interact", "--limit", str(limit)]
+            full_cmd = base_cmd + ["interact", "--limit", str(limit)]
             if comments:
                 full_cmd.extend(["--comments", comments])
                 
@@ -89,7 +156,7 @@ def run_script():
             if not target_url:
                 yield "Error: No target URL provided for scraping.\n"
                 return
-            full_cmd = [sys.executable, "main.py", "scrape", target_url, "--limit", str(limit)]
+            full_cmd = base_cmd + ["scrape", target_url, "--limit", str(limit)]
             process = subprocess.Popen(
                 full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
             )
@@ -121,7 +188,7 @@ def run_script():
             yield f"\n========== [Target {i+1}/{total}] ==========\n"
             yield f"Posting to: {target}\n"
             
-            full_cmd = [sys.executable, "main.py", cmd, target, content]
+            full_cmd = base_cmd + [cmd, target, content]
             if image:
                 full_cmd.extend(["--image", image])
                 

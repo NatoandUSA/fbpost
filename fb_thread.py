@@ -3,20 +3,34 @@ import os
 import time
 import random
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type
+from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser
 
 STATE_FILE = "state.json"
 
-def send_message(thread_id, content, image_path=None):
+def send_message(thread_id, content, image_path=None, account_id=None, gpm_api_url=None):
     thread_url = f"https://www.messenger.com/t/{thread_id}"
     print(f"Attempting to send message to thread: {thread_url}")
     content = process_spintax(content)
     
+    # Load account if provided
+    account = None
+    if account_id:
+        accounts = load_accounts()
+        account = next((a for a in accounts if a["id"] == account_id), None)
+        if not account:
+            print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
+            return
+
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=False)
-            context = browser.new_context(storage_state=STATE_FILE)
-            page = context.new_page()
+            if account:
+                browser_obj, context, page = launch_browser(account, p, gpm_api_url)
+            else:
+                print("No account specified, fallback to default state.json.")
+                browser_obj = p.chromium.launch(headless=False)
+                state_arg = STATE_FILE if os.path.exists(STATE_FILE) else None
+                context = browser_obj.new_context(storage_state=state_arg)
+                page = context.new_page()
 
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
             page.goto(thread_url)
@@ -50,16 +64,20 @@ def send_message(thread_id, content, image_path=None):
         except Exception as e:
             print(f"❌ An error occurred: {e}")
         finally:
-            if 'browser' in locals():
-                browser.close()
+            if account:
+                close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
+            else:
+                if 'browser_obj' in locals() and browser_obj:
+                    browser_obj.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python fb_thread.py <THREAD_ID> '<YOUR MESSAGE CONTENT>' [IMAGE_PATH]")
-        print("Note: THREAD_ID can be a username or a numeric ID from the messenger.com URL.")
-        sys.exit(1)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("id")
+    parser.add_argument("content")
+    parser.add_argument("--image", default=None)
+    parser.add_argument("--account-id", default=None)
+    parser.add_argument("--gpm-api", default=None)
+    args = parser.parse_args()
     
-    thread_id = sys.argv[1]
-    content = sys.argv[2]
-    image_path = sys.argv[3] if len(sys.argv) > 3 else None
-    send_message(thread_id, content, image_path)
+    send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)

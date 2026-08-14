@@ -3,28 +3,42 @@ import time
 import random
 import re
 import json
+import os
 from playwright.sync_api import sync_playwright
+from utils import load_accounts, launch_browser, close_browser
 
 STATE_FILE = "state.json"
 
 def extract_phone(text):
-    # Regex tìm số điện thoại Việt Nam (10 chữ số, có thể cách nhau bởi dấu chấm, khoảng trắng, gạch ngang)
     pattern = re.compile(r'\b(0[35789]\d{8}|0[35789]\d{2}[.\s-]?\d{3}[.\s-]?\d{3})\b')
     match = pattern.search(text)
     if match:
-        # Làm sạch, chỉ giữ lại số
         num = re.sub(r'\D', '', match.group(1))
         return num
     return None
 
-def scrape_comments(post_url, max_comments=50):
+def scrape_comments(post_url, max_comments=50, account_id=None, gpm_api_url=None):
     print(f"Bắt đầu quét bình luận từ bài viết: {post_url}")
     
+    # Load account if provided
+    account = None
+    if account_id:
+        accounts = load_accounts()
+        account = next((a for a in accounts if a["id"] == account_id), None)
+        if not account:
+            print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
+            return
+
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=False)
-            context = browser.new_context(storage_state=STATE_FILE)
-            page = context.new_page()
+            if account:
+                browser_obj, context, page = launch_browser(account, p, gpm_api_url)
+            else:
+                print("No account specified, fallback to default state.json.")
+                browser_obj = p.chromium.launch(headless=False)
+                state_arg = STATE_FILE if os.path.exists(STATE_FILE) else None
+                context = browser_obj.new_context(storage_state=state_arg)
+                page = context.new_page()
 
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
             print("Đang mở link bài viết...")
@@ -32,7 +46,6 @@ def scrape_comments(post_url, max_comments=50):
             page.wait_for_load_state("networkidle")
             time.sleep(random.uniform(3.0, 5.0))
             
-            # Click nút "Xem thêm bình luận" / "Xem thêm phản hồi"
             print("Đang tải thêm bình luận...")
             for click_idx in range(5):
                 try:
@@ -49,17 +62,14 @@ def scrape_comments(post_url, max_comments=50):
                 except Exception:
                     break
             
-            # Sử dụng Javascript chạy trên trình duyệt để trích xuất dữ liệu bình luận cực kỳ chính xác và nhanh chóng
             raw_comments = page.evaluate("""() => {
                 const results = [];
-                // Chọn tất cả các khối có thuộc tính role="article" (cấu trúc của bình luận trên FB)
                 const articles = document.querySelectorAll('div[role="article"]');
                 articles.forEach(art => {
                     const links = art.querySelectorAll('a[role="link"], a');
                     let name = '';
                     let profileUrl = '';
                     
-                    // Tìm thẻ a chứa tên và link profile của người bình luận
                     for (let link of links) {
                         if (link.innerText && link.href && !link.href.includes('/posts/') && !link.href.includes('/groups/')) {
                             name = link.innerText;
@@ -68,7 +78,6 @@ def scrape_comments(post_url, max_comments=50):
                         }
                     }
                     
-                    // Tìm nội dung bình luận
                     const textElems = art.querySelectorAll('div[dir="auto"], span[dir="auto"]');
                     let text = '';
                     textElems.forEach(el => {
@@ -84,13 +93,11 @@ def scrape_comments(post_url, max_comments=50):
                 return results;
             }""")
             
-            # Xử lý và trích xuất số điện thoại từ các bình luận thu thập được
             scraped_data = []
             for item in raw_comments:
                 text = item.get('text', '')
                 phone = extract_phone(text)
                 
-                # Làm sạch link profile (bỏ phần query string để lấy link sạch hoặc UID)
                 profile = item.get('profileUrl', '')
                 if '?' in profile:
                     profile = profile.split('?')[0]
@@ -103,27 +110,24 @@ def scrape_comments(post_url, max_comments=50):
                 })
                 
             print(f"✅ Đã quét được {len(scraped_data)} bình luận.")
-            
-            # In ra dạng JSON_DATA để frontend bắt và hiển thị dạng bảng
             print("JSON_DATA:" + json.dumps(scraped_data, ensure_ascii=False))
             
         except Exception as e:
             print(f"❌ Có lỗi xảy ra khi quét bình luận: {e}")
         finally:
-            if 'browser' in locals():
-                browser.close()
+            if account:
+                close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
+            else:
+                if 'browser_obj' in locals() and browser_obj:
+                    browser_obj.close()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python fb_scraper.py <POST_URL> [MAX_COMMENTS]")
-        sys.exit(1)
-        
-    post_url = sys.argv[1]
-    max_comments = 50
-    if len(sys.argv) > 2:
-        try:
-            max_comments = int(sys.argv[2])
-        except ValueError:
-            pass
-            
-    scrape_comments(post_url, max_comments)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("url")
+    parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--account-id", default=None)
+    parser.add_argument("--gpm-api", default=None)
+    args = parser.parse_args()
+    
+    scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)

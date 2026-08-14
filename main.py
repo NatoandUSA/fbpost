@@ -3,17 +3,18 @@ import argparse
 import os
 
 def check_state():
-    if not os.path.exists("state.json"):
-        print("❌ Error: state.json not found.")
-        print("Please run 'python main.py auth' first to log in and save your session state.")
-        sys.exit(1)
+    # If using local profile, state.json is not required globally, so we skip check_state for specific profiles.
+    pass
 
 def main():
     parser = argparse.ArgumentParser(description="Facebook Automation Tool")
+    parser.add_argument("--account-id", default=None, help="The Account ID to use for running the automation")
+    parser.add_argument("--gpm-api", default=None, help="GPM Login API URL (e.g. http://127.0.0.1:13926)")
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
     # Auth command
-    subparsers.add_parser("auth", help="Log into Facebook and save session state")
+    auth_parser = subparsers.add_parser("auth", help="Log into Facebook and save session state")
     
     # Group command
     group_parser = subparsers.add_parser("group", help="Post to a Facebook Group")
@@ -46,28 +47,24 @@ def main():
     args = parser.parse_args()
     
     if args.command == "auth":
-        from fb_auth import login
-        login()
+        # Launch headed auth for the specific account
+        from fb_auth import login_account
+        login_account(args.account_id, args.gpm_api)
     elif args.command == "group":
-        check_state()
         from fb_group import post_to_group
-        post_to_group(args.url, args.content, args.image)
+        post_to_group(args.url, args.content, args.image, args.account_id, args.gpm_api)
     elif args.command == "page":
-        check_state()
         from fb_page import post_to_page
-        post_to_page(args.url, args.content, args.image)
+        post_to_page(args.url, args.content, args.image, args.account_id, args.gpm_api)
     elif args.command == "thread":
-        check_state()
         from fb_thread import send_message
-        send_message(args.id, args.content, args.image)
+        send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)
     elif args.command == "interact":
-        check_state()
         from fb_interact import interact_newsfeed
-        interact_newsfeed(args.limit, args.comments)
+        interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
     elif args.command == "scrape":
-        check_state()
         from fb_scraper import scrape_comments
-        scrape_comments(args.url, args.limit)
+        scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
     else:
         parser.print_help()
 

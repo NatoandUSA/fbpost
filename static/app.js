@@ -46,11 +46,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const tfaCode = document.getElementById('tfa-code');
     const tfaCopyBtn = document.getElementById('tfa-copy-btn');
 
+    // Multi-Account elements
+    const gpmApiInput = document.getElementById('gpm-api-input');
+    const accountSelector = document.getElementById('account-selector');
+    const addAccountToggleBtn = document.getElementById('add-account-toggle-btn');
+    const addAccountForm = document.getElementById('add-account-form');
+    const cancelAccountBtn = document.getElementById('cancel-account-btn');
+    const saveAccountBtn = document.getElementById('save-account-btn');
+    
+    const accName = document.getElementById('acc-name');
+    const accType = document.getElementById('acc-type');
+    const accProfileId = document.getElementById('acc-profile-id');
+    const accProxy = document.getElementById('acc-proxy');
+    const accountsTableBody = document.getElementById('accounts-table-body');
+
     let currentMode = 'group'; // group, page, thread, interact, scrape
     let isCsvMode = false;
     let isRunning = false;
     let logHasContent = false;
     let currentScrapedData = [];
+    let accountsList = [];
 
     // ---- Toast Notifications ----
     function showToast(message, type = 'success') {
@@ -87,6 +102,128 @@ document.addEventListener('DOMContentLoaded', () => {
             statusBadge.className = 'status-badge unauthenticated';
         }
     }
+
+    // ---- Load and Render Accounts ----
+    async function loadAccounts() {
+        try {
+            const res = await fetch('/api/accounts');
+            accountsList = await res.json();
+            
+            // Populate account selector
+            const selectedVal = accountSelector.value;
+            accountSelector.innerHTML = '<option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>';
+            accountsList.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                accountSelector.appendChild(opt);
+            });
+            // Restore selection if existed
+            if (selectedVal) accountSelector.value = selectedVal;
+            
+            // Render accounts table
+            accountsTableBody.innerHTML = '';
+            if (accountsList.length === 0) {
+                accountsTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--fb-text-secondary);">Chưa cấu hình tài khoản nào. Hãy nhấp nút "Thêm Profile" bên trên.</td></tr>';
+                return;
+            }
+            
+            accountsList.forEach(acc => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${acc.name}</strong></td>
+                    <td><span class="badge badge-${acc.type}">${acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)'}</span></td>
+                    <td><code>${acc.profile_path_or_id}</code></td>
+                    <td><span style="color: var(--fb-text-secondary);">${acc.proxy || 'Trực tiếp (Không dán)'}</span></td>
+                    <td class="acc-action-btns">
+                        <button class="btn btn-secondary btn-sm btn-auth-acc" data-id="${acc.id}">🔑 Xác thực</button>
+                        <button class="btn btn-danger btn-sm btn-delete-acc" data-id="${acc.id}">❌ Xóa</button>
+                    </td>
+                `;
+                accountsTableBody.appendChild(tr);
+            });
+
+            // Bind actions
+            document.querySelectorAll('.btn-auth-acc').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const id = btn.dataset.id;
+                    runCommand('auth', { accountId: id });
+                });
+            });
+
+            document.querySelectorAll('.btn-delete-acc').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.dataset.id;
+                    if (confirm('Bạn chắc chắn muốn xóa tài khoản này khỏi danh sách?')) {
+                        try {
+                            const response = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+                            const result = await response.json();
+                            if (result.success) {
+                                showToast('Đã xóa tài khoản thành công!');
+                                loadAccounts();
+                            } else {
+                                showToast(result.error || 'Lỗi khi xóa', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Lỗi kết nối', 'error');
+                        }
+                    }
+                });
+            });
+
+        } catch (e) {
+            console.error("Lỗi khi tải tài khoản:", e);
+        }
+    }
+
+    // Toggle add form
+    addAccountToggleBtn.addEventListener('click', () => {
+        addAccountForm.classList.toggle('hidden');
+    });
+
+    cancelAccountBtn.addEventListener('click', () => {
+        addAccountForm.classList.add('hidden');
+        clearAddForm();
+    });
+
+    function clearAddForm() {
+        accName.value = '';
+        accProfileId.value = '';
+        accProxy.value = '';
+        accType.value = 'local';
+    }
+
+    // Save account
+    saveAccountBtn.addEventListener('click', async () => {
+        const name = accName.value.trim();
+        const type = accType.value;
+        const profileId = accProfileId.value.trim();
+        const proxy = accProxy.value.trim();
+
+        if (!name) {
+            showToast('Vui lòng điền tên tài khoản gợi nhớ!', 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, type, profile_path_or_id: profileId, proxy })
+            });
+            const data = await res.json();
+            if (data.error) {
+                showToast(data.error, 'error');
+            } else {
+                showToast('Đã thêm tài khoản thành công!');
+                addAccountForm.classList.add('hidden');
+                clearAddForm();
+                loadAccounts();
+            }
+        } catch (err) {
+            showToast('Lỗi máy chủ', 'error');
+        }
+    });
 
     // ---- 2FA Code Generator ----
     tfaToggleBtn.addEventListener('click', (e) => {
@@ -321,6 +458,15 @@ document.addEventListener('DOMContentLoaded', () => {
         progressFill.style.width = '20%';
         appendLog(`▶ Bắt đầu lệnh: ${command}...`);
 
+        // Add account attributes to payload if selected
+        const accId = accountSelector.value;
+        const gpmApi = gpmApiInput.value.trim();
+        
+        if (accId) {
+            payload.accountId = accId;
+            payload.gpmApiUrl = gpmApi;
+        }
+
         try {
             const response = await fetch('/api/run', {
                 method: 'POST',
@@ -440,7 +586,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
-                tasks = targets.map(t => ({ target: t, content: content, image: null }));
+                targets.forEach(t => {
+                    tasks.push({ target: t, content: content, image: null });
+                });
             }
 
             runCommand(currentMode, { tasks });
@@ -466,4 +614,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Initial Check ----
     checkStatus();
+    loadAccounts();
 });
