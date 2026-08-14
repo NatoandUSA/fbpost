@@ -259,7 +259,18 @@ def add_checkin(page):
             checkin_btn.click()
             time.sleep(random.uniform(1.5, 2.5))
             
-            locations_list = ["Hà Nội", "Hồ Chí Minh", "Đà Nẵng", "Nha Trang", "Vũng Tàu", "Đà Lạt", "Huế"]
+            locations_list = [
+                "Đại Nội Huế", 
+                "Chùa Thiên Mụ", 
+                "Cầu Trường Tiền", 
+                "Lăng Khải Định", 
+                "Lăng Tự Đức", 
+                "Lăng Minh Mạng", 
+                "Trường Quốc Học Huế", 
+                "Làng hương Thủy Xuân", 
+                "Đồi Vọng Cảnh", 
+                "Cung An Định"
+            ]
             selected_location = random.choice(locations_list)
             
             search_input = page.locator("input[placeholder*='Where are you'], input[placeholder*='Bạn đang ở đâu'], input[placeholder*='Tìm kiếm']").first

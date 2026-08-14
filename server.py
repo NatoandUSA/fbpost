@@ -20,6 +20,25 @@ def get_status():
     is_authenticated = os.path.exists(STATE_FILE)
     return jsonify({"authenticated": is_authenticated})
 
+# ---- Image Upload Endpoint for Manual Posting ----
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'image' not in request.files:
+        return jsonify({"error": "Không tìm thấy tệp gửi lên!"}), 400
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({"error": "Chưa chọn tệp ảnh!"}), 400
+    if file:
+        import uuid
+        upload_dir = os.path.abspath("uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        ext = os.path.splitext(file.filename)[1]
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = os.path.join(upload_dir, filename)
+        file.save(filepath)
+        return jsonify({"filepath": filepath})
+
 # ---- REST APIs for Account Management ----
 
 @app.route('/api/accounts', methods=['GET'])
