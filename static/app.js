@@ -79,6 +79,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Content Hub Section
     const contentHubSection = document.getElementById('content-hub-section');
 
+    // Visual Progress Dashboard Elements
+    const visualProgressDashboard = document.getElementById('visual-progress-dashboard');
+    const activeTaskName = document.getElementById('active-task-name');
+    const activeTargetIndex = document.getElementById('active-target-index');
+    const activeTargetUrl = document.getElementById('active-target-url');
+    const statusIndicatorDot = document.getElementById('status-indicator-dot');
+    const statusDetailText = document.getElementById('status-detail-text');
+    const cooldownTimerCard = document.getElementById('cooldown-timer-card');
+    const cooldownTimeLeft = document.getElementById('cooldown-time-left');
+    const cooldownProgressFill = document.getElementById('cooldown-progress-fill');
+    const targetStepperList = document.getElementById('target-stepper-list');
+    let cooldownInterval = null;
+
     let currentMode = 'group'; // group, page, thread, interact, scrape, content-hub
     let isCsvMode = false;
     let isRunning = false;
@@ -571,6 +584,42 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.removeChild(link);
     });
 
+    // ---- Visual Progress Helper ----
+    function initProgressDashboard(taskName, targets) {
+        activeTaskName.textContent = taskName;
+        activeTargetIndex.textContent = `0/${targets.length}`;
+        activeTargetUrl.textContent = 'Đang khởi chạy...';
+        statusIndicatorDot.className = 'status-indicator-dot active';
+        statusDetailText.textContent = 'Đang thiết lập phiên làm việc...';
+        cooldownTimerCard.classList.add('hidden');
+        
+        if (cooldownInterval) {
+            clearInterval(cooldownInterval);
+            cooldownInterval = null;
+        }
+        
+        targetStepperList.innerHTML = '';
+        targets.forEach((t, idx) => {
+            const item = document.createElement('div');
+            item.className = 'stepper-item pending';
+            item.id = `stepper-item-${idx}`;
+            
+            let displayTarget = t;
+            if (t.startsWith('http')) {
+                displayTarget = t.split('/').pop() || t;
+                if (!displayTarget && t.includes('groups/')) {
+                    displayTarget = t.split('groups/')[1].split('/')[0];
+                }
+            }
+            if (displayTarget.length > 20) displayTarget = displayTarget.slice(0, 17) + '...';
+            
+            item.innerHTML = `<span class="stepper-icon"></span><span>${displayTarget}</span>`;
+            targetStepperList.appendChild(item);
+        });
+        
+        visualProgressDashboard.classList.remove('hidden');
+    }
+
     // ---- Run Command ----
     async function runCommand(command, payload = {}) {
         setRunning(true);
@@ -626,8 +675,116 @@ document.addEventListener('DOMContentLoaded', () => {
                             saveLink(postUrl);
                             appendLog(`🔗 Đã lấy được link bài đăng: ${postUrl}`);
                         }
-                    } else if (cleanLine) {
-                        appendLog(cleanLine);
+                    } else {
+                        if (cleanLine) {
+                            appendLog(cleanLine);
+                            
+                            // Visual Dashboard Real-time Parsing
+                            const targetMatch = cleanLine.match(/========== \[Target (\d+)\/(\d+)\] ==========/);
+                            if (targetMatch) {
+                                const index = parseInt(targetMatch[1]);
+                                const total = parseInt(targetMatch[2]);
+                                activeTargetIndex.textContent = `${index}/${total}`;
+                                
+                                for (let idx = 0; idx < total; idx++) {
+                                    const item = document.getElementById(`stepper-item-${idx}`);
+                                    if (item) {
+                                        if (idx < index - 1) {
+                                            item.className = 'stepper-item success';
+                                        } else if (idx === index - 1) {
+                                            item.className = 'stepper-item active';
+                                            item.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                                        } else {
+                                            item.className = 'stepper-item pending';
+                                        }
+                                    }
+                                }
+                            }
+
+                            const postingMatch = cleanLine.match(/Posting to:\s*(.*)/);
+                            if (postingMatch) {
+                                const target = postingMatch[1].trim();
+                                activeTargetUrl.textContent = target;
+                                statusIndicatorDot.className = 'status-indicator-dot active';
+                                statusDetailText.textContent = 'Đang truy cập trang mục tiêu...';
+                            }
+
+                            // Stepper detail feedback
+                            if (cleanLine.includes('Looking for')) {
+                                statusDetailText.textContent = 'Đang tìm kiếm ô nhập bài viết...';
+                            } else if (cleanLine.includes('Attaching image')) {
+                                statusDetailText.textContent = '🖼️ Đang tải ảnh lên bài viết...';
+                            } else if (cleanLine.includes('Typing content') || cleanLine.includes('Typing...')) {
+                                statusDetailText.textContent = '✍️ Đang gõ nội dung bài đăng...';
+                            } else if (cleanLine.includes("Clicking 'Post'")) {
+                                statusDetailText.textContent = '🚀 Đang nhấn nút đăng bài viết...';
+                            } else if (cleanLine.includes('Successfully posted') || cleanLine.includes('posted successfully')) {
+                                statusDetailText.textContent = '✅ Đăng bài lên Facebook thành công!';
+                                const activeItem = document.querySelector('.stepper-item.active');
+                                if (activeItem) activeItem.className = 'stepper-item success';
+                            } else if (cleanLine.toLowerCase().includes('error') || cleanLine.toLowerCase().includes('fail')) {
+                                statusDetailText.textContent = '❌ Lỗi: ' + cleanLine;
+                                const activeItem = document.querySelector('.stepper-item.active');
+                                if (activeItem) activeItem.className = 'stepper-item error';
+                            }
+
+                            // Anti-Spam Cooldown timer
+                            const delayMatch = cleanLine.match(/\[Anti-Spam\] Waiting (\d+) seconds/);
+                            if (delayMatch) {
+                                let timeLeft = parseInt(delayMatch[1]);
+                                const totalDelay = timeLeft;
+                                statusIndicatorDot.className = 'status-indicator-dot wait';
+                                statusDetailText.textContent = '⏳ Giãn cách nghỉ tránh spam để bảo vệ tài khoản...';
+                                
+                                cooldownTimeLeft.textContent = `${timeLeft}s`;
+                                cooldownTimerCard.classList.remove('hidden');
+                                cooldownProgressFill.style.transition = 'none';
+                                cooldownProgressFill.style.width = '100%';
+                                setTimeout(() => {
+                                    cooldownProgressFill.style.transition = `width ${totalDelay}s linear`;
+                                    cooldownProgressFill.style.width = '0%';
+                                }, 100);
+
+                                if (cooldownInterval) clearInterval(cooldownInterval);
+                                cooldownInterval = setInterval(() => {
+                                    timeLeft -= 1;
+                                    if (timeLeft <= 0) {
+                                        clearInterval(cooldownInterval);
+                                        cooldownTimerCard.classList.add('hidden');
+                                    } else {
+                                        cooldownTimeLeft.textContent = `${timeLeft}s`;
+                                    }
+                                }, 1000);
+                            }
+
+                            const remainMatch = cleanLine.match(/\.\.\.\s*(\d+)s remaining/);
+                            if (remainMatch) {
+                                const secondsLeft = parseInt(remainMatch[1]);
+                                cooldownTimeLeft.textContent = `${secondsLeft}s`;
+                            }
+
+                            // Interact Newsfeed parsing
+                            if (cleanLine.includes('Bắt đầu tương tác Newsfeed')) {
+                                statusDetailText.textContent = 'Khởi chạy tương tác Newsfeed nuôi nick...';
+                            } else if (cleanLine.includes('Đang lướt Newsfeed')) {
+                                statusDetailText.textContent = '📱 Đang cuộn lướt xem Bảng tin (Newsfeed)...';
+                                statusIndicatorDot.className = 'status-indicator-dot active';
+                            } else if (cleanLine.includes('Thả biểu cảm')) {
+                                statusDetailText.textContent = '💖 Đang thả cảm xúc biểu đạt bài viết...';
+                            } else if (cleanLine.includes('Viết bình luận')) {
+                                statusDetailText.textContent = '💬 Đang tiến hành bình luận bài viết...';
+                            } else if (cleanLine.includes('Hoàn thành tương tác Newsfeed')) {
+                                statusDetailText.textContent = '✅ Đã hoàn thành tương tác nuôi nick!';
+                                statusIndicatorDot.className = 'status-indicator-dot';
+                            }
+
+                            // Scrape articles parsing
+                            if (cleanLine.includes('Quét tìm bình luận')) {
+                                statusDetailText.textContent = '🔍 Đang quét thu thập bình luận...';
+                            } else if (cleanLine.includes('Lọc số điện thoại')) {
+                                statusDetailText.textContent = '📱 Đang phân tích lọc số điện thoại khách hàng...';
+                            }
+                        }
                     }
                 }
             }
@@ -657,6 +814,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentMode === 'interact') {
             const limit = parseInt(interactLimit.value) || 5;
             const comments = interactComments.value.trim();
+            const dummyTargets = Array.from({ length: limit }, (_, i) => `Bài viết Newsfeed #${i+1}`);
+            initProgressDashboard('Nuôi Nick (Tương tác)', dummyTargets);
             runCommand('interact', { limit, comments });
         } else if (currentMode === 'scrape') {
             const target = scrapeTarget.value.trim();
@@ -666,6 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             scrapeResultsContainer.classList.add('hidden');
+            initProgressDashboard('Quét bình luận bài viết', [target]);
             runCommand('scrape', { target, limit });
         } else {
             // Standard posting modes
@@ -723,6 +883,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     tasks.push({ target: t, content: content, image: selectedImagePath });
                 });
             }
+
+            // Khởi tạo bảng tiến trình trực quan
+            const taskNameMap = {
+                group: 'Tác vụ đăng bài Nhóm (Group)',
+                page: 'Tác vụ đăng bài Trang (Page)',
+                thread: 'Tác vụ gửi tin nhắn (Thread)'
+            };
+            initProgressDashboard(taskNameMap[currentMode] || 'Tác vụ đăng bài', tasks.map(t => t.target));
 
             runCommand(currentMode, { tasks });
         }
