@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Facebook Automation Dashboard - Post to Groups, Pages & Threads">
+    <meta name="description" content="Facebook Automation Dashboard - Post, Interact & Scrape">
     <title>FB Automation Dashboard</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -17,6 +17,20 @@
             <span class="top-bar-title">FB Automation</span>
         </div>
         <div class="top-bar-right">
+            <!-- 2FA Tool Widget -->
+            <div class="tfa-widget">
+                <button id="tfa-toggle-btn" class="btn-tfa-toggle" title="Lấy mã 2FA">🔑 Lấy mã 2FA</button>
+                <div id="tfa-popover" class="tfa-popover hidden">
+                    <h4>Trình tạo mã 2FA</h4>
+                    <input type="text" id="tfa-secret-input" placeholder="Nhập Secret Key 2FA...">
+                    <button id="tfa-generate-btn" class="btn btn-primary btn-sm">Tạo mã</button>
+                    <div id="tfa-result" class="tfa-result hidden">
+                        <span id="tfa-code">------</span>
+                        <button id="tfa-copy-btn" class="btn-copy" title="Sao chép">📋</button>
+                    </div>
+                </div>
+            </div>
+            
             <div id="auth-status" class="status-badge checking">
                 <span class="status-dot"></span>
                 <span class="status-text">Đang kiểm tra...</span>
@@ -35,7 +49,7 @@
                 </div>
                 <div class="auth-text">
                     <h3>Chưa đăng nhập Facebook</h3>
-                    <p>Vui lòng xác thực tài khoản để bắt đầu đăng bài tự động.</p>
+                    <p>Vui lòng xác thực tài khoản để bắt đầu sử dụng các tính năng tự động.</p>
                 </div>
             </div>
             <button id="auth-btn" class="btn btn-auth">Đăng nhập</button>
@@ -57,12 +71,20 @@
                     <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
                     <span>Thread</span>
                 </button>
+                <button class="composer-tab" data-target="interact" id="tab-interact">
+                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span>Nuôi Nick</span>
+                </button>
+                <button class="composer-tab" data-target="scrape" id="tab-scrape">
+                    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    <span>Quét Bình Luận</span>
+                </button>
             </div>
 
             <!-- Composer Body -->
             <div class="composer-body">
-                <!-- Input Mode Toggle -->
-                <div class="input-mode-toggle">
+                <!-- Input Mode Toggle (Only visible for Group, Page, Thread) -->
+                <div class="input-mode-toggle" id="mode-toggle-container">
                     <button class="mode-btn active" data-mode="manual" id="mode-manual">
                         ✏️ Nhập thủ công
                     </button>
@@ -71,7 +93,7 @@
                     </button>
                 </div>
 
-                <!-- Manual Input Section -->
+                <!-- 1. Post/Message manual sections -->
                 <div id="manual-section">
                     <!-- Target URLs -->
                     <div class="field-group">
@@ -93,7 +115,7 @@
                     </div>
                 </div>
 
-                <!-- CSV Input Section -->
+                <!-- 2. CSV Input Section -->
                 <div id="csv-section" class="hidden">
                     <div class="field-group">
                         <label class="field-label">📊 URL Google Sheets (CSV công khai)</label>
@@ -102,11 +124,59 @@
                     </div>
                 </div>
 
-                <!-- Divider -->
-                <div class="composer-divider"></div>
+                <!-- 3. Interact Seeding Section (Nuôi Nick) -->
+                <div id="interact-section" class="hidden">
+                    <div class="field-group">
+                        <label class="field-label">📈 Số lượng bài viết muốn tương tác</label>
+                        <input type="number" id="interact-limit" class="field-input" value="5" min="1" max="50">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">💬 Danh sách bình luận ngẫu nhiên (Phân tách bằng dấu chấm phẩy <code>;</code>)</label>
+                        <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Chúc ngày mới tốt lành nhé!;Like mạnh!;Đỉnh quá!"></textarea>
+                        <p class="field-hint">Hệ thống sẽ lướt dòng thời gian, thả Tim/Like ngẫu nhiên (60% tỉ lệ) và chọn ngẫu nhiên các bình luận trên để phản hồi (30% tỉ lệ).</p>
+                    </div>
+                </div>
 
-                <!-- Add to Post bar -->
-                <div class="add-to-post">
+                <!-- 4. Scrape Comments Section -->
+                <div id="scrape-section" class="hidden">
+                    <div class="field-group">
+                        <label class="field-label">🔗 Đường dẫn bài viết Facebook cần quét</label>
+                        <input type="text" id="scrape-target" class="field-input" placeholder="https://www.facebook.com/username/posts/123456789">
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">📊 Số lượng bình luận tối đa muốn tải</label>
+                        <input type="number" id="scrape-limit" class="field-input" value="50" min="10" max="500">
+                    </div>
+                    
+                    <!-- Scraped Results display table -->
+                    <div id="scrape-results-container" class="scrape-results-container hidden">
+                        <div class="scrape-results-header">
+                            <h4>📋 Kết quả quét bình luận</h4>
+                            <button id="download-csv-btn" class="btn btn-secondary btn-sm">📥 Tải về CSV</button>
+                        </div>
+                        <div class="table-wrapper">
+                            <table id="scrape-table">
+                                <thead>
+                                    <tr>
+                                        <th>Họ tên</th>
+                                        <th>Profile / UID</th>
+                                        <th>Nội dung bình luận</th>
+                                        <th>Số điện thoại</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scrape-table-body">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Divider -->
+                <div class="composer-divider" id="composer-divider-bar"></div>
+
+                <!-- Add to Post bar (Only visible for manual posts) -->
+                <div class="add-to-post" id="add-to-post-bar">
                     <span class="add-to-post-label">Thêm vào bài viết</span>
                     <div class="add-to-post-actions">
                         <button class="icon-btn photo" title="Thêm ảnh" id="add-image-btn">
@@ -115,7 +185,7 @@
                     </div>
                 </div>
 
-                <!-- Post Button -->
+                <!-- Post/Run Button -->
                 <button id="post-btn" class="btn btn-primary">Đăng bài ngay</button>
             </div>
         </div>

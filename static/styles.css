@@ -785,3 +785,154 @@ body {
     padding: 4px 10px;
   }
 }
+
+/* ============================================
+   2FA Widget & Scrape Table Style Additions
+   ============================================ */
+
+.tfa-widget {
+  position: relative;
+  margin-right: 12px;
+}
+
+.btn-tfa-toggle {
+  background-color: var(--fb-blue-light);
+  color: var(--fb-blue);
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-tfa-toggle:hover {
+  background-color: #D0E7FF;
+}
+
+.tfa-popover {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 240px;
+  background-color: var(--fb-card);
+  border: 1px solid var(--fb-divider);
+  border-radius: var(--fb-radius);
+  box-shadow: var(--fb-shadow-lg);
+  padding: 12px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tfa-popover h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fb-text);
+  margin-bottom: 2px;
+}
+
+.tfa-popover input {
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--fb-divider);
+  border-radius: 4px;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.tfa-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--fb-input-bg);
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px dashed var(--fb-blue);
+  margin-top: 4px;
+}
+
+#tfa-code {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fb-blue);
+  letter-spacing: 2px;
+}
+
+.btn-copy {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  font-size: 14px;
+}
+
+/* Scrape Results Container */
+.scrape-results-container {
+  margin-top: 16px;
+  border: 1px solid var(--fb-divider);
+  border-radius: var(--fb-radius);
+  padding: 12px;
+  background-color: var(--fb-card);
+}
+
+.scrape-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.scrape-results-header h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fb-text);
+}
+
+.table-wrapper {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--fb-divider);
+  border-radius: 6px;
+}
+
+#scrape-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+
+#scrape-table th, #scrape-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--fb-divider);
+}
+
+#scrape-table th {
+  background-color: var(--fb-input-bg);
+  color: var(--fb-text-secondary);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+#scrape-table tbody tr:hover {
+  background-color: var(--fb-hover);
+}
+
+#scrape-table td {
+  color: var(--fb-text);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+

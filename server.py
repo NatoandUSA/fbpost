@@ -20,17 +20,76 @@ def get_status():
     is_authenticated = os.path.exists(STATE_FILE)
     return jsonify({"authenticated": is_authenticated})
 
+@app.route('/api/2fa', methods=['POST'])
+def generate_2fa():
+    data = request.json or {}
+    secret = data.get('secret', '').strip()
+    if not secret:
+        return jsonify({"error": "Vui lòng nhập khóa bảo mật 2FA!"}), 400
+    try:
+        secret = secret.replace(" ", "").upper()
+        import hmac
+        import hashlib
+        import time
+        import base64
+        import struct
+        
+        # Pad base64 key
+        missing_padding = len(secret) % 8
+        if missing_padding:
+            secret += '=' * (8 - missing_padding)
+            
+        key = base64.b32decode(secret)
+        counter = struct.pack(">Q", int(time.time() / 30))
+        mac = hmac.new(key, counter, hashlib.sha1).digest()
+        offset = mac[-1] & 0x0f
+        binary = struct.unpack(">I", mac[offset:offset+4])[0] & 0x7fffffff
+        token = str(binary % 1000000).zfill(6)
+        return jsonify({"token": token})
+    except Exception as e:
+        return jsonify({"error": f"Lỗi tính toán mã 2FA: {str(e)}"}), 400
+
 @app.route('/api/run', methods=['POST'])
 def run_script():
     import random
     import time
     
-    data = request.json
+    data = request.json or {}
     cmd = data.get('command')
     
     def generate():
         if cmd == 'auth':
             full_cmd = [sys.executable, "main.py", "auth"]
+            process = subprocess.Popen(
+                full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            )
+            for line in iter(process.stdout.readline, ''):
+                yield line
+            process.wait()
+            return
+
+        if cmd == 'interact':
+            limit = data.get('limit', 5)
+            comments = data.get('comments', '')
+            full_cmd = [sys.executable, "main.py", "interact", "--limit", str(limit)]
+            if comments:
+                full_cmd.extend(["--comments", comments])
+                
+            process = subprocess.Popen(
+                full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            )
+            for line in iter(process.stdout.readline, ''):
+                yield line
+            process.wait()
+            return
+
+        if cmd == 'scrape':
+            target_url = data.get('target', '').strip()
+            limit = data.get('limit', 50)
+            if not target_url:
+                yield "Error: No target URL provided for scraping.\n"
+                return
+            full_cmd = [sys.executable, "main.py", "scrape", target_url, "--limit", str(limit)]
             process = subprocess.Popen(
                 full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
             )

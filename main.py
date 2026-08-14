@@ -32,6 +32,16 @@ def main():
     thread_parser.add_argument("id", help="The Thread ID or username")
     thread_parser.add_argument("content", help="The text content of your message")
     thread_parser.add_argument("--image", help="Absolute path to an image file", default=None)
+
+    # Interact command (Nuôi nick)
+    interact_parser = subparsers.add_parser("interact", help="Interact with Facebook Newsfeed (Like/Comment)")
+    interact_parser.add_argument("--limit", type=int, default=5, help="Number of articles to interact with")
+    interact_parser.add_argument("--comments", help="Semicolon separated comments for random posting", default="")
+
+    # Scrape command (Quét bình luận)
+    scrape_parser = subparsers.add_parser("scrape", help="Scrape comments and phone numbers from a post")
+    scrape_parser.add_argument("url", help="The full URL of the Facebook post")
+    scrape_parser.add_argument("--limit", type=int, default=50, help="Maximum number of comments to scan")
     
     args = parser.parse_args()
     
@@ -50,6 +60,14 @@ def main():
         check_state()
         from fb_thread import send_message
         send_message(args.id, args.content, args.image)
+    elif args.command == "interact":
+        check_state()
+        from fb_interact import interact_newsfeed
+        interact_newsfeed(args.limit, args.comments)
+    elif args.command == "scrape":
+        check_state()
+        from fb_scraper import scrape_comments
+        scrape_comments(args.url, args.limit)
     else:
         parser.print_help()
 
