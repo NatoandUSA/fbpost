@@ -1061,7 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
           { kw:["nhã nhạc","cung đình"], line:"🎶 Nhã nhạc cung đình Huế — di sản phi vật thể UNESCO, nghe một lần cho biết", short:"nhã nhạc cung đình" },
           { kw:["lịch sử","triều nguyễn","kinh đô","di sản","unesco"], line:"📜 Huế — kinh đô triều Nguyễn gần 150 năm, quần thể di tích được UNESCO công nhận di sản thế giới", short:"kinh đô triều Nguyễn" },
           { kw:["xích lô"], line:"🛺 Dạo Thành Nội bằng xích lô — chậm rãi ngắm phố, đúng nhịp sống Huế", short:"dạo phố bằng xích lô" },
-          { kw:["thuê xe máy","xe máy"], line:"%;"> Thuê xe máy giúp chủ động lịch trình; luôn kiểm tra quãng đường, thời tiết và chỗ gửi xe trước khi đi", short:"thuê xe máy dạo Huế" },
+          { kw:["thuê xe máy","xe máy"], line:"🛵 Thuê xe máy giúp chủ động lịch trình; luôn kiểm tra quãng đường, thời tiết và chỗ gửi xe trước khi đi", short:"thuê xe máy dạo Huế" },
           { kw:["bản đồ","chỉ đường","map","lịch trình"], line:"🗺️ Mẹo: lưu sẵn Google Maps, gom các điểm cùng khu và kiểm tra giờ mở cửa trước khi xuất phát", short:"lưu bản đồ các điểm" },
           { kw:["đặc sản","quà","mang về","mè xửng","tôm chua"], line:"🎁 Đặc sản mang về: mè xửng, tôm chua, trà cung đình, nón lá — ghé chợ Đông Ba là đủ", short:"đặc sản Huế mang về" },
           { kw:["bánh khoái","bánh bèo","bánh nậm","bánh lọc","bánh huế"], line:"🥞 Bánh khoái, bánh bèo, bánh nậm, bánh lọc — bộ tứ bánh Huế ăn một lần là nhớ", short:"bộ tứ bánh Huế" },
