@@ -1,3 +1,4 @@
 flask==3.0.3
 playwright==1.45.0
 requests==2.32.3
+APScheduler==3.10.4

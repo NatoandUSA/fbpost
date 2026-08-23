@@ -2135,4 +2135,196 @@ document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
     loadAccounts();
     loadSavedLinks();
+
+    // ====== PAGE SCHEDULER JS ======
+    const schedSection = document.getElementById('page-scheduler-section');
+
+    // Show/hide scheduler section when tab is clicked
+    document.getElementById('tab-page-scheduler')?.addEventListener('click', () => {
+        schedSection?.classList.remove('hidden');
+        // hide the bottom post bar & divider when in scheduler mode
+        document.getElementById('composer-divider-bar')?.classList.add('hidden');
+        document.getElementById('add-to-post-bar')?.classList.add('hidden');
+        document.getElementById('post-btn')?.classList.add('hidden');
+        document.getElementById('diverse-post-settings-bar')?.classList.add('hidden');
+        loadSchedConfig();
+        loadSchedStatus();
+    });
+
+    async function loadSchedConfig() {
+        try {
+            const res = await fetch('/api/page/config');
+            const data = await res.json();
+            const tokenBadge = document.getElementById('sched-token-badge');
+            const pageInfo = document.getElementById('sched-page-info');
+
+            if (data.has_token) {
+                tokenBadge.textContent = `✅ ${data.page_name || 'Token hợp lệ'}`;
+                tokenBadge.className = 'sched-badge badge-success';
+                document.getElementById('sched-page-name').textContent = `📄 ${data.page_name}`;
+                document.getElementById('sched-page-id-badge').textContent = `ID: ${data.page_id}`;
+                pageInfo.classList.remove('hidden');
+            } else {
+                tokenBadge.textContent = 'Chưa cấu hình';
+                tokenBadge.className = 'sched-badge badge-error';
+                pageInfo.classList.add('hidden');
+            }
+
+            if (data.sheets_csv_url) {
+                document.getElementById('sched-sheets-url').value = data.sheets_csv_url;
+            }
+            const intervalSel = document.getElementById('sched-interval');
+            if (data.scheduler_interval_minutes) {
+                intervalSel.value = String(data.scheduler_interval_minutes);
+            }
+        } catch (e) { console.error('loadSchedConfig error', e); }
+    }
+
+    async function loadSchedStatus() {
+        try {
+            const res = await fetch('/api/scheduler/status');
+            const data = await res.json();
+            const badge = document.getElementById('sched-status-badge');
+            if (data.running) {
+                badge.textContent = '🟢 Đang chạy';
+                badge.className = 'sched-badge badge-success';
+            } else {
+                badge.textContent = '🔴 Đang dừng';
+                badge.className = 'sched-badge badge-error';
+            }
+        } catch (e) {}
+    }
+
+    // Save Token
+    document.getElementById('sched-save-token-btn')?.addEventListener('click', async () => {
+        const token = document.getElementById('sched-token-input').value.trim();
+        if (!token) return alert('Vui lòng nhập Page Access Token!');
+        const btn = document.getElementById('sched-save-token-btn');
+        btn.textContent = '⏳ Đang xác thực...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/page/token', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token})
+            });
+            const data = await res.json();
+            if (data.error) {
+                alert(`❌ ${data.error}`);
+            } else {
+                alert(`✅ Xác thực thành công! Page: ${data.page_name} (ID: ${data.page_id})`);
+                document.getElementById('sched-token-input').value = '';
+                loadSchedConfig();
+            }
+        } catch (e) { alert(`Lỗi kết nối: ${e.message}`); }
+        finally { btn.textContent = '✅ Xác thực & Lưu'; btn.disabled = false; }
+    });
+
+    // Save Sheets URL
+    document.getElementById('sched-save-sheets-btn')?.addEventListener('click', async () => {
+        const url = document.getElementById('sched-sheets-url').value.trim();
+        const interval = document.getElementById('sched-interval').value;
+        if (!url) return alert('Vui lòng nhập Google Sheets CSV URL!');
+        const res = await fetch('/api/page/sheets', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({url, interval: parseInt(interval)})
+        });
+        const data = await res.json();
+        if (data.success) alert('✅ Đã lưu Sheets URL!');
+        else alert(`❌ ${data.error}`);
+    });
+
+    // Preview Sheets
+    document.getElementById('sched-preview-btn')?.addEventListener('click', async () => {
+        const url = document.getElementById('sched-sheets-url').value.trim();
+        const btn = document.getElementById('sched-preview-btn');
+        btn.textContent = '⏳ Đang tải...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/page/preview', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url})
+            });
+            const data = await res.json();
+            if (data.error) { alert(data.error); return; }
+            const rows = data.rows || [];
+            const tbody = document.getElementById('sched-preview-body');
+            tbody.innerHTML = '';
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;opacity:0.5">Không có dữ liệu hoặc URL sai.</td></tr>';
+            } else {
+                rows.forEach((row, i) => {
+                    const statusClass = row.status === 'posted' ? 'sched-status-posted' :
+                                       row.status === 'skip' ? 'sched-status-skip' : 'sched-status-pending';
+                    tbody.innerHTML += `<tr>
+                        <td>${i+1}</td>
+                        <td>${row.page_id}</td>
+                        <td title="${row.content}">${row.content.substring(0,50)}${row.content.length > 50 ? '...' : ''}</td>
+                        <td>${row.image_url ? '🖼 Có ảnh' : '-'}</td>
+                        <td>${row.scheduled_time}</td>
+                        <td class="${statusClass}">${row.status}</td>
+                    </tr>`;
+                });
+            }
+            document.getElementById('sched-preview-container').classList.remove('hidden');
+        } catch (e) { alert(`Lỗi: ${e.message}`); }
+        finally { btn.textContent = '👁 Xem trước dữ liệu Sheet'; btn.disabled = false; }
+    });
+
+    // Start Scheduler
+    document.getElementById('sched-start-btn')?.addEventListener('click', async () => {
+        const res = await fetch('/api/scheduler/start', {method:'POST'});
+        const data = await res.json();
+        if (data.success) { alert('🚀 Scheduler đã khởi động!'); loadSchedStatus(); }
+        else alert('❌ Lỗi khởi động scheduler!');
+    });
+
+    // Stop Scheduler
+    document.getElementById('sched-stop-btn')?.addEventListener('click', async () => {
+        const res = await fetch('/api/scheduler/stop', {method:'POST'});
+        const data = await res.json();
+        alert(data.success ? '⏹ Scheduler đã dừng.' : 'Scheduler chưa chạy.');
+        loadSchedStatus();
+    });
+
+    // Run Now
+    document.getElementById('sched-run-now-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('sched-run-now-btn');
+        btn.textContent = '⏳ Đang chạy...';
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/scheduler/run-now', {method:'POST'});
+            const data = await res.json();
+            alert(data.success ? '✅ Đã chạy xong! Kiểm tra log bên dưới.' : `❌ ${data.error}`);
+            loadSchedLogs();
+        } catch (e) { alert(`Lỗi: ${e.message}`); }
+        finally { btn.textContent = '⚡ Chạy ngay 1 lần'; btn.disabled = false; }
+    });
+
+    // Refresh Logs
+    document.getElementById('sched-refresh-log-btn')?.addEventListener('click', loadSchedLogs);
+
+    async function loadSchedLogs() {
+        try {
+            const res = await fetch('/api/scheduler/logs?lines=80');
+            const data = await res.json();
+            const logDiv = document.getElementById('sched-log-output');
+            if (!data.logs || data.logs.length === 0) {
+                logDiv.innerHTML = '<span style="opacity:0.5">Chưa có log.</span>';
+                return;
+            }
+            logDiv.innerHTML = data.logs.map(line => {
+                let cls = '';
+                if (line.includes('✅') || line.includes('thành công')) cls = 'log-ok';
+                else if (line.includes('❌') || line.includes('ERROR') || line.includes('thất bại')) cls = 'log-err';
+                else if (line.includes('INFO') || line.includes('🔍') || line.includes('📢')) cls = 'log-info';
+                return `<span class="${cls}">${line}</span>`;
+            }).join('\n');
+            logDiv.scrollTop = logDiv.scrollHeight;
+        } catch (e) {}
+    }
+    // ====== END PAGE SCHEDULER JS ======
 });
+

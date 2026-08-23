@@ -6,3 +6,5 @@ __pycache__/
 *.jpg
 *.png
 static/sample.csv
+scheduler.log
+config.json

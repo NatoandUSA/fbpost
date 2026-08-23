@@ -1,9 +1,22 @@
 import sys
 import os
+import json
 import subprocess
 from flask import Flask, request, jsonify, Response, send_from_directory
 
 app = Flask(__name__, static_folder='static')
+
+CONFIG_FILE = "config.json"
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return {}
+    with open(CONFIG_FILE, "r") as f:
+        return json.load(f)
+
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 STATE_FILE = "state.json"
 
@@ -241,6 +254,140 @@ def run_script():
     return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
+    # Auto-start scheduler if it was running before
+    config = load_config()
+    if config.get("scheduler_running", False):
+        from scheduler import start_scheduler
+        interval = config.get("scheduler_interval_minutes", 5)
+        start_scheduler(interval)
+
     print("Starting Facebook Automation Dashboard...")
     print("Access the dashboard at: http://127.0.0.1:5000")
     app.run(host='127.0.0.1', port=5000)
+
+# ===================== PAGE SCHEDULER API =====================
+
+@app.route('/api/page/config', methods=['GET'])
+def get_page_config():
+    config = load_config()
+    # Never expose full token to frontend — mask it
+    token = config.get("page_access_token", "")
+    masked = f"...{token[-8:]}" if len(token) > 8 else ("(chưa cấu hình)" if not token else token)
+    return jsonify({
+        "page_id": config.get("page_id", ""),
+        "page_name": config.get("page_name", ""),
+        "token_masked": masked,
+        "has_token": bool(token),
+        "sheets_csv_url": config.get("sheets_csv_url", ""),
+        "scheduler_interval_minutes": config.get("scheduler_interval_minutes", 5),
+    })
+
+@app.route('/api/page/token', methods=['POST'])
+def save_page_token():
+    from fb_page_api import validate_token
+    data = request.json or {}
+    token = data.get("token", "").strip()
+    if not token:
+        return jsonify({"error": "Token không được để trống"}), 400
+
+    ok, info = validate_token(token)
+    if not ok:
+        return jsonify({"error": f"Token không hợp lệ: {info}"}), 400
+
+    config = load_config()
+    config["page_access_token"] = token
+    config["page_id"] = info.get("id", "")
+    config["page_name"] = info.get("name", "")
+    save_config(config)
+    return jsonify({"success": True, "page_name": info.get("name"), "page_id": info.get("id")})
+
+@app.route('/api/page/sheets', methods=['POST'])
+def save_sheets_url():
+    data = request.json or {}
+    url = data.get("url", "").strip()
+    interval = int(data.get("interval", 5))
+    if not url:
+        return jsonify({"error": "URL không được để trống"}), 400
+    config = load_config()
+    config["sheets_csv_url"] = url
+    config["scheduler_interval_minutes"] = interval
+    save_config(config)
+    return jsonify({"success": True})
+
+@app.route('/api/page/preview', methods=['POST'])
+def preview_sheets():
+    from scheduler import preview_sheets as _preview
+    data = request.json or {}
+    url = data.get("url", "").strip()
+    if not url:
+        config = load_config()
+        url = config.get("sheets_csv_url", "")
+    if not url:
+        return jsonify({"error": "Chưa có Sheets URL"}), 400
+    rows = _preview(url)
+    return jsonify({"rows": rows})
+
+@app.route('/api/scheduler/status', methods=['GET'])
+def scheduler_status():
+    from scheduler import get_scheduler_status
+    return jsonify(get_scheduler_status())
+
+@app.route('/api/scheduler/start', methods=['POST'])
+def start_sched():
+    from scheduler import start_scheduler
+    config = load_config()
+    interval = config.get("scheduler_interval_minutes", 5)
+    ok = start_scheduler(interval)
+    if ok:
+        config["scheduler_running"] = True
+        save_config(config)
+    return jsonify({"success": ok})
+
+@app.route('/api/scheduler/stop', methods=['POST'])
+def stop_sched():
+    from scheduler import stop_scheduler
+    ok = stop_scheduler()
+    config = load_config()
+    config["scheduler_running"] = False
+    save_config(config)
+    return jsonify({"success": ok})
+
+@app.route('/api/scheduler/run-now', methods=['POST'])
+def run_now():
+    """Manually trigger one scheduler job run immediately."""
+    from scheduler import run_scheduler_job
+    try:
+        run_scheduler_job()
+        return jsonify({"success": True, "message": "Đã chạy thủ công xong!"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/scheduler/logs', methods=['GET'])
+def get_logs():
+    from scheduler import get_log_tail
+    lines = request.args.get("lines", 80, type=int)
+    return jsonify({"logs": get_log_tail(lines)})
+
+@app.route('/api/page/post-now', methods=['POST'])
+def post_now_api():
+    """Manually post a single post to a page via API (not scheduled)."""
+    from fb_page_api import post_to_page
+    data = request.json or {}
+    config = load_config()
+    token = config.get("page_access_token", "")
+    page_id = data.get("page_id") or config.get("page_id", "")
+    content = data.get("content", "").strip()
+    image_url = data.get("image_url", "").strip()
+
+    if not token:
+        return jsonify({"error": "Chưa có Page Access Token. Hãy cấu hình ở tab Page Scheduler!"}), 400
+    if not page_id:
+        return jsonify({"error": "Chưa có Page ID"}), 400
+    if not content:
+        return jsonify({"error": "Nội dung không được để trống"}), 400
+
+    ok, result = post_to_page(page_id, token, content, image_url or None)
+    if ok:
+        return jsonify({"success": True, "post_id": result.get("post_id")})
+    else:
+        return jsonify({"error": result}), 400
