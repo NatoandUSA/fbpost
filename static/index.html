@@ -3,697 +3,565 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Facebook Automation Dashboard - Post, Interact & Scrape">
-    <title>FB Automation Dashboard</title>
+    <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
+    <title>FB Automation Panel V4</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Top Navigation Bar -->
-    <nav class="top-bar">
-        <div class="top-bar-left">
-            <div class="fb-logo">
-                <svg viewBox="0 0 36 36"><path d="M20.181 35.87C29.094 34.791 36 27.202 36 18c0-9.941-8.059-18-18-18S0 8.059 0 18c0 8.442 5.811 15.526 13.652 17.471L14 26h-3v-4h3v-3.2c0-3.36 1.893-5.294 4.922-5.294 1.468 0 2.578.11 2.578.11V17h-1.926C18.19 17 17.5 18.126 17.5 19.314V22h4l-.5 4h-3.5l.181 9.87z"></path></svg>
-            </div>
-            <span class="top-bar-title">FB Automation</span>
-        </div>
-        <div class="top-bar-right">
-            <!-- GPM API Setting input -->
-            <div class="gpm-api-setting">
-                <input type="text" id="gpm-api-input" value="http://127.0.0.1:13926" placeholder="GPM API URL (ví dụ: http://127.0.0.1:13926)" title="Cấu hình API GPM Login">
-            </div>
-
-            <!-- 2FA Tool Widget -->
-            <div class="tfa-widget">
-                <button id="tfa-toggle-btn" class="btn-tfa-toggle" title="Lấy mã 2FA">🔑 Lấy mã 2FA</button>
-                <div id="tfa-popover" class="tfa-popover hidden">
-                    <h4>Trình tạo mã 2FA</h4>
-                    <input type="text" id="tfa-secret-input" placeholder="Nhập Secret Key 2FA...">
-                    <button id="tfa-generate-btn" class="btn btn-primary btn-sm">Tạo mã</button>
-                    <div id="tfa-result" class="tfa-result hidden">
-                        <span id="tfa-code">------</span>
-                        <button id="tfa-copy-btn" class="btn-copy" title="Sao chép">📋</button>
-                    </div>
-                </div>
+    <div class="app-layout">
+        <!-- Left Sidebar Navigation -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <svg class="brand-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="36" height="36" rx="8" fill="#2563EB"/>
+                    <path d="M22.5 12.5H13.5C12.95 12.5 12.5 12.95 12.5 13.5V22.5C12.5 23.05 12.95 23.5 13.5 23.5H22.5C23.05 23.5 23.5 23.05 23.5 22.5V13.5C23.5 12.95 23.05 12.5 22.5 12.5ZM21.5 18H18.5V21H17.5V18H14.5V17H17.5V14H18.5V17H21.5V18Z" fill="white"/>
+                </svg>
+                <span class="brand-text">FB Auto 2026</span>
             </div>
             
-            <div id="auth-status" class="status-badge checking">
-                <span class="status-dot"></span>
-                <span class="status-text">Đang kiểm tra...</span>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
-    <div class="main-content">
-
-        <!-- Auth Card (shown when not authenticated) -->
-        <div id="auth-card" class="auth-card hidden">
-            <div class="auth-card-info">
-                <div class="auth-icon">
-                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
-                </div>
-                <div class="auth-text">
-                    <h3>Chưa đăng nhập Facebook</h3>
-                    <p>Vui lòng xác thực tài khoản hoặc quản lý các cấu hình Profile bên dưới để bắt đầu sử dụng các tính năng tự động.</p>
-                </div>
-            </div>
-            <button id="auth-btn" class="btn btn-auth">Đăng nhập</button>
-        </div>
-
-        <!-- Accounts Management Card -->
-        <div class="accounts-card">
-            <div class="accounts-header">
-                <div class="accounts-header-left">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="#1877F2"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                    <h3>Quản lý Profiles & Tài khoản</h3>
-                </div>
-                <button id="add-account-toggle-btn" class="btn btn-secondary btn-sm">➕ Thêm Profile</button>
-            </div>
-            
-            <!-- Add Account Form -->
-            <div id="add-account-form" class="add-account-form hidden">
-                <div class="form-grid">
-                    <div class="field-group">
-                        <label class="field-label">Tên tài khoản gợi nhớ</label>
-                        <input type="text" id="acc-name" class="field-input" placeholder="Ví dụ: Nick Phụ 1">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Loại Profile</label>
-                        <select id="acc-type" class="field-input">
-                            <option value="local">📁 Profile Cục bộ (Local)</option>
-                            <option value="gpm">🌐 Profile GPM Login</option>
-                        </select>
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Profile ID (GPM) / Folder Name (Local)</label>
-                        <input type="text" id="acc-profile-id" class="field-input" placeholder="Ví dụ: my-profile-1 hoặc ID GPM">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">Proxy (Tùy chọn)</label>
-                        <input type="text" id="acc-proxy" class="field-input" placeholder="http://username:password@ip:port">
-                    </div>
-                </div>
-                <div class="form-actions">
-                    <button id="save-account-btn" class="btn btn-primary btn-sm">Lưu cấu hình</button>
-                    <button id="cancel-account-btn" class="btn btn-secondary btn-sm">Hủy</button>
-                </div>
-            </div>
-
-            <!-- Accounts Table -->
-            <div class="accounts-list-container">
-                <table id="accounts-table">
-                    <thead>
-                        <tr>
-                            <th>Tên tài khoản</th>
-                            <th>Loại</th>
-                            <th>Thư mục / ID GPM</th>
-                            <th>Proxy</th>
-                            <th>Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accounts-table-body">
-                        <!-- Dynamic accounts -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Composer Card -->
-        <div class="composer-card">
-            <!-- Tabs -->
-            <div class="composer-tabs">
-                <button class="composer-tab active" data-target="group" id="tab-group">
-                    <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-                    <span>Group</span>
+            <div class="sidebar-menu">
+                <div class="menu-label">Chức năng chính</div>
+                <button class="composer-tab nav-item active" data-target="group" id="tab-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>Đăng bài Nhóm</span>
                 </button>
-                <button class="composer-tab" data-target="page" id="tab-page">
-                    <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-                    <span>Page</span>
+                <button class="composer-tab nav-item" data-target="page" id="tab-page">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                    <span>Đăng bài Trang</span>
                 </button>
-                <button class="composer-tab" data-target="thread" id="tab-thread">
-                    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
-                    <span>Thread</span>
+                <button class="composer-tab nav-item" data-target="thread" id="tab-thread">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>Gửi tin nhắn</span>
                 </button>
-                <button class="composer-tab" data-target="interact" id="tab-interact">
-                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    <span>Nuôi Nick</span>
+                <button class="composer-tab nav-item" data-target="interact" id="tab-interact">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                    <span>Nuôi nick (Tương tác)</span>
                 </button>
-                <button class="composer-tab" data-target="scrape" id="tab-scrape">
-                    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                    <span>Quét Bình Luận</span>
+                <button class="composer-tab nav-item" data-target="scrape" id="tab-scrape">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <span>Quét bình luận</span>
                 </button>
-                <button class="composer-tab" data-target="content-hub" id="tab-content-hub">
-                    <svg viewBox="0 0 24 24"><path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5.47 18.6L12 22l6.53-3.4-1.89-1.03L12 19.8l-4.64-2.53-1.89 1.03z"/></svg>
+                <button class="composer-tab nav-item" data-target="content-hub" id="tab-content-hub">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                     <span>Content Hub</span>
                 </button>
-                <button class="composer-tab" data-target="page-scheduler" id="tab-page-scheduler">
-                    <svg viewBox="0 0 24 24"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
-                    <span>📅 Page Scheduler</span>
+                <button class="composer-tab nav-item" data-target="page-scheduler" id="tab-page-scheduler">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <span>Page Scheduler</span>
                 </button>
             </div>
 
-            <!-- Composer Body -->
-            <div class="composer-body">
-                <!-- Account Selector -->
-                <div class="field-group" id="account-selector-container">
-                    <label class="field-label">👤 Chọn Tài khoản (Profile) thực hiện</label>
-                    <select id="account-selector" class="field-input">
-                        <option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>
-                        <!-- Dynamic options loaded via JS -->
-                    </select>
+            <div class="sidebar-configs">
+                <div class="menu-label">Cài đặt & Công cụ</div>
+                
+                <div class="sidebar-config-item">
+                    <label class="field-label">GPM API URL</label>
+                    <input type="text" id="gpm-api-input" value="http://127.0.0.1:13926" class="field-input" placeholder="http://127.0.0.1:13926">
                 </div>
-
-                <!-- Input Mode Toggle (Only visible for Group, Page, Thread) -->
-                <div class="input-mode-toggle" id="mode-toggle-container">
-                    <button class="mode-btn active" data-mode="manual" id="mode-manual">
-                        ✏️ Nhập thủ công
-                    </button>
-                    <button class="mode-btn" data-mode="csv" id="mode-csv">
-                        📊 Google Sheets CSV
-                    </button>
-                </div>
-
-                <!-- 1. Post/Message manual sections -->
-                <div id="manual-section">
-                    <!-- Target URLs -->
-                    <div class="field-group">
-                        <label class="field-label" id="target-label">🔗 Đường dẫn Group (mỗi link 1 dòng)</label>
-                        <textarea id="target-input" class="field-textarea" rows="3" placeholder="https://facebook.com/groups/123&#10;https://facebook.com/groups/456"></textarea>
-                    </div>
-
-                    <!-- Post Content -->
-                    <div class="composer-prompt">
-                        <div class="avatar">
-                            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                
+                <div class="tfa-sidebar-container">
+                    <button id="tfa-toggle-btn" class="btn btn-secondary btn-sm btn-full">🔑 Trình tạo OTP 2FA</button>
+                    <div id="tfa-popover" class="tfa-popover hidden">
+                        <h4>Tạo mã OTP 2FA</h4>
+                        <input type="text" id="tfa-secret-input" placeholder="Dán Secret Key 2FA...">
+                        <button id="tfa-generate-btn" class="btn btn-primary btn-sm btn-full" style="margin-top: 8px;">Tạo mã</button>
+                        <div id="tfa-result" class="tfa-result hidden" style="margin-top: 8px;">
+                            <span id="tfa-code">------</span>
+                            <button id="tfa-copy-btn" class="btn-copy">📋</button>
                         </div>
-                        <div style="flex:1">
-                            <textarea id="post-content" class="field-textarea composer-textarea" rows="4" placeholder="Bạn đang nghĩ gì?"></textarea>
-                            <div class="spintax-hint">
-                                💡 Spintax: <code>{Xin chào|Hello}</code> sẽ chọn ngẫu nhiên
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main class="app-workspace">
+            <header class="workspace-header">
+                <div class="header-left">
+                    <h2 class="workspace-title" id="active-workspace-title">Đăng Bài Nhóm (Group)</h2>
+                </div>
+                <div class="header-right">
+                    <div id="auth-status" class="status-badge checking">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Đang kiểm tra...</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Flat Workspace Column Grid -->
+            <div class="workspace-grid">
+                
+                <!-- Left Panel: Configurations & Inputs -->
+                <div class="workspace-panel panel-left">
+                    
+                    <!-- Auth Card (Alert box style when not authenticated) -->
+                    <div id="auth-card" class="auth-card hidden">
+                        <div class="auth-card-info">
+                            <div class="auth-icon">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                            </div>
+                            <div class="auth-text">
+                                <h4>Trình duyệt chưa đăng nhập</h4>
+                                <p>Nhấp nút Đăng nhập để mở cửa sổ Playwright kết nối và xác thực.</p>
                             </div>
                         </div>
+                        <button id="auth-btn" class="btn btn-primary btn-sm">Đăng nhập</button>
                     </div>
-                </div>
 
-                <!-- 2. CSV Input Section -->
-                <div id="csv-section" class="hidden">
-                    <div class="field-group">
-                        <label class="field-label">📊 URL Google Sheets (CSV công khai)</label>
-                        <input type="text" id="csv-url" class="field-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-                        <p class="field-hint">Định dạng: Cột A (URL mục tiêu), Cột B (Nội dung), Cột C (Đường dẫn ảnh - Tùy chọn)</p>
-                    </div>
-                </div>
-
-                <!-- 3. Interact Seeding Section (Nuôi Nick) -->
-                <div id="interact-section" class="hidden">
-                    <div class="field-group">
-                        <label class="field-label">📈 Số lượng bài viết muốn tương tác</label>
-                        <input type="number" id="interact-limit" class="field-input" value="5" min="1" max="50">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">💬 Danh sách bình luận ngẫu nhiên (Phân tách bằng dấu chấm phẩy <code>;</code>)</label>
-                        <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Chúc ngày mới tốt lành nhé!;Like mạnh!;Đỉnh quá!"></textarea>
-                        <p class="field-hint">Hệ thống sẽ lướt dòng thời gian, thả Tim/Like ngẫu nhiên (60% tỉ lệ) và chọn ngẫu nhiên các bình luận trên để phản hồi (30% tỉ lệ).</p>
-                    </div>
-                </div>
-
-                <!-- 4. Scrape Comments Section -->
-                <div id="scrape-section" class="hidden">
-                    <div class="field-group">
-                        <label class="field-label">🔗 Đường dẫn bài viết Facebook cần quét</label>
-                        <input type="text" id="scrape-target" class="field-input" placeholder="https://www.facebook.com/username/posts/123456789">
-                    </div>
-                    <div class="field-group">
-                        <label class="field-label">📊 Số lượng bình luận tối đa muốn tải</label>
-                        <input type="number" id="scrape-limit" class="field-input" value="50" min="10" max="500">
-                    </div>
-                    
-                    <!-- Scraped Results display table -->
-                    <div id="scrape-results-container" class="scrape-results-container hidden">
-                        <div class="scrape-results-header">
-                            <h4>📋 Kết quả quét bình luận</h4>
-                            <button id="download-csv-btn" class="btn btn-secondary btn-sm">📥 Tải về CSV</button>
+                    <!-- Profiles / Accounts Card -->
+                    <section class="card accounts-card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <span class="card-icon">📁</span>
+                                <h3>Quản lý Profiles & Tài khoản</h3>
+                            </div>
+                            <button id="add-account-toggle-btn" class="btn btn-secondary btn-xs">➕ Thêm Profile</button>
                         </div>
-                        <div class="table-wrapper">
-                            <table id="scrape-table">
+                        
+                        <div id="add-account-form" class="add-account-form hidden">
+                            <div class="form-grid">
+                                <div class="field-group">
+                                    <label class="field-label">Tên tài khoản</label>
+                                    <input type="text" id="acc-name" class="field-input" placeholder="Ví dụ: Nick Phụ 1">
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Loại Profile</label>
+                                    <select id="acc-type" class="field-input">
+                                        <option value="local">📁 Profile Cục bộ (Local)</option>
+                                        <option value="gpm">🌐 Profile GPM Login</option>
+                                    </select>
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Folder Name / ID GPM</label>
+                                    <input type="text" id="acc-profile-id" class="field-input" placeholder="local_profile_1">
+                                </div>
+                                <div class="field-group">
+                                    <label class="field-label">Proxy (Tùy chọn)</label>
+                                    <input type="text" id="acc-proxy" class="field-input" placeholder="user:pass@ip:port">
+                                </div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 12px; display: flex; gap: 8px;">
+                                <button id="save-account-btn" class="btn btn-primary btn-sm">Lưu cấu hình</button>
+                                <button id="cancel-account-btn" class="btn btn-secondary btn-sm">Hủy</button>
+                            </div>
+                        </div>
+
+                        <div class="accounts-list-container">
+                            <table id="accounts-table">
                                 <thead>
                                     <tr>
-                                        <th>Họ tên</th>
-                                        <th>Profile / UID</th>
-                                        <th>Nội dung bình luận</th>
-                                        <th>Số điện thoại</th>
+                                        <th>Tên nick</th>
+                                        <th>Loại</th>
+                                        <th>Thư mục / ID GPM</th>
+                                        <th>Proxy</th>
+                                        <th>Thao tác</th>
                                     </tr>
                                 </thead>
-                                <tbody id="scrape-table-body">
-                                    <!-- Dynamic rows -->
+                                <tbody id="accounts-table-body">
+                                    <!-- Dynamic rows from JS -->
                                 </tbody>
                             </table>
                         </div>
-                    </div>
-                </div>
+                    </section>
 
-                <!-- 5. Content Hub Integrated Section -->
-                <div id="content-hub-section" class="hidden">
-                    <!-- Brand selector -->
-                    <div class="brands">
-                        <button type="button" class="brand active" id="brandLacasa" aria-pressed="true">🌿 Lacasa</button>
-                        <button type="button" class="brand" id="brandUmee" aria-pressed="false">🎬 UMEE</button>
-                        <button type="button" class="brand" id="brandHue" aria-pressed="false">🌸 Về Huế</button>
-                    </div>
-
-                    <!-- Sub-tabs for Content Hub -->
-                    <div class="tabs" id="hub-tabbar" role="tablist">
-                        <button type="button" class="tab active" aria-selected="true" data-tab="0">✨ Tạo bài</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="1">Bài chính</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="2">Group</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="3">Reel/Story</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="4">Comment</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="5">Hashtag</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="6">Điểm</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="7">Lịch sử</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="8">Mẫu thắng</button>
-                        <button type="button" class="tab" aria-selected="false" data-tab="9">Lưu ý</button>
-                    </div>
-
-                    <!-- Sub Sections -->
-                    <!-- SUB 0: Tạo bài -->
-                    <div class="hub-section active" id="hub-sec-0">
-                        <div class="card primary-card">
-                            <div class="section-intro"><h2>Tạo nội dung</h2><span>1. Chọn ý → 2. Kiểm tra → 3. Tạo bài</span></div>
-                            <div class="label">✨ Ý chính & mục đích</div>
-                            <div class="row">
-                                <div class="flabel">Mục đích bài đăng</div>
-                                <select id="purpose" class="field-input">
-                                    <option value="auto">Tự chọn theo ý chính</option>
-                                </select>
-                            </div>
-                            <div class="row">
-                                <div class="flabel">Ý chính (mọi ý đều được giữ trong bài)</div>
-                                <textarea id="idea" class="field-textarea" placeholder="vd: dorm 8 giường có rèm riêng tư, sân vườn BBQ"></textarea>
-                            </div>
-                            <div class="chips" id="chips"></div>
+                    <!-- Composer Workspace Section -->
+                    <section class="card composer-body-card">
+                        <!-- Account Selector -->
+                        <div class="field-group" id="account-selector-container">
+                            <label class="field-label">👤 Chọn Profile chạy tác vụ</label>
+                            <select id="account-selector" class="field-input">
+                                <option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>
+                            </select>
                         </div>
 
-                        <div class="card" id="roomCard">
-                            <div class="label">📅 Thông tin phòng hôm nay (bỏ trống nếu không cần)</div>
-                            <div class="grid2">
-                                <div class="row"><div class="flabel">Ngày cần bán</div><input type="text" id="fDate" class="field-input" placeholder="hôm nay / 13–15/7"></div>
-                                <div class="row" style="grid-column:1 / -1">
-                                    <div class="flabel">Phòng còn trống (chạm để chọn, chọn được nhiều)</div>
-                                    <div class="chips" id="roomChips" style="margin-bottom:6px"></div>
-                                    <input type="text" id="fRoom" class="field-input" placeholder="hoặc tự gõ loại phòng khác">
-                                </div>
-                                <div class="row"><div class="flabel">Số phòng/giường trống</div><input type="text" id="fCount" class="field-input" placeholder="2 phòng / 5 giường"></div>
-                                <div class="row"><div class="flabel">Giá từ</div><input type="text" id="fPrice" class="field-input" placeholder="từ 1xx/người / 490k/đêm"></div>
-                            </div>
-                            <div class="row" style="margin-top:10px;"><div class="flabel">Số khách phù hợp</div><input type="text" id="fGuest" class="field-input" placeholder="2 người / nhóm 4–8"></div>
-                            <div class="row"><div class="flabel">Ghi chú đặc biệt</div><input type="text" id="fNote" class="field-input" placeholder="vd: tầng 2 view vườn, nhận thú cưng nhỏ"></div>
+                        <!-- Input Mode Toggle -->
+                        <div class="input-mode-toggle" id="mode-toggle-container">
+                            <button class="mode-btn active" data-mode="manual" id="mode-manual">✏️ Nhập thủ công</button>
+                            <button class="mode-btn" data-mode="csv" id="mode-csv">📊 Google Sheets CSV</button>
                         </div>
 
-                        <div class="card format-card">
-                            <div class="label">🎨 Giọng & định dạng</div>
-                            <div class="grid2">
-                                <div class="row"><div class="flabel">Nền tảng đăng</div>
-                                    <select id="platform" class="field-input">
-                                        <option value="facebook">Facebook Page / Group</option>
-                                        <option value="threads">Threads — trò chuyện, góc nhìn</option>
-                                        <option value="instagram">Instagram — caption hình/Reel</option>
-                                        <option value="google">Google Maps — cập nhật doanh nghiệp</option>
-                                    </select>
-                                </div>
-                                <div class="row"><div class="flabel">Cảm xúc muốn bán</div>
-                                    <select id="emotion" class="field-input">
-                                        <option value="auto">Tự chọn theo ý chính</option>
-                                        <option value="sleep">Giấc ngủ ngon</option>
-                                        <option value="morning">Buổi sáng bình yên</option>
-                                        <option value="healing">Không gian chữa lành</option>
-                                        <option value="together">Khoảnh khắc bên nhau</option>
-                                        <option value="freedom">Tự do & nhẹ đầu</option>
-                                    </select>
-                                </div>
-                                <div class="row"><div class="flabel">Đối tượng</div><select id="target" class="field-input"></select></div>
-                                <div class="row"><div class="flabel">Tông giọng</div>
-                                    <select id="tone" class="field-input">
-                                        <option value="auto">Tự nhiên như người thật</option>
-                                        <option value="vui">Vui vẻ trẻ trung</option>
-                                        <option value="nhe">Nhẹ nhàng ấm áp</option>
-                                        <option value="chot">Chốt phòng nhanh</option>
-                                        <option value="review">Review trải nghiệm</option>
-                                        <option value="sang">Sang hơn một chút</option>
-                                    </select>
-                                </div>
-                                <div class="row"><div class="flabel">Độ dài</div>
-                                    <select id="length" class="field-input">
-                                        <option value="vua">Vừa</option>
-                                        <option value="ngan">Ngắn</option>
-                                        <option value="dai">Dài hơn</option>
-                                    </select>
-                                </div>
-                                <div class="row"><div class="flabel">Kêu gọi (CTA)</div>
-                                    <select id="cta" class="field-input">
-                                        <option value="both">Inbox hoặc Zalo</option>
-                                        <option value="inbox">Inbox Fanpage</option>
-                                        <option value="zalo">Zalo 0905 555 317</option>
-                                        <option value="hinh">Nhắn để xem hình phòng</option>
-                                        <option value="giu">Nhắn để giữ phòng</option>
-                                    </select>
+                        <!-- 1. Post/Message manual sections -->
+                        <div id="manual-section">
+                            <div class="field-group">
+                                <label class="field-label" id="target-label">🔗 Đường dẫn Group (mỗi link 1 dòng)</label>
+                                <textarea id="target-input" class="field-textarea" rows="3" placeholder="https://facebook.com/groups/..."></textarea>
+                            </div>
+
+                            <div class="field-group">
+                                <label class="field-label">📝 Nội dung bài viết</label>
+                                <textarea id="post-content" class="field-textarea" rows="5" placeholder="Bạn đang nghĩ gì?"></textarea>
+                                <div class="spintax-hint" style="margin-top: 8px;">
+                                    💡 Spintax: <code>{Xin chào|Hello}</code> sẽ chọn ngẫu nhiên
                                 </div>
                             </div>
                         </div>
 
-                        <div class="genwrap">
-                            <div class="gen2">
-                                <button class="gen ghost2" id="genOffBtn">⚡ Tạo Offline<span class="sub">Miễn phí · tức thì</span></button>
-                                <button class="gen" id="genBtn">🤖 Tạo bằng AI<span class="sub">Tự nhiên hơn · có dùng API</span></button>
+                        <!-- 2. CSV Input Section -->
+                        <div id="csv-section" class="hidden">
+                            <div class="field-group">
+                                <label class="field-label">📊 URL Google Sheets (CSV công khai)</label>
+                                <input type="text" id="csv-url" class="field-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
+                                <p class="field-hint" style="margin-top: 6px;">Định dạng: Cột A (URL), Cột B (Nội dung), Cột C (Ảnh cục bộ - Tùy chọn)</p>
                             </div>
                         </div>
-                        <div class="status" id="status"></div>
-                    </div>
 
-                    <!-- SUB 1: Bài chính -->
-                    <div class="hub-section" id="hub-sec-1">
-                        <div class="card">
-                            <div class="label" id="mainLabel">Bài chính — đăng Facebook</div>
-                            <div class="post" id="main"><span class="empty">Chưa có nội dung. Qua tab ✨ Tạo bài trước nha.</span></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('main',this)">📋 Copy bài chính</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="main">📥 Đưa vào Bảng đăng bài</button>
+                        <!-- 3. Interact Seeding Section (Nuôi Nick) -->
+                        <div id="interact-section" class="hidden">
+                            <div class="field-group">
+                                <label class="field-label">📈 Số bài tương tác</label>
+                                <input type="number" id="interact-limit" class="field-input" value="5" min="1" max="50">
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">💬 Danh sách bình luận (Phân tách bằng dấu <code>;</code>)</label>
+                                <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Like mạnh!"></textarea>
                             </div>
                         </div>
-                        <div class="card">
-                            <button class="copy ghost" id="btn-copy-package">📦 Copy trọn bộ (bài chính + group + reel + hashtag)</button>
-                        </div>
-                    </div>
 
-                    <!-- SUB 2: Group -->
-                    <div class="hub-section" id="hub-sec-2">
-                        <div class="card">
-                            <div class="label">Group #1 — chia sẻ thật</div>
-                            <div class="post" id="grp1"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('grp1',this)">📋 Copy group #1</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="grp1">📥 Đưa vào Bảng đăng bài</button>
+                        <!-- 4. Scrape Comments Section -->
+                        <div id="scrape-section" class="hidden">
+                            <div class="field-group">
+                                <label class="field-label">🔗 Link bài viết Facebook cần quét</label>
+                                <input type="text" id="scrape-target" class="field-input" placeholder="https://www.facebook.com/posts/...">
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">📊 Số lượng comment tối đa</label>
+                                <input type="number" id="scrape-limit" class="field-input" value="50" min="10" max="500">
+                            </div>
+                            
+                            <div id="scrape-results-container" class="scrape-results-container hidden" style="margin-top: 14px;">
+                                <div class="scrape-results-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                                    <h4>📋 Kết quả bình luận</h4>
+                                    <button id="download-csv-btn" class="btn btn-secondary btn-sm">📥 Tải về CSV</button>
+                                </div>
+                                <div class="table-wrapper">
+                                    <table id="scrape-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Họ tên</th>
+                                                <th>UID / Link</th>
+                                                <th>Nội dung</th>
+                                                <th>SĐT</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="scrape-table-body"></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
-                        <div class="card">
-                            <div class="label">Group #2 — gợi ý trải nghiệm</div>
-                            <div class="post" id="grp2"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('grp2',this)">📋 Copy group #2</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="grp2">📥 Đưa vào Bảng đăng bài</button>
+
+                        <!-- 5. Content Hub Integrated Section -->
+                        <div id="content-hub-section" class="hidden">
+                            <div class="brands">
+                                <button type="button" class="brand active" id="brandLacasa">🌿 Lacasa</button>
+                                <button type="button" class="brand" id="brandUmee">🎬 UMEE</button>
+                                <button type="button" class="brand" id="brandHue">🌸 Về Huế</button>
+                            </div>
+
+                            <div class="tabs" id="hub-tabbar" role="tablist">
+                                <button type="button" class="tab active" aria-selected="true" data-tab="0">✨ Tạo bài</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="1">Bài chính</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="2">Group</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="3">Reel/Story</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="4">Comment</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="5">Hashtag</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="6">Điểm</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="7">Lịch sử</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="8">Mẫu thắng</button>
+                                <button type="button" class="tab" aria-selected="false" data-tab="9">Lưu ý</button>
+                            </div>
+
+                            <!-- Hub Section 0: Setup -->
+                            <div class="hub-section active" id="hub-sec-0">
+                                <div class="row">
+                                    <div class="flabel">Mục đích bài đăng</div>
+                                    <select id="purpose" class="field-input"></select>
+                                </div>
+                                <div class="row">
+                                    <div class="flabel">Ý chính (mỗi ý cách nhau bằng dấu phẩy)</div>
+                                    <textarea id="idea" class="field-textarea" rows="3" placeholder="Ví dụ: dorm 8 giường có rèm riêng tư, BBQ sân vườn..."></textarea>
+                                </div>
+                                <div class="chips" id="chips"></div>
+
+                                <div class="card" id="roomCard" style="margin-top: 14px;">
+                                    <div class="flabel">📅 Thông tin bán phòng hôm nay</div>
+                                    <div class="grid2">
+                                        <div class="row"><div class="flabel">Ngày bán</div><input type="text" id="fDate" class="field-input" placeholder="hôm nay"></div>
+                                        <div class="row" style="grid-column: 1/-1">
+                                            <div class="flabel">Chọn phòng trống</div>
+                                            <div class="chips" id="roomChips"></div>
+                                            <input type="text" id="fRoom" class="field-input" placeholder="hoặc tự gõ">
+                                        </div>
+                                        <div class="row"><div class="flabel">Số lượng</div><input type="text" id="fCount" class="field-input" placeholder="2 phòng"></div>
+                                        <div class="row"><div class="flabel">Giá từ</div><input type="text" id="fPrice" class="field-input" placeholder="từ 1xx/đêm"></div>
+                                    </div>
+                                    <div class="row" style="margin-top:8px;"><div class="flabel">Số khách hợp</div><input type="text" id="fGuest" class="field-input" placeholder="nhóm 4-8 người"></div>
+                                    <div class="row"><div class="flabel">Ghi chú thêm</div><input type="text" id="fNote" class="field-input" placeholder="nhận thú cưng nhỏ"></div>
+                                </div>
+
+                                <div class="card" style="margin-top: 14px;">
+                                    <div class="flabel">🎨 Bộ lọc & Tông giọng</div>
+                                    <div class="grid2">
+                                        <div class="row"><div class="flabel">Nền tảng</div><select id="platform" class="field-input"><option value="facebook">Facebook</option><option value="threads">Threads</option><option value="instagram">Instagram</option><option value="google">Google Maps</option></select></div>
+                                        <div class="row"><div class="flabel">Cảm xúc bán</div><select id="emotion" class="field-input"><option value="auto">Tự động</option><option value="sleep">Giấc ngủ</option><option value="morning">Bình yên</option><option value="healing">Chữa lành</option><option value="together">Sum vầy</option><option value="freedom">Tự do</option></select></div>
+                                        <div class="row"><div class="flabel">Đối tượng</div><select id="target" class="field-input"></select></div>
+                                        <div class="row"><div class="flabel">Tông giọng</div><select id="tone" class="field-input"><option value="auto">Tự nhiên</option><option value="vui">Vui vẻ</option><option value="nhe">Nhẹ nhàng</option><option value="chot">Chốt nhanh</option><option value="review">Review</option><option value="sang">Chỉn chu</option></select></div>
+                                        <div class="row"><div class="flabel">Độ dài</div><select id="length" class="field-input"><option value="vua">Vừa phải</option><option value="ngan">Ngắn</option><option value="dai">Dài</option></select></div>
+                                        <div class="row"><div class="flabel">CTA</div><select id="cta" class="field-input"><option value="both">Zalo & Inbox</option><option value="inbox">Chỉ Inbox</option><option value="zalo">Chỉ Zalo</option></select></div>
+                                    </div>
+                                </div>
+
+                                <div class="genwrap" style="margin-top: 14px;">
+                                    <div class="gen2">
+                                        <button class="gen ghost2" id="genOffBtn">⚡ Tạo Cục Bộ</button>
+                                        <button class="gen" id="genBtn">🤖 Tạo bằng AI (Claude)</button>
+                                    </div>
+                                </div>
+                                <div class="status" id="status"></div>
+                            </div>
+
+                            <!-- Hub result views -->
+                            <div class="hub-section" id="hub-sec-1">
+                                <div class="post-result-box">
+                                    <div class="label" id="mainLabel">Bài viết chính</div>
+                                    <div class="post" id="main"></div>
+                                    <div style="display:flex; gap:8px;">
+                                        <button class="copy" onclick="copyEl('main',this)">📋 Copy bài chính</button>
+                                        <button class="btn btn-primary push-to-comp-btn" data-source="main">📥 Đưa vào Bảng đăng bài</button>
+                                    </div>
+                                </div>
+                                <button class="copy ghost" style="margin-top:12px;" id="btn-copy-package">📦 Copy trọn bộ (Main + Groups + Reels)</button>
+                            </div>
+
+                            <div class="hub-section" id="hub-sec-2">
+                                <div class="post-result-box">
+                                    <div class="label">Group 1 (Chia sẻ)</div><div class="post" id="grp1"></div><button class="copy" onclick="copyEl('grp1',this)">📋 Copy</button>
+                                    <button class="btn btn-primary btn-sm push-to-comp-btn" data-source="grp1">📥 Đưa vào đăng bài</button>
+                                </div>
+                                <div class="post-result-box">
+                                    <div class="label">Group 2 (Trải nghiệm)</div><div class="post" id="grp2"></div><button class="copy" onclick="copyEl('grp2',this)">📋 Copy</button>
+                                    <button class="btn btn-primary btn-sm push-to-comp-btn" data-source="grp2">📥 Đưa vào đăng bài</button>
+                                </div>
+                                <div class="post-result-box">
+                                    <div class="label">Group 3 (Hỏi đáp)</div><div class="post" id="grp3"></div><button class="copy" onclick="copyEl('grp3',this)">📋 Copy</button>
+                                    <button class="btn btn-primary btn-sm push-to-comp-btn" data-source="grp3">📥 Đưa vào đăng bài</button>
+                                </div>
+                                <div class="post-result-box">
+                                    <div class="label">Group 4 ( Checklist)</div><div class="post" id="grp4"></div><button class="copy" onclick="copyEl('grp4',this)">📋 Copy</button>
+                                    <button class="btn btn-primary btn-sm push-to-comp-btn" data-source="grp4">📥 Đưa vào đăng bài</button>
+                                </div>
+                            </div>
+
+                            <div class="hub-section" id="hub-sec-3">
+                                <div class="card"><h5>Tiêu đề video Reel gợi ý</h5><div id="titles"></div></div>
+                                <div class="card" style="margin-top:10px;"><h5>Mô tả Reel</h5><div class="post" id="reeldesc"></div><button class="copy" onclick="copyEl('reeldesc',this)">📋 Copy</button></div>
+                                <div class="card" style="margin-top:10px;"><h5>Story ngắn</h5><div class="post" id="story"></div><button class="copy" onclick="copyEl('story',this)">📋 Copy</button></div>
+                            </div>
+
+                            <div class="hub-section" id="hub-sec-4">
+                                <h5>Bình luận gợi ý (Comment đầu bài viết)</h5>
+                                <div id="comments" style="margin-top:8px;"></div>
+                            </div>
+                            <div class="hub-section" id="hub-sec-5"><div id="hashtagSection"></div></div>
+                            <div class="hub-section" id="hub-sec-6"><div id="scoreCard"><div id="scoreBody"></div></div></div>
+                            <div class="hub-section" id="hub-sec-7"><div id="histList"></div></div>
+                            <div class="hub-section" id="hub-sec-8"><div id="tplList"></div></div>
+                            <div class="hub-section" id="hub-sec-9"><div id="notes"></div></div>
+                        </div>
+
+                        <!-- 6. Page Scheduler Section -->
+                        <div id="page-scheduler-section" class="hidden">
+                            <div class="sched-card">
+                                <div class="sched-card-header">
+                                    <span class="sched-step">1</span>
+                                    <h4>Access Token liên kết Trang</h4>
+                                    <span id="sched-token-badge" class="sched-badge badge-error">Chưa cấu hình</span>
+                                </div>
+                                <div class="sched-card-body">
+                                    <input type="password" id="sched-token-input" class="field-input" placeholder="Dán Facebook Page Token vào đây...">
+                                    <button id="sched-save-token-btn" class="btn btn-primary btn-sm" style="margin-top: 8px;">Xác thực & Lưu</button>
+                                    <div id="sched-page-info" class="sched-page-info hidden">
+                                        <span id="sched-page-name"></span>
+                                        <span id="sched-page-id-badge" class="tag"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sched-card">
+                                <div class="sched-card-header">
+                                    <span class="sched-step">2</span>
+                                    <h4>Kết nối Google Sheets</h4>
+                                </div>
+                                <div class="sched-card-body">
+                                    <div class="field-group">
+                                        <label class="field-label">Đường dẫn CSV Google Sheet</label>
+                                        <input type="text" id="sched-sheets-url" class="field-input" placeholder="Nhập liên kết sheets CSV công khai...">
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Chu kỳ kiểm tra & đăng bài</label>
+                                        <select id="sched-interval" class="field-input">
+                                            <option value="5">Mỗi 5 phút</option>
+                                            <option value="15">Mỗi 15 phút</option>
+                                            <option value="30">Mỗi 30 phút</option>
+                                            <option value="60">Mỗi 1 giờ</option>
+                                        </select>
+                                    </div>
+                                    <div style="display:flex; gap:8px;">
+                                        <button id="sched-save-sheets-btn" class="btn btn-primary btn-sm">💾 Lưu Cấu hình</button>
+                                        <button id="sched-preview-btn" class="btn btn-secondary btn-sm">👁 Xem trước dữ liệu Sheet</button>
+                                    </div>
+                                    
+                                    <div id="sched-preview-container" class="hidden" style="margin-top: 14px;">
+                                        <table id="sched-preview-table" class="sched-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Page ID</th>
+                                                    <th>Nội dung</th>
+                                                    <th>Ảnh</th>
+                                                    <th>Thời gian đăng</th>
+                                                    <th>Trạng thái</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="sched-preview-body"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sched-card">
+                                <div class="sched-card-header">
+                                    <span class="sched-step">3</span>
+                                    <h4>Trạng thái Scheduler</h4>
+                                    <span id="sched-status-badge" class="sched-badge badge-error">🔴 Đang dừng</span>
+                                </div>
+                                <div class="sched-card-body">
+                                    <div class="sched-actions" style="display:flex; gap:8px;">
+                                        <button id="sched-start-btn" class="btn btn-primary btn-sm">▶ Kích hoạt Scheduler</button>
+                                        <button id="sched-stop-btn" class="btn btn-secondary btn-sm">⏹ Tạm dừng</button>
+                                        <button id="sched-run-now-btn" class="btn btn-secondary btn-sm">⚡ Kiểm tra & Chạy ngay</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="sched-card">
+                                <div class="sched-card-header">
+                                    <span class="sched-step">4</span>
+                                    <h4>Nhật ký Scheduler (scheduler.log)</h4>
+                                    <button id="sched-refresh-log-btn" class="btn btn-secondary btn-xs">🔄 Làm mới log</button>
+                                </div>
+                                <div id="sched-log-output" class="sched-log-output"></div>
                             </div>
                         </div>
-                        <div class="card">
-                            <div class="label">Group #3 — hỏi đáp tư vấn</div>
-                            <div class="post" id="grp3"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('grp3',this)">📋 Copy group #3</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="grp3">📥 Đưa vào Bảng đăng bài</button>
+
+                        <!-- Shared control parts for posting -->
+                        <div class="composer-divider" id="composer-divider-bar"></div>
+
+                        <div class="add-to-post" id="add-to-post-bar">
+                            <span class="add-to-post-label">Thêm ảnh bài đăng</span>
+                            <div class="add-to-post-actions">
+                                <button class="icon-btn photo" title="Thêm ảnh" id="add-image-btn">
+                                    <svg viewBox="0 0 24 24" width="20" height="20"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="#10B981"/></svg>
+                                </button>
+                                <input type="file" id="post-image-file" style="display:none" accept="image/*">
                             </div>
                         </div>
-                        <div class="card">
-                            <div class="label">Group #4 — note nhanh</div>
-                            <p class="hint" style="margin-bottom: 8px;">4 bản khác hẳn nhau → đăng 4 group không lo trùng. Giãn vài group/ngày.</p>
-                            <div class="post" id="grp4"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('grp4',this)">📋 Copy group #4</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="grp4">📥 Đưa vào Bảng đăng bài</button>
+
+                        <div id="image-upload-preview" class="hidden">
+                            <span id="image-preview-name">📎 photo.jpg</span>
+                            <button id="remove-image-btn" class="btn-ghost">❌ Hủy</button>
+                        </div>
+
+                        <div class="diverse-post-settings" id="diverse-post-settings-bar">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="post-feeling-opt"> 😊 Gắn cảm xúc ngẫu nhiên (Feeling)
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="post-checkin-opt"> 📍 Check-in tại Huế ngẫu nhiên
+                            </label>
+                        </div>
+
+                        <button id="post-btn" class="btn btn-primary btn-full">Đăng bài ngay</button>
+                    </section>
+                </div>
+
+                <!-- Right Panel: Visual Queue, Scheduler Log Preview, General Logs -->
+                <div class="workspace-panel panel-right">
+                    <!-- Visual Progress Dashboard -->
+                    <div id="visual-progress-dashboard" class="visual-progress-dashboard hidden">
+                        <div class="status-summary-card">
+                            <div class="status-summary-header">
+                                <span class="active-badge" id="active-task-name">Tác vụ đăng bài</span>
+                                <span class="active-target-index" id="active-target-index">0/0</span>
+                            </div>
+                            <div class="active-target-url" id="active-target-url">Đang chuẩn bị hàng đợi...</div>
+                            <div class="status-indicator">
+                                <span class="status-indicator-dot" id="status-indicator-dot"></span>
+                                <span id="status-detail-text" class="status-detail-text">Khởi tạo...</span>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- SUB 3: Reel/Story -->
-                    <div class="hub-section" id="hub-sec-3">
-                        <div class="card"><div class="label">Reel — Title (chọn 1)</div>
-                            <div id="titles"><span class="empty">Chưa có nội dung.</span></div></div>
-                        <div class="card"><div class="label">Reel — Description (≤255 ký tự)</div>
-                            <div class="post" id="reeldesc"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="count" id="reelcount"></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('reeldesc',this)">📋 Copy reel description</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="reeldesc">📥 Đưa vào Bảng đăng bài</button>
+                        
+                        <!-- Delay countdown status card -->
+                        <div id="cooldown-timer-card" class="cooldown-timer-card hidden">
+                            <div class="cooldown-header">
+                                <span>⏳ Nghỉ tránh spam (Giãn cách)</span>
+                                <span id="cooldown-time-left" class="cooldown-time-left">0s</span>
+                            </div>
+                            <div class="cooldown-progress-bar">
+                                <div id="cooldown-progress-fill" class="cooldown-progress-fill"></div>
                             </div>
                         </div>
-                        <div class="card"><div class="label">Story — bản siêu ngắn (≤120 ký tự)</div>
-                            <div class="post" id="story"><span class="empty">Chưa có nội dung.</span></div>
-                            <div class="count" id="storycount"></div>
-                            <div class="hub-action-row" style="display: flex; gap: 8px;">
-                                <button class="copy" style="flex: 1;" onclick="copyEl('story',this)">📋 Copy story</button>
-                                <button class="btn btn-primary push-to-comp-btn" style="flex: 1;" data-source="story">📥 Đưa vào Bảng đăng bài</button>
+
+                        <div class="target-stepper-container">
+                            <h5>Hàng đợi thực hiện (Queue)</h5>
+                            <div id="target-stepper-list" class="target-stepper-list"></div>
+                        </div>
+                    </div>
+
+                    <!-- Posted Successful Links Card -->
+                    <div id="posted-links-card" class="card posted-links-card hidden">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <span>🔗</span>
+                                <h3>Liên kết đã đăng thành công</h3>
+                            </div>
+                            <button id="clear-links-btn" class="btn-ghost btn-xs">Xóa danh sách</button>
+                        </div>
+                        <div class="posted-links-list" id="posted-links-list">
+                            <!-- JS loaded dynamic links -->
+                        </div>
+                    </div>
+
+                    <!-- Logs Panel Terminal -->
+                    <div class="card log-card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <span id="log-dot" class="log-dot idle"></span>
+                                <h3>💻 Nhật ký hoạt động chi tiết</h3>
+                            </div>
+                            <button id="clear-log" class="btn-ghost btn-xs">Xóa</button>
+                        </div>
+                        <div id="progress-container" class="hidden">
+                            <div class="progress-bar">
+                                <div id="progress-fill" class="progress-bar-fill"></div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- SUB 4: Comment -->
-                    <div class="hub-section" id="hub-sec-4">
-                        <div class="card">
-                            <div class="label">First comment — đăng ngay dưới bài</div>
-                            <p class="hint" style="margin-bottom: 8px;">Tự viết theo nội dung bài chính. Chọn câu hợp ngữ cảnh nhất; không cần dùng tất cả.</p>
-                            <div id="comments" class="comment-grid"></div>
+                        <div id="log-output" class="log-output">
+                            <div class="log-empty">
+                                <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                                <span>Chưa chạy tác vụ nào. Mời bạn thiết lập cấu hình bên trái và bấm Đăng/Chạy.</span>
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- SUB 5: Hashtag -->
-                    <div class="hub-section" id="hub-sec-5">
-                        <div id="hashtagSection"></div>
-                    </div>
-
-                    <!-- SUB 6: Điểm -->
-                    <div class="hub-section" id="hub-sec-6">
-                        <div class="card" id="scoreCard">
-                            <div class="label">Content Score — kiểm tra trước khi đăng</div>
-                            <div id="scoreBody"><span class="empty">Chưa có nội dung để chấm. Tạo bài trước nha.</span></div>
-                        </div>
-                    </div>
-
-                    <!-- SUB 7: Lịch sử -->
-                    <div class="hub-section" id="hub-sec-7">
-                        <div class="card">
-                            <div class="label">Lịch sử bài đã tạo (lưu trên máy này)</div>
-                            <p class="hint" style="margin-bottom: 8px;">Đánh dấu bài đã đăng & bài hiệu quả để cả team biết mẫu nào ăn khách.</p>
-                            <div id="histList"><span class="empty">Chưa có lịch sử.</span></div>
-                        </div>
-                    </div>
-
-                    <!-- SUB 8: Mẫu thắng -->
-                    <div class="hub-section" id="hub-sec-8">
-                        <div class="card">
-                            <div class="label">Mẫu thắng — bấm là điền sẵn, chỉ việc Tạo</div>
-                            <div id="tplList"></div>
-                        </div>
-                    </div>
-
-                    <!-- SUB 9: Lưu ý -->
-                    <div class="hub-section" id="hub-sec-9">
-                        <div class="card note" id="notes"></div>
                     </div>
                 </div>
 
-                <!-- ====== PAGE SCHEDULER SECTION ====== -->
-                <div id="page-scheduler-section" class="hidden">
-                    <!-- Step 1: Token -->
-                    <div class="sched-card">
-                        <div class="sched-card-header">
-                            <span class="sched-step">1</span>
-                            <h4>Cấu hình Page Access Token</h4>
-                            <span id="sched-token-badge" class="sched-badge badge-error">Chưa cấu hình</span>
-                        </div>
-                        <div class="sched-card-body">
-                            <p class="sched-hint">Lấy token tại <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Facebook Graph API Explorer</a>. Chọn Page của bạn → Chọn quyền <code>pages_manage_posts</code> → Generate Access Token.</p>
-                            <div class="sched-input-row">
-                                <input type="password" id="sched-token-input" class="field-input" placeholder="Dán Page Access Token vào đây...">
-                                <button id="sched-save-token-btn" class="btn btn-primary btn-sm">✅ Xác thực & Lưu</button>
-                            </div>
-                            <div id="sched-page-info" class="sched-page-info hidden">
-                                <span id="sched-page-name"></span>
-                                <span id="sched-page-id-badge"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Step 2: Google Sheets -->
-                    <div class="sched-card">
-                        <div class="sched-card-header">
-                            <span class="sched-step">2</span>
-                            <h4>Kết nối Google Sheets</h4>
-                        </div>
-                        <div class="sched-card-body">
-                            <p class="sched-hint">Tạo Google Sheet với 5 cột: <strong>A=Page ID, B=Nội dung, C=Link ảnh(URL), D=Thời gian (YYYY-MM-DD HH:MM), E=Trạng thái (pending)</strong>. Sau đó vào File → Share → Publish to web → CSV → Copy link.</p>
-                            <div class="sched-input-row">
-                                <input type="text" id="sched-sheets-url" class="field-input" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-                                <select id="sched-interval" class="field-input" style="max-width:140px;">
-                                    <option value="5">Mỗi 5 phút</option>
-                                    <option value="10">Mỗi 10 phút</option>
-                                    <option value="15">Mỗi 15 phút</option>
-                                    <option value="30">Mỗi 30 phút</option>
-                                    <option value="60">Mỗi 1 giờ</option>
-                                </select>
-                                <button id="sched-save-sheets-btn" class="btn btn-primary btn-sm">💾 Lưu</button>
-                            </div>
-                            <button id="sched-preview-btn" class="btn btn-secondary btn-sm" style="margin-top:8px;">👁 Xem trước dữ liệu Sheet</button>
-                        </div>
-
-                        <!-- Preview Table -->
-                        <div id="sched-preview-container" class="hidden" style="overflow-x:auto; margin-top:12px;">
-                            <table id="sched-preview-table" class="sched-table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>Page ID</th>
-                                        <th>Nội dung</th>
-                                        <th>Link ảnh</th>
-                                        <th>Thời gian đăng</th>
-                                        <th>Trạng thái</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="sched-preview-body"></tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Step 3: Scheduler Control -->
-                    <div class="sched-card">
-                        <div class="sched-card-header">
-                            <span class="sched-step">3</span>
-                            <h4>Điều khiển Scheduler</h4>
-                            <span id="sched-status-badge" class="sched-badge badge-error">🔴 Đang dừng</span>
-                        </div>
-                        <div class="sched-card-body">
-                            <div class="sched-actions">
-                                <button id="sched-start-btn" class="btn btn-primary">▶ Khởi động Scheduler</button>
-                                <button id="sched-stop-btn" class="btn btn-secondary">⏹ Dừng Scheduler</button>
-                                <button id="sched-run-now-btn" class="btn btn-secondary">⚡ Chạy ngay 1 lần</button>
-                            </div>
-                            <p class="sched-hint" style="margin-top:10px;">Sau khi khởi động, Scheduler sẽ tự động kiểm tra Google Sheet theo chu kỳ đã cài và đăng bài khi đến giờ. Tắt server sẽ dừng scheduler.</p>
-                        </div>
-                    </div>
-
-                    <!-- Step 4: Live Logs -->
-                    <div class="sched-card">
-                        <div class="sched-card-header">
-                            <span class="sched-step">4</span>
-                            <h4>Log hoạt động (scheduler.log)</h4>
-                            <button id="sched-refresh-log-btn" class="btn btn-secondary btn-sm">🔄 Làm mới</button>
-                        </div>
-                        <div id="sched-log-output" class="sched-log-output">
-                            <span style="opacity:0.5">Chưa có log. Nhấn "Làm mới" hoặc khởi động Scheduler.</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- ====== END PAGE SCHEDULER SECTION ====== -->
-
-                <!-- Divider -->
-                <div class="composer-divider" id="composer-divider-bar"></div>
-
-                <!-- Add to Post bar (Only visible for manual posts) -->
-                <div class="add-to-post" id="add-to-post-bar">
-                    <span class="add-to-post-label">Thêm vào bài viết</span>
-                    <div class="add-to-post-actions">
-                        <button class="icon-btn photo" title="Thêm ảnh" id="add-image-btn">
-                            <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" fill="#45BD62"/></svg>
-                        </button>
-                        <input type="file" id="post-image-file" style="display:none" accept="image/*">
-                    </div>
-                </div>
-
-                <!-- Image preview container -->
-                <div id="image-upload-preview" class="hidden">
-                    <span id="image-preview-name">📎 photo.jpg</span>
-                    <button id="remove-image-btn" class="btn-ghost">❌</button>
-                </div>
-
-                <!-- Diverse Posting Settings (Feeling, Checkin options) -->
-                <div class="diverse-post-settings" id="diverse-post-settings-bar">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="post-feeling-opt"> 😊 Cảm xúc ngẫu nhiên (Feeling)
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="post-checkin-opt"> 📍 Địa điểm ngẫu nhiên (Check-in)
-                    </label>
-                </div>
-
-                <!-- Post/Run Button -->
-                <button id="post-btn" class="btn btn-primary">Đăng bài ngay</button>
             </div>
-        </div>
-
-        <!-- Posted Links Card -->
-        <div id="posted-links-card" class="posted-links-card hidden">
-            <div class="posted-links-header">
-                <div class="posted-links-header-left">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="#1877F2"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
-                    <h3>Liên kết bài đăng thành công</h3>
-                </div>
-                <button id="clear-links-btn" class="btn-ghost">Xóa hết</button>
-            </div>
-            <div class="posted-links-list" id="posted-links-list">
-                <!-- Dynamic links loaded via JS -->
-            </div>
-        </div>
-
-        <!-- Log Panel -->
-        <div class="log-card">
-            <div class="log-header">
-                <div class="log-header-left">
-                    <span id="log-dot" class="log-dot idle"></span>
-                    <h3>Nhật ký hoạt động</h3>
-                </div>
-                <button id="clear-log" class="btn-ghost">Xóa</button>
-            </div>
-            <div id="progress-container" class="hidden">
-                <div class="progress-bar">
-                    <div id="progress-fill" class="progress-bar-fill"></div>
-                </div>
-            </div>
-            
-            <!-- Visual Progress Dashboard -->
-            <div id="visual-progress-dashboard" class="visual-progress-dashboard hidden">
-                <div class="dashboard-grid">
-                    <!-- Current Status Info -->
-                    <div class="status-summary-card">
-                        <div class="status-summary-header">
-                            <span class="active-badge" id="active-task-name">Tác vụ đăng bài</span>
-                            <span class="active-target-index" id="active-target-index">0/0</span>
-                        </div>
-                        <div class="active-target-url" id="active-target-url">Đang chờ khởi chạy...</div>
-                        <div class="status-indicator">
-                            <span class="status-indicator-dot" id="status-indicator-dot"></span>
-                            <span id="status-detail-text" class="status-detail-text">Sẵn sàng thực hiện.</span>
-                        </div>
-                    </div>
-                    
-                    <!-- Delay / Cooldown Timer Card -->
-                    <div id="cooldown-timer-card" class="cooldown-timer-card hidden">
-                        <div class="cooldown-header">
-                            <span>⏳ Giãn cách chống Spam (Delay)</span>
-                            <span id="cooldown-time-left" class="cooldown-time-left">0s</span>
-                        </div>
-                        <div class="cooldown-progress-bar">
-                            <div id="cooldown-progress-fill" class="cooldown-progress-fill"></div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Target Stepper Queue -->
-                <div class="target-stepper-container">
-                    <h5>Hàng đợi thực hiện</h5>
-                    <div id="target-stepper-list" class="target-stepper-list">
-                        <!-- Stepper items generated dynamically -->
-                    </div>
-                </div>
-            </div>
-
-            <div id="log-output" class="log-output">
-                <div class="log-empty">
-                    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg>
-                    <span>Chưa có hoạt động nào</span>
-                </div>
-            </div>
-        </div>
-
+        </main>
     </div>
 
-    <!-- Toast Container -->
+    <!-- Toast message overlay -->
     <div id="toast-container" class="toast-container"></div>
 
     <script src="app.js"></script>

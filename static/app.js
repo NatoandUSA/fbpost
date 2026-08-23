@@ -425,11 +425,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Workspace title map for each mode
+    const workspaceTitleMap = {
+        group: 'Đăng Bài Nhóm (Group)',
+        page: 'Đăng Bài Trang (Page)',
+        thread: 'Gửi Tin Nhắn Cá Nhân (Thread)',
+        interact: 'Nuôi Nick — Tương tác Newsfeed',
+        scrape: 'Quét & Lọc Bình Luận',
+        'content-hub': 'Content Hub — Tạo Nội Dung AI',
+        'page-scheduler': 'Page Scheduler — Lên Lịch Đăng Bài'
+    };
+
+    const workspaceTitleEl = document.getElementById('active-workspace-title');
+
     document.querySelectorAll('.composer-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.composer-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             currentMode = tab.dataset.target;
+
+            // Update workspace title
+            if (workspaceTitleEl) {
+                workspaceTitleEl.textContent = workspaceTitleMap[currentMode] || 'Tác vụ';
+            }
             
             // Hide all specialized sections first
             manualSection.classList.add('hidden');
@@ -447,15 +465,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentMode === 'interact') {
                 interactSection.classList.remove('hidden');
                 postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Bắt đầu tương tác';
+                postBtn.textContent = 'Bắt đầu tương tác Newsfeed';
             } else if (currentMode === 'scrape') {
                 scrapeSection.classList.remove('hidden');
                 postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Bắt đầu quét';
+                postBtn.textContent = 'Bắt đầu quét bình luận';
             } else if (currentMode === 'content-hub') {
                 contentHubSection.classList.remove('hidden');
                 accountSelectorContainer.classList.add('hidden');
-                // Content Hub has its own generate buttons
             } else {
                 // Standard modes (Group, Page, Thread)
                 modeToggleContainer.classList.remove('hidden');
