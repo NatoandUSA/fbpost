@@ -168,6 +168,34 @@
                     </section>
 
                     <!-- Composer Workspace Section -->
+                    <div class="card" id="campaign-manager-card">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>📣</span><h3>Campaign Manager</h3></div>
+                            <button id="refresh-campaigns-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                        </div>
+                        <div class="composer-body-card">
+                            <div class="form-grid">
+                                <div class="field-group"><label class="field-label" for="campaign-name">Tên chiến dịch</label><input id="campaign-name" class="field-input" placeholder="VD: Lacasa – Ưu đãi tháng 9"></div>
+                                <div class="field-group"><label class="field-label" for="campaign-brand">Thương hiệu</label><input id="campaign-brand" class="field-input" placeholder="Lacasa / UMEE"></div>
+                            </div>
+                            <div class="field-group"><label class="field-label" for="campaign-target">Page/target được phép</label><input id="campaign-target" class="field-input" placeholder="Page ID hoặc URL Page bạn quản trị"></div>
+                            <button id="create-campaign-btn" class="btn btn-primary btn-full" type="button">Tạo chiến dịch</button>
+                        </div>
+                    </div>
+                    <div class="card" id="compliance-card">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>🛡️</span><h3>Kiểm tra &amp; duyệt bài đăng</h3></div>
+                            <span id="preflight-status" class="sched-badge badge-error">Chưa kiểm tra</span>
+                        </div>
+                        <div class="composer-body-card">
+                            <p class="field-hint">Kiểm tra nội dung hiện tại, rồi đưa vào hàng đợi để chủ động duyệt trước khi đăng.</p>
+                            <div class="field-group" style="margin-top:10px;"><label class="field-label" for="campaign-selector">Thuộc chiến dịch</label><select id="campaign-selector" class="field-input"><option value="">Không gắn chiến dịch</option></select></div>
+                            <div class="form-grid" style="margin-top:10px;">
+                                <button id="preflight-btn" class="btn btn-secondary" type="button">🔎 Kiểm tra bài</button>
+                                <button id="queue-post-btn" class="btn btn-primary" type="button">➕ Thêm vào hàng đợi</button>
+                            </div>
+                        </div>
+                    </div>
                     <section class="card composer-body-card">
                         <!-- Account Selector -->
                         <div class="field-group" id="account-selector-container">
@@ -532,6 +560,19 @@
                         <div class="posted-links-list" id="posted-links-list">
                             <!-- JS loaded dynamic links -->
                         </div>
+                    </div>
+
+                    <div class="card" id="approval-queue-card">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>📋</span><h3>Hàng đợi cần duyệt</h3></div>
+                            <button id="refresh-queue-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                        </div>
+                        <div id="approval-queue-list" class="posted-links-list"><span class="empty">Chưa có bài nào trong hàng đợi.</span></div>
+                    </div>
+
+                    <div class="card" id="campaign-report-card">
+                        <div class="card-header"><div class="card-title-group"><span>📊</span><h3>Báo cáo chiến dịch</h3></div></div>
+                        <div id="campaign-report-list" class="posted-links-list"><span class="empty">Chưa có chiến dịch.</span></div>
                     </div>
 
                     <!-- Logs Panel Terminal -->

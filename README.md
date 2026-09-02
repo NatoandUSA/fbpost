@@ -30,7 +30,7 @@ Công cụ tự động hóa Facebook với Dashboard Web, hỗ trợ đăng bà
 ### 🪟 Windows
 1. `git clone https://github.com/NatoandUSA/fbpost.git`
 2. Mở thư mục `fbpost`
-3. **Double-click** vào file `START_WINDOWS.bat`
+3. **Double-click** vào file `start_portable.bat`
 
 ### 🐧 Linux
 ```bash
@@ -40,6 +40,17 @@ bash START_LINUX.sh
 ```
 
 > Script sẽ tự động tạo môi trường ảo, cài thư viện, cài Chromium và mở Dashboard tại **http://127.0.0.1:5000** 🎉
+
+### Cấu hình Content Hub AI (tùy chọn)
+
+Chế độ tạo nội dung AI giữ khóa ở máy chủ, không ở trình duyệt. Trước khi chạy server, đặt hai biến môi trường sau trên máy đang chạy tool:
+
+```text
+CONTENT_AI_PROXY_URL=https://your-ai-proxy.example
+CONTENT_AI_APP_KEY=your-private-key
+```
+
+Nếu chưa cấu hình, bạn vẫn dùng được chế độ tạo nội dung offline. Không commit các khóa này vào Git.
 
 ---
 
@@ -76,7 +87,7 @@ bash START_LINUX.sh
 ```
 fbpost/
 ├── START_MAC.command      # 1-click launcher cho macOS
-├── START_WINDOWS.bat      # 1-click launcher cho Windows
+├── start_portable.bat     # 1-click launcher cho Windows
 ├── START_LINUX.sh         # 1-click launcher cho Linux
 ├── server.py              # Flask backend API
 ├── main.py                # CLI entrypoint
@@ -89,7 +100,8 @@ fbpost/
 ├── utils.py               # Spintax + Human Typing
 ├── requirements.txt       # Python dependencies
 ├── sample_import.csv      # File CSV mẫu
-└── static/                # Dashboard UI (HTML/CSS/JS)
+├── static/                # Dashboard UI (HTML/CSS/JS)
+└── tests/                 # Regression tests cho API và scheduler
 ```
 
 ---

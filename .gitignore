@@ -8,3 +8,12 @@ __pycache__/
 static/sample.csv
 scheduler.log
 config.json
+scheduler_state.json
+publication_queue.json
+campaigns.json
+release/
+runtime/
+profiles/
+uploads/
+*.webp
+*.gif

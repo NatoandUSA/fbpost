@@ -3,6 +3,7 @@ import random
 import time
 import os
 import json
+import tempfile
 
 ACCOUNTS_FILE = "accounts.json"
 
@@ -83,12 +84,18 @@ def load_accounts():
         return []
 
 def save_accounts(accounts):
+    temporary_path = None
     try:
-        with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+        fd, temporary_path = tempfile.mkstemp(prefix="accounts-", suffix=".json", dir=".")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(accounts, f, ensure_ascii=False, indent=2)
+        os.replace(temporary_path, ACCOUNTS_FILE)
         return True
-    except Exception:
+    except OSError:
         return False
+    finally:
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
 
 def launch_browser(account, p, api_url=None):
     """

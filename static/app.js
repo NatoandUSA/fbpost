@@ -68,6 +68,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const postedLinksCard = document.getElementById('posted-links-card');
     const postedLinksList = document.getElementById('posted-links-list');
     const clearLinksBtn = document.getElementById('clear-links-btn');
+    const preflightBtn = document.getElementById('preflight-btn');
+    const queuePostBtn = document.getElementById('queue-post-btn');
+    const preflightStatus = document.getElementById('preflight-status');
+    const approvalQueueList = document.getElementById('approval-queue-list');
+    const refreshQueueBtn = document.getElementById('refresh-queue-btn');
+    const campaignName = document.getElementById('campaign-name');
+    const campaignBrand = document.getElementById('campaign-brand');
+    const campaignTarget = document.getElementById('campaign-target');
+    const campaignSelector = document.getElementById('campaign-selector');
+    const createCampaignBtn = document.getElementById('create-campaign-btn');
+    const refreshCampaignsBtn = document.getElementById('refresh-campaigns-btn');
+    const campaignReportList = document.getElementById('campaign-report-list');
+    let campaignCache = [];
 
     // Image Upload Elements
     const addImageBtn = document.getElementById('add-image-btn');
@@ -78,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Content Hub Section
     const contentHubSection = document.getElementById('content-hub-section');
+    const schedSection = document.getElementById('page-scheduler-section');
 
     // Visual Progress Dashboard Elements
     const visualProgressDashboard = document.getElementById('visual-progress-dashboard');
@@ -105,7 +119,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function showToast(message, type = 'success') {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
-        toast.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span><span>${message}</span>`;
+        const icon = document.createElement('span');
+        icon.textContent = type === 'success' ? '✅' : '❌';
+        const text = document.createElement('span');
+        text.textContent = message;
+        toast.append(icon, text);
         toastContainer.appendChild(toast);
         setTimeout(() => {
             toast.style.opacity = '0';
@@ -148,6 +166,164 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function currentDraft() {
+        const selectedCampaign = campaignCache.find(campaign => campaign.id === campaignSelector.value);
+        return {
+            target: targetInput.value.split('\n').map(value => value.trim()).find(Boolean) || selectedCampaign?.target || '',
+            content: postContent.value.trim(),
+            campaign_id: campaignSelector.value,
+        };
+    }
+
+    function renderCampaigns(campaigns) {
+        campaignCache = campaigns;
+        const selected = campaignSelector.value;
+        campaignSelector.innerHTML = '<option value="">Không gắn chiến dịch</option>';
+        campaignReportList.innerHTML = '';
+        if (!campaigns.length) {
+            campaignReportList.innerHTML = '<span class="empty">Chưa có chiến dịch.</span>';
+            return;
+        }
+        campaigns.forEach(campaign => {
+            const option = document.createElement('option');
+            option.value = campaign.id;
+            option.textContent = `${campaign.name}${campaign.state === 'paused' ? ' (tạm dừng)' : ''}`;
+            campaignSelector.appendChild(option);
+
+            const row = document.createElement('div');
+            row.className = 'posted-link-item';
+            const body = document.createElement('div');
+            const title = document.createElement('strong');
+            title.textContent = `${campaign.state === 'active' ? '🟢' : '⏸'} ${campaign.name}`;
+            const meta = document.createElement('div');
+            meta.className = 'text-small';
+            const summary = campaign.summary || {};
+            meta.textContent = `${campaign.brand || 'Chưa gắn thương hiệu'} · ${summary.total || 0} bài · Nháp ${summary.draft || 0} · Đã duyệt ${summary.approved || 0}`;
+            body.append(title, meta);
+            const toggle = document.createElement('button');
+            toggle.className = 'btn btn-secondary btn-sm';
+            toggle.textContent = campaign.state === 'active' ? 'Tạm dừng' : 'Kích hoạt';
+            toggle.addEventListener('click', () => toggleCampaign(campaign.id));
+            row.append(body, toggle);
+            if (campaign.state === 'active' && (summary.draft || 0) > 0) {
+                const approveAll = document.createElement('button');
+                approveAll.className = 'btn btn-primary btn-sm';
+                approveAll.textContent = `Duyệt ${summary.draft}`;
+                approveAll.addEventListener('click', () => approveCampaignDrafts(campaign.id));
+                row.appendChild(approveAll);
+            }
+            campaignReportList.appendChild(row);
+        });
+        campaignSelector.value = selected;
+    }
+
+    async function loadCampaigns() {
+        try {
+            const response = await fetch('/api/campaigns');
+            renderCampaigns(await response.json());
+        } catch (_) {
+            campaignReportList.textContent = 'Không thể tải chiến dịch.';
+        }
+    }
+
+    async function toggleCampaign(id) {
+        const response = await fetch(`/api/campaigns/${id}/toggle`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) showToast(data.error || 'Không thể cập nhật chiến dịch.', 'error');
+        else { showToast(data.state === 'active' ? 'Đã kích hoạt chiến dịch.' : 'Đã tạm dừng chiến dịch.'); loadCampaigns(); }
+    }
+
+    async function approveCampaignDrafts(id) {
+        const response = await fetch(`/api/campaigns/${id}/approve-drafts`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) showToast(data.error || 'Không thể duyệt các bài nháp.', 'error');
+        else { showToast(`Đã duyệt ${data.approved} bài trong chiến dịch.`); loadCampaigns(); loadQueue(); }
+    }
+
+    createCampaignBtn.addEventListener('click', async () => {
+        const payload = { name: campaignName.value.trim(), brand: campaignBrand.value.trim(), target: campaignTarget.value.trim() };
+        const response = await fetch('/api/campaigns', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+        const data = await response.json();
+        if (!response.ok) return showToast(data.error || 'Không thể tạo chiến dịch.', 'error');
+        campaignName.value = '';
+        campaignBrand.value = '';
+        campaignTarget.value = '';
+        showToast('Đã tạo chiến dịch.');
+        await loadCampaigns();
+        campaignSelector.value = data.id;
+    });
+
+    refreshCampaignsBtn.addEventListener('click', loadCampaigns);
+
+    function renderQueue(items) {
+        approvalQueueList.innerHTML = '';
+        if (!items.length) {
+            approvalQueueList.innerHTML = '<span class="empty">Chưa có bài nào trong hàng đợi.</span>';
+            return;
+        }
+        items.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'posted-link-item';
+            const text = document.createElement('div');
+            const title = document.createElement('strong');
+            title.textContent = `${item.state === 'approved' ? '✅ Đã duyệt' : item.state === 'cancelled' ? '⏹ Đã hủy' : '📝 Nháp'} · ${item.target}`;
+            const preview = document.createElement('div');
+            preview.className = 'text-small';
+            preview.textContent = item.content.slice(0, 100);
+            text.append(title, preview);
+            row.appendChild(text);
+            if (item.state === 'draft') {
+                const approve = document.createElement('button');
+                approve.className = 'btn btn-primary btn-sm';
+                approve.textContent = 'Duyệt';
+                approve.addEventListener('click', () => updateQueueItem(item.id, 'approve'));
+                row.appendChild(approve);
+            }
+            if (item.state !== 'approved') {
+                const cancel = document.createElement('button');
+                cancel.className = 'btn btn-ghost btn-sm';
+                cancel.textContent = 'Hủy';
+                cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
+                row.appendChild(cancel);
+            }
+            approvalQueueList.appendChild(row);
+        });
+    }
+
+    async function loadQueue() {
+        try {
+            const response = await fetch('/api/queue');
+            renderQueue(await response.json());
+        } catch (_) {
+            approvalQueueList.textContent = 'Không thể tải hàng đợi.';
+        }
+    }
+
+    async function updateQueueItem(id, action) {
+        const response = await fetch(`/api/queue/${id}/${action}`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) showToast(data.error || 'Không thể cập nhật hàng đợi.', 'error');
+        else { showToast(action === 'approve' ? 'Đã duyệt bài đăng.' : 'Đã hủy bài đăng.'); loadQueue(); }
+    }
+
+    preflightBtn.addEventListener('click', async () => {
+        const draft = currentDraft();
+        const response = await fetch('/api/preflight', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(draft) });
+        const data = await response.json();
+        preflightStatus.textContent = data.ready ? '✅ Sẵn sàng duyệt' : `⚠️ ${data.issues[0] || 'Cần kiểm tra'}`;
+        preflightStatus.className = `sched-badge ${data.ready ? 'badge-success' : 'badge-error'}`;
+    });
+
+    queuePostBtn.addEventListener('click', async () => {
+        const response = await fetch('/api/queue', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(currentDraft()) });
+        const data = await response.json();
+        if (!response.ok) return showToast(data.error || 'Không thể tạo hàng đợi.', 'error');
+        showToast('Đã thêm bài vào hàng đợi để duyệt.');
+        loadQueue();
+    });
+
+    refreshQueueBtn.addEventListener('click', loadQueue);
+
     function saveLink(url) {
         if (!savedPostLinks.includes(url)) {
             savedPostLinks.unshift(url);
@@ -164,12 +340,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         savedPostLinks.forEach(link => {
+            let url;
+            try {
+                url = new URL(link, window.location.origin);
+            } catch (_) {
+                return;
+            }
             const item = document.createElement('div');
             item.className = 'posted-link-item';
-            item.innerHTML = `
-                <span class="posted-link-url" title="${link}">${link}</span>
-                <a href="${link}" target="_blank" class="btn btn-secondary btn-sm">🔗 Mở link</a>
-            `;
+            if (!['http:', 'https:'].includes(url.protocol)) return;
+            const label = document.createElement('span');
+            label.className = 'posted-link-url';
+            label.title = link;
+            label.textContent = link;
+            const anchor = document.createElement('a');
+            anchor.href = url.href;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.className = 'btn btn-secondary btn-sm';
+            anchor.textContent = '🔗 Mở link';
+            item.append(label, anchor);
             postedLinksList.appendChild(item);
         });
         postedLinksCard.classList.remove('hidden');
@@ -247,16 +437,28 @@ document.addEventListener('DOMContentLoaded', () => {
             
             accountsList.forEach(acc => {
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${acc.name}</strong></td>
-                    <td><span class="badge badge-${acc.type}">${acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)'}</span></td>
-                    <td><code>${acc.profile_path_or_id}</code></td>
-                    <td><span style="color: var(--fb-text-secondary);">${acc.proxy || 'Trực tiếp (Không dán)'}</span></td>
-                    <td class="acc-action-btns">
-                        <button class="btn btn-secondary btn-sm btn-auth-acc" data-id="${acc.id}">🔑 Xác thực</button>
-                        <button class="btn btn-danger btn-sm btn-delete-acc" data-id="${acc.id}">❌ Xóa</button>
-                    </td>
-                `;
+                const makeCell = (text, tag = 'span') => {
+                    const cell = document.createElement('td');
+                    const value = document.createElement(tag);
+                    value.textContent = text;
+                    cell.appendChild(value);
+                    return cell;
+                };
+                const nameCell = makeCell(acc.name, 'strong');
+                const typeCell = makeCell(acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)');
+                typeCell.firstChild.className = `badge badge-${acc.type}`;
+                const profileCell = makeCell(acc.profile_path_or_id, 'code');
+                const proxyCell = makeCell(acc.proxy || 'Trực tiếp (Không dùng)');
+                const actions = document.createElement('td');
+                actions.className = 'acc-action-btns';
+                for (const [label, className] of [['🔑 Xác thực', 'btn-auth-acc'], ['❌ Xóa', 'btn-delete-acc']]) {
+                    const button = document.createElement('button');
+                    button.className = `btn btn-${className === 'btn-delete-acc' ? 'danger' : 'secondary'} btn-sm ${className}`;
+                    button.dataset.id = acc.id;
+                    button.textContent = label;
+                    actions.appendChild(button);
+                }
+                tr.append(nameCell, typeCell, profileCell, proxyCell, actions);
                 accountsTableBody.appendChild(tr);
             });
 
@@ -455,6 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
             interactSection.classList.add('hidden');
             scrapeSection.classList.add('hidden');
             contentHubSection.classList.add('hidden');
+            schedSection.classList.add('hidden');
             modeToggleContainer.classList.add('hidden');
             addToPostBar.classList.add('hidden');
             composerDividerBar.classList.add('hidden');
@@ -473,6 +676,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (currentMode === 'content-hub') {
                 contentHubSection.classList.remove('hidden');
                 accountSelectorContainer.classList.add('hidden');
+            } else if (currentMode === 'page-scheduler') {
+                schedSection.classList.remove('hidden');
+                accountSelectorContainer.classList.add('hidden');
+                loadSchedConfig();
+                loadSchedStatus();
             } else {
                 // Standard modes (Group, Page, Thread)
                 modeToggleContainer.classList.remove('hidden');
@@ -566,12 +774,35 @@ document.addEventListener('DOMContentLoaded', () => {
         
         data.forEach(item => {
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td><strong>${item.name}</strong></td>
-                <td><a href="${item.profile}" target="_blank">${item.profile}</a></td>
-                <td>${item.comment}</td>
-                <td style="color: ${item.phone !== 'Không có' ? '#1877F2' : 'inherit'}; font-weight: ${item.phone !== 'Không có' ? 'bold' : 'normal'};">${item.phone}</td>
-            `;
+            const nameCell = document.createElement('td');
+            const name = document.createElement('strong');
+            name.textContent = item.name || '';
+            nameCell.appendChild(name);
+            const profileCell = document.createElement('td');
+            try {
+                const profileUrl = new URL(item.profile);
+                if (['http:', 'https:'].includes(profileUrl.protocol)) {
+                    const link = document.createElement('a');
+                    link.href = profileUrl.href;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = item.profile;
+                    profileCell.appendChild(link);
+                } else {
+                    profileCell.textContent = item.profile || '';
+                }
+            } catch (_) {
+                profileCell.textContent = item.profile || '';
+            }
+            const commentCell = document.createElement('td');
+            commentCell.textContent = item.comment || '';
+            const phoneCell = document.createElement('td');
+            phoneCell.textContent = item.phone || '';
+            if (item.phone !== 'Không có') {
+                phoneCell.style.color = '#1877F2';
+                phoneCell.style.fontWeight = 'bold';
+            }
+            row.append(nameCell, profileCell, commentCell, phoneCell);
             scrapeTableBody.appendChild(row);
         });
         scrapeResultsContainer.classList.remove('hidden');
@@ -925,10 +1156,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     // CONTENT HUB LOGIC INTEGRATION
     // =========================================================================
-
-    const HUB_PASS = "1717";
-    const AI_PROXY_URL = "https://postfb.nvphilong.workers.dev";
-    const AI_APP_KEY = "postfb-hue-2026";
 
     const BRANDS = {
       lacasa: {
@@ -1682,8 +1909,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('reeldesc').innerHTML = '<span class="empty">Chưa có nội dung.</span>';
         document.getElementById('story').innerHTML = '<span class="empty">Chưa có nội dung.</span>';
-        document.getElementById('reelcount').textContent = "";
-        document.getElementById('storycount').textContent = "";
+        const reelCount = document.getElementById('reelcount');
+        const storyCount = document.getElementById('storycount');
+        if (reelCount) reelCount.textContent = "";
+        if (storyCount) storyCount.textContent = "";
         document.getElementById('titles').innerHTML = '<span class="empty">Chưa có nội dung.</span>';
     }
 
@@ -1696,11 +1925,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const desc = a.reeldesc || "";
         document.getElementById('reeldesc').innerText = desc;
-        document.getElementById('reelcount').innerText = `${desc.length}/255 ký tự`;
+        const reelCount = document.getElementById('reelcount');
+        if (reelCount) reelCount.innerText = `${desc.length}/255 ký tự`;
         
         const st = a.story || "";
         document.getElementById('story').innerText = st;
-        document.getElementById('storycount').innerText = `${st.length}/120 ký tự`;
+        const storyCount = document.getElementById('storycount');
+        if (storyCount) storyCount.innerText = `${st.length}/120 ký tự`;
         
         const t = document.getElementById('titles'); 
         t.innerHTML = "";
@@ -1837,14 +2068,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Construct the prompt for Claude
         const prompt = buildAIPrompt(f);
         
-        const response = await fetch(AI_PROXY_URL, {
+        const response = await fetch('/api/content/generate', {
           method: "POST",
-          headers: { "Content-Type": "text/plain;charset=UTF-8" },
-          body: JSON.stringify({ prompt, key: AI_APP_KEY })
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt })
         });
         
         const data = await response.json();
-        if (data.type === 'error') throw new Error(data.error?.message || 'AI API Error');
+        if (!response.ok || data.type === 'error') throw new Error(data.error?.message || data.error || 'AI API Error');
         
         let text = (data.content || []).map(bk => bk.text || "").join("").trim();
         text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
@@ -2152,10 +2383,10 @@ document.addEventListener('DOMContentLoaded', () => {
     checkStatus();
     loadAccounts();
     loadSavedLinks();
+    loadQueue();
+    loadCampaigns();
 
     // ====== PAGE SCHEDULER JS ======
-    const schedSection = document.getElementById('page-scheduler-section');
-
     // Show/hide scheduler section when tab is clicked
     document.getElementById('tab-page-scheduler')?.addEventListener('click', () => {
         schedSection?.classList.remove('hidden');
@@ -2275,14 +2506,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 rows.forEach((row, i) => {
                     const statusClass = row.status === 'posted' ? 'sched-status-posted' :
                                        row.status === 'skip' ? 'sched-status-skip' : 'sched-status-pending';
-                    tbody.innerHTML += `<tr>
-                        <td>${i+1}</td>
-                        <td>${row.page_id}</td>
-                        <td title="${row.content}">${row.content.substring(0,50)}${row.content.length > 50 ? '...' : ''}</td>
-                        <td>${row.image_url ? '🖼 Có ảnh' : '-'}</td>
-                        <td>${row.scheduled_time}</td>
-                        <td class="${statusClass}">${row.status}</td>
-                    </tr>`;
+                    const tr = document.createElement('tr');
+                    const values = [i + 1, row.page_id, `${row.content.substring(0, 50)}${row.content.length > 50 ? '...' : ''}`, row.image_url ? '🖼 Có ảnh' : '-', row.scheduled_time, row.status];
+                    values.forEach((value, index) => {
+                        const td = document.createElement('td');
+                        td.textContent = value;
+                        if (index === 2) td.title = row.content;
+                        if (index === 5) td.className = statusClass;
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
                 });
             }
             document.getElementById('sched-preview-container').classList.remove('hidden');
@@ -2332,13 +2565,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 logDiv.innerHTML = '<span style="opacity:0.5">Chưa có log.</span>';
                 return;
             }
-            logDiv.innerHTML = data.logs.map(line => {
+            logDiv.innerHTML = '';
+            data.logs.forEach(line => {
                 let cls = '';
                 if (line.includes('✅') || line.includes('thành công')) cls = 'log-ok';
                 else if (line.includes('❌') || line.includes('ERROR') || line.includes('thất bại')) cls = 'log-err';
                 else if (line.includes('INFO') || line.includes('🔍') || line.includes('📢')) cls = 'log-info';
-                return `<span class="${cls}">${line}</span>`;
-            }).join('\n');
+                const entry = document.createElement('span');
+                entry.className = cls;
+                entry.textContent = line;
+                logDiv.append(entry, document.createTextNode('\n'));
+            });
             logDiv.scrollTop = logDiv.scrollHeight;
         } catch (e) {}
     }
