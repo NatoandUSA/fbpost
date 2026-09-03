@@ -43,11 +43,21 @@ def human_type(page, locator, text):
     Types text character by character with random delays and occasional simulated typos.
     """
     print("Typing with human-like behavior (including possible typos)...")
-    locator.focus()
+    try:
+        locator.focus()
+    except Exception:
+        pass
+    
     keyboard = page.keyboard
     
-    # Facebook composer inputs often need an initial click
-    locator.click()
+    # Facebook composer inputs often need an initial click - dùng force=True để tránh bị backdrop che
+    try:
+        locator.click(force=True, timeout=5000)
+    except Exception:
+        try:
+            locator.focus()
+        except Exception:
+            pass
     time.sleep(random.uniform(0.5, 1.0))
     
     for char in text:

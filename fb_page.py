@@ -113,16 +113,37 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             
             print("👉 Click mở ô soạn thảo bài viết...")
             composer_box.click()
-            time.sleep(random.uniform(2.0, 3.5))
+            time.sleep(random.uniform(2.5, 4.0))
 
-            # Chờ Dialog modal hiện lên
-            dialog = page.locator("div[role='dialog']").first
+            # Chờ Dialog modal mở hoàn toàn
+            dialog = None
+            try:
+                page.wait_for_selector("div[role='dialog']", state="visible", timeout=10000)
+                dialog = page.locator("div[role='dialog']").first
+            except Exception:
+                dialog = page.locator("div[role='dialog']").first
+
             textbox = None
+            if dialog and dialog.is_visible():
+                candidates = dialog.locator("div[role='textbox']")
+                for idx in range(candidates.count()):
+                    c = candidates.nth(idx)
+                    label = (c.get_attribute("aria-label") or "") + " " + (c.get_attribute("aria-placeholder") or "")
+                    if "bình luận" not in label.lower() and "comment" not in label.lower():
+                        textbox = c
+                        break
+                if not textbox and candidates.count() > 0:
+                    textbox = candidates.first
 
-            if dialog.is_visible():
-                textbox = dialog.locator("div[role='textbox']").first
-            else:
-                textbox = page.locator("div[role='textbox']").first
+            # Fallback nếu không có dialog: quét textbox trên trang và loại bỏ ô bình luận
+            if not textbox:
+                candidates = page.locator("div[role='textbox']")
+                for idx in range(candidates.count()):
+                    c = candidates.nth(idx)
+                    label = (c.get_attribute("aria-label") or "") + " " + (c.get_attribute("aria-placeholder") or "")
+                    if "bình luận" not in label.lower() and "comment" not in label.lower() and c.is_visible():
+                        textbox = c
+                        break
             
             # Đính kèm ảnh nếu có
             if image_path and os.path.exists(image_path):
@@ -168,9 +189,13 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
                     break
 
             if post_button:
-                post_button.click()
+                try:
+                    post_button.click(force=True)
+                except Exception:
+                    post_button.click()
             else:
-                page.get_by_role("button", name=re.compile(r"^(Đăng|Post)$", re.IGNORECASE)).first.click()
+                # Fallback role button
+                page.get_by_role("button", name=re.compile(r"^(Đăng|Post)$", re.IGNORECASE)).first.click(force=True)
 
             time.sleep(random.uniform(4.0, 6.0))
             
