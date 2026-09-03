@@ -1,4 +1,4 @@
-"Target URL / ID","Nội dung bài viết (Hỗ trợ Spintax)","Đường dẫn ảnh (Tùy chọn)"
-"https://www.facebook.com/groups/1234567890","{Xin chào|Hello} mọi người! Lacasa Homestay hôm nay còn trống phòng riêng giường Queen cực chill cho couple, có sân vườn BBQ miễn phí. Zalo 0905 555 317.",""
-"https://www.facebook.com/groups/9876543210","{Chiều dạo sông Hương|Tối dạo phố cổ}, đêm về UMEE Homestay nằm đệm King xem phim máy chiếu Netflix 100 inch cực đã. Zalo: 0905 555 317.","D:\images\umee_room.jpg"
-"https://www.facebook.com/groups/5555555555","{Huế đang nắng đẹp|Huế buổi sáng bình yên} lắm cả nhà ơi. Mọi người đi Huế nhớ ăn bún bò, uống cafe muối nha. Cần chỗ ở nhắn Zalo 0905 555 317 (Lacasa & UMEE).",""
+"Target URL / ID","Post Content (Spintax Supported)","Local Image Path (Optional)"
+"https://www.facebook.com/groups/1234567890","{Hello|Hi} everyone! Replace this sample with an approved post for your business.",""
+"https://www.facebook.com/groups/9876543210","{Weekend stay|Relaxing getaway}: replace this sample post before use.","C:\images\room.jpg"
+"https://www.facebook.com/groups/5555555555","Use only Group URLs where your account is allowed to post.",""

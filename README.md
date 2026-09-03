@@ -19,6 +19,8 @@ Công cụ tự động hóa Facebook với Dashboard Web, hỗ trợ đăng bà
 
 ## 🚀 Cài Đặt & Khởi Động (1-Click)
 
+> Hướng dẫn vận hành đầy đủ, bao gồm Campaign, Queue, Content Hub, Page Scheduler và phương án Cloudflare: mở file [HUONG_DAN_SU_DUNG.html](HUONG_DAN_SU_DUNG.html).
+
 > **Yêu cầu duy nhất:** Máy cần cài sẵn **Python 3** (tải tại [python.org](https://www.python.org/downloads/))
 
 ### 🍎 macOS

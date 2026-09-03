@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Panel V4</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>FB Automation Panel v5.4.7</title>
+    <link rel="stylesheet" href="styles.css?v=5.4.7">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -44,6 +44,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <span>Quét bình luận</span>
                 </button>
+                <button class="composer-tab nav-item" data-target="comment" id="tab-comment">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                    <span>Comment theo Link</span>
+                </button>
                 <button class="composer-tab nav-item" data-target="content-hub" id="tab-content-hub">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                     <span>Content Hub</span>
@@ -52,6 +56,22 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                     <span>Page Scheduler</span>
                 </button>
+                <button class="composer-tab nav-item" data-target="settings" id="tab-settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span>Bảo mật &amp; Cấu hình</span>
+                </button>
+                <button class="composer-tab nav-item" data-target="profiles" id="tab-profiles">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>Profiles &amp; activity</span>
+                </button>
+                <button class="composer-tab nav-item" data-target="vault" id="tab-vault">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="16" r="1"/></svg>
+                    <span>Kho tài khoản</span>
+                </button>
+                <button class="composer-tab nav-item" data-target="groups" id="tab-groups">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/><path d="M9 10h.01"/><path d="M15 10h.01"/></svg>
+                    <span>Group manager</span>
+                </button>
             </div>
 
             <div class="sidebar-configs">
@@ -59,7 +79,7 @@
                 
                 <div class="sidebar-config-item">
                     <label class="field-label">GPM API URL</label>
-                    <input type="text" id="gpm-api-input" value="http://127.0.0.1:13926" class="field-input" placeholder="http://127.0.0.1:13926">
+                    <input type="text" id="gpm-api-input" value="http://127.0.0.1:19995" class="field-input" placeholder="http://127.0.0.1:19995">
                 </div>
                 
                 <div class="tfa-sidebar-container">
@@ -74,6 +94,7 @@
                         </div>
                     </div>
                 </div>
+                <div class="build-info" id="build-info">UI v5.4.7 · Checking server build…</div>
             </div>
         </aside>
 
@@ -81,7 +102,10 @@
         <main class="app-workspace">
             <header class="workspace-header">
                 <div class="header-left">
-                    <h2 class="workspace-title" id="active-workspace-title">Đăng Bài Nhóm (Group)</h2>
+                    <div>
+                        <div class="workspace-eyebrow">Không gian làm việc</div>
+                        <h2 class="workspace-title" id="active-workspace-title">Đăng Bài Nhóm (Group)</h2>
+                    </div>
                 </div>
                 <div class="header-right">
                     <div id="auth-status" class="status-badge checking">
@@ -111,6 +135,22 @@
                         <button id="auth-btn" class="btn btn-primary btn-sm">Đăng nhập</button>
                     </div>
 
+                    <section class="workflow-guide" aria-label="Quy trình thao tác">
+                        <div class="workflow-copy">
+                            <span class="workflow-kicker">QUY TRÌNH GỢI Ý</span>
+                            <strong>Soạn nội dung, kiểm tra, rồi chủ động duyệt trước khi đăng.</strong>
+                        </div>
+                        <div class="workflow-steps" aria-label="Ba bước">
+                            <span><b>1</b> Tạo nội dung</span>
+                            <span><b>2</b> Kiểm tra &amp; Queue</span>
+                            <span><b>3</b> Đăng / Lập lịch</span>
+                        </div>
+                        <div class="workflow-actions">
+                            <button class="btn btn-secondary btn-sm" type="button" data-workspace-target="content-hub">✨ Mở Content Hub</button>
+                            <button class="btn btn-primary btn-sm" type="button" data-workspace-target="page-scheduler">🗓 Mở lịch Page</button>
+                        </div>
+                    </section>
+
                     <!-- Profiles / Accounts Card -->
                     <section class="card accounts-card">
                         <div class="card-header">
@@ -118,9 +158,12 @@
                                 <span class="card-icon">📁</span>
                                 <h3>Quản lý Profiles & Tài khoản</h3>
                             </div>
-                            <button id="add-account-toggle-btn" class="btn btn-secondary btn-xs">➕ Thêm Profile</button>
+                            <div class="card-header-actions">
+                                <button id="manage-accounts-btn" class="btn btn-ghost btn-xs" type="button">Quản lý</button>
+                                <button id="add-account-toggle-btn" class="btn btn-secondary btn-xs" type="button">➕ Thêm Profile</button>
+                            </div>
                         </div>
-                        
+                        <div id="accounts-content" class="accounts-content hidden">
                         <div id="add-account-form" class="add-account-form hidden">
                             <div class="form-grid">
                                 <div class="field-group">
@@ -135,8 +178,8 @@
                                     </select>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label">Folder Name / ID GPM</label>
-                                    <input type="text" id="acc-profile-id" class="field-input" placeholder="local_profile_1">
+                                    <label class="field-label" id="acc-profile-id-label">Tên thư mục Local (tùy chọn)</label>
+                                    <input type="text" id="acc-profile-id" class="field-input" placeholder="Ví dụ: lacasa-local-01">
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">Proxy (Tùy chọn)</label>
@@ -144,8 +187,8 @@
                                 </div>
                             </div>
                             <div class="form-actions" style="margin-top: 12px; display: flex; gap: 8px;">
-                                <button id="save-account-btn" class="btn btn-primary btn-sm">Lưu cấu hình</button>
-                                <button id="cancel-account-btn" class="btn btn-secondary btn-sm">Hủy</button>
+                                <button id="save-account-btn" class="btn btn-primary btn-sm" type="button">Lưu cấu hình</button>
+                                <button id="cancel-account-btn" class="btn btn-secondary btn-sm" type="button">Hủy</button>
                             </div>
                         </div>
 
@@ -164,6 +207,7 @@
                                     <!-- Dynamic rows from JS -->
                                 </tbody>
                             </table>
+                        </div>
                         </div>
                     </section>
 
@@ -280,7 +324,28 @@
                             </div>
                         </div>
 
-                        <!-- 5. Content Hub Integrated Section -->
+                        <!-- 5. Comment on Specific Post Links Section -->
+                        <div id="comment-section" class="hidden">
+                            <div class="field-group">
+                                <label class="field-label">🔗 Danh sách link bài viết cần bình luận (Mỗi link 1 dòng - Hỗ trợ Group public & Fanpage public)</label>
+                                <textarea id="comment-targets" class="field-textarea" rows="4" placeholder="https://www.facebook.com/groups/123/posts/456&#10;https://www.facebook.com/FanpageName/posts/789"></textarea>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">💬 Nội dung bình luận (Hỗ trợ Spintax)</label>
+                                <textarea id="comment-content" class="field-textarea" rows="3" placeholder="{Chào bạn|Chào ad|Hello} {bài viết rất hay|thông tin hữu ích quá|cho mình hỏi thêm với ạ}"></textarea>
+                                <div class="spintax-hint" style="margin-top: 8px;">
+                                    💡 Spintax: <code>{Hay quá|Tuyệt vời|Bài viết hữu ích}</code> sẽ chọn ngẫu nhiên
+                                </div>
+                            </div>
+                            <div class="field-group" style="margin-top: 10px;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="comment-like-post" checked>
+                                    <span>👍 Tự động thả Thích (Like) bài viết trước khi bình luận</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 6. Content Hub Integrated Section -->
                         <div id="content-hub-section" class="hidden">
                             <div class="brands">
                                 <button type="button" class="brand active" id="brandLacasa">🌿 Lacasa</button>
@@ -436,9 +501,20 @@
                                             <option value="60">Mỗi 1 giờ</option>
                                         </select>
                                     </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Giãn cách ngẫu nhiên giữa các bài đến hạn</label>
+                                        <select id="sched-post-spacing" class="field-input">
+                                            <option value="0:0">Không giãn thêm</option>
+                                            <option value="5:10">Ngẫu nhiên 5–10 phút</option>
+                                            <option value="5:15">Ngẫu nhiên 5–15 phút</option>
+                                            <option value="10:20">Ngẫu nhiên 10–20 phút</option>
+                                        </select>
+                                        <p class="field-hint">Chỉ áp dụng khi có từ hai bài Page đã đến giờ trong cùng một lượt. Mức thấp nhất khi bật là 5 phút.</p>
+                                    </div>
                                     <div style="display:flex; gap:8px;">
                                         <button id="sched-save-sheets-btn" class="btn btn-primary btn-sm">💾 Lưu Cấu hình</button>
                                         <button id="sched-preview-btn" class="btn btn-secondary btn-sm">👁 Xem trước dữ liệu Sheet</button>
+                                        <a class="btn btn-ghost btn-sm" href="page_scheduler_template_en.csv" download>⇩ Download English CSV template</a>
                                     </div>
                                     
                                     <div id="sched-preview-container" class="hidden" style="margin-top: 14px;">
@@ -483,6 +559,100 @@
                                 <div id="sched-log-output" class="sched-log-output"></div>
                             </div>
                         </div>
+
+                        <section id="settings-section" class="settings-section hidden" aria-labelledby="settings-title">
+                            <div class="settings-hero">
+                                <div>
+                                    <span class="workflow-kicker">TRUNG TÂM CẤU HÌNH</span>
+                                    <h3 id="settings-title">Thiết lập an toàn, không cần mở file JSON</h3>
+                                    <p>Chỉ hiển thị trạng thái. Token, API key và session không được gửi ngược về màn hình.</p>
+                                </div>
+                                <div class="settings-hero-actions">
+                                    <span class="local-only-badge">🔒 Chỉ máy này</span>
+                                    <button id="security-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Cập nhật trạng thái</button>
+                                </div>
+                            </div>
+
+                            <div class="security-health-grid" id="security-health-grid" aria-live="polite">
+                                <div class="security-health-card is-loading">Đang kiểm tra cấu hình...</div>
+                            </div>
+
+                            <div class="settings-action-grid">
+                                <article class="settings-action-card">
+                                    <span>1</span><div><h4>Kết nối Facebook Page</h4><p>Dán token vào trường được che, xác thực và lưu. Token sẽ không hiện lại.</p></div>
+                                    <button class="btn btn-primary btn-sm" data-workspace-target="page-scheduler" type="button">Mở Page Scheduler</button>
+                                </article>
+                                <article class="settings-action-card">
+                                    <span>2</span><div><h4>Chuẩn bị Google Sheets</h4><p>Nhập URL CSV HTTPS và kiểm tra preview trước khi bật lịch.</p></div>
+                                    <button class="btn btn-secondary btn-sm" data-workspace-target="page-scheduler" type="button">Cấu hình lịch</button>
+                                </article>
+                                <article class="settings-action-card">
+                                    <span>3</span><div><h4>Quản lý Profile</h4><p>Thêm hoặc cập nhật profile từ Dashboard; không sửa accounts.json thủ công.</p></div>
+                                    <button id="security-manage-accounts-btn" class="btn btn-secondary btn-sm" type="button">Mở Profiles</button>
+                                </article>
+                            </div>
+
+                            <div class="settings-notice">
+                                <strong>Quy tắc dành cho nhân viên:</strong> Không gửi token/Page access key, secret 2FA, file config hoặc ảnh chụp phần cấu hình cho người khác. Khi đổi máy, đăng nhập lại thay vì sao chép session.
+                            </div>
+                        </section>
+
+                        <section id="profile-activity-section" class="management-section hidden" aria-labelledby="profile-activity-title">
+                            <div class="management-hero">
+                                <div><span class="workflow-kicker">PROFILE OPERATIONS</span><h3 id="profile-activity-title">Profiles &amp; activity history</h3><p>Review which selected profile ran a group, page, interaction, or comment-related task. “Finished” means the local task ended; verify the Facebook result in the activity log.</p></div>
+                                <div class="management-actions"><button id="profile-activity-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button><button id="profile-activity-manage-btn" class="btn btn-primary btn-sm" type="button">Manage profiles</button></div>
+                            </div>
+                            <div class="management-filter"><label class="field-label" for="profile-activity-filter">Filter by profile</label><select id="profile-activity-filter" class="field-input"><option value="">All profiles</option></select></div>
+                            <div id="profile-activity-list" class="management-list"><span class="empty">Loading activity...</span></div>
+                        </section>
+
+                        <section id="vault-section" class="vault-section hidden" aria-labelledby="vault-title">
+                            <div class="management-hero vault-hero">
+                                <div><span class="workflow-kicker">OFFLINE ACCOUNT VAULT</span><h3 id="vault-title">Kho email &amp; mật khẩu</h3><p>Gom tài khoản theo nền tảng, lưu ngày nhập và lần đổi mật khẩu gần nhất. Dữ liệu chỉ được lưu trong tệp local <code>account_vault.json</code> trên máy này.</p></div>
+                                <button id="vault-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Làm mới</button>
+                            </div>
+                            <div class="vault-notice">🔒 Mật khẩu được che trên màn hình. Vì tệp local chưa được mã hóa riêng, chỉ dùng trên máy cá nhân đã khóa và bật mã hóa ổ đĩa.</div>
+                            <form id="vault-form" class="vault-form">
+                                <input id="vault-id" type="hidden">
+                                <div class="field-group"><label class="field-label" for="vault-platform">Nền tảng *</label><input id="vault-platform" class="field-input" maxlength="80" required placeholder="Facebook, Gmail, Shopee…"></div>
+                                <div class="field-group"><label class="field-label" for="vault-name">Tên gợi nhớ *</label><input id="vault-name" class="field-input" required maxlength="2000" placeholder="VD: Nick bán hàng 01"></div>
+                                <div class="field-group"><label class="field-label" for="vault-email">Email / tên đăng nhập *</label><input id="vault-email" class="field-input" required maxlength="2000" placeholder="name@example.com"></div>
+                                <div class="field-group"><label class="field-label" for="vault-password">Mật khẩu</label><input id="vault-password" class="field-input" type="password" maxlength="2000" autocomplete="new-password" placeholder="Để trống nếu chưa lưu"></div>
+                                <div class="field-group"><label class="field-label" for="vault-date-added">Ngày nhập</label><input id="vault-date-added" class="field-input" type="date"></div>
+                                <div class="field-group"><label class="field-label" for="vault-password-changed">Ngày đổi pass gần nhất</label><input id="vault-password-changed" class="field-input" type="date"></div>
+                                <div class="field-group vault-notes-field"><label class="field-label" for="vault-notes">Ghi chú</label><textarea id="vault-notes" class="field-textarea" rows="2" maxlength="2000" placeholder="2FA, số điện thoại khôi phục, mục đích sử dụng…"></textarea></div>
+                                <div class="vault-form-actions"><button id="vault-save-btn" class="btn btn-primary" type="submit">+ Lưu tài khoản</button><button id="vault-cancel-btn" class="btn btn-ghost hidden" type="button">Hủy sửa</button></div>
+                            </form>
+                            <div class="vault-toolbar"><input id="vault-search" class="field-input" type="search" placeholder="Tìm nền tảng, email, ghi chú…"><select id="vault-platform-filter" class="field-input"><option value="">Tất cả nền tảng</option></select><span id="vault-count" class="vault-count">0 tài khoản</span></div>
+                            <div id="vault-list" class="vault-list"><span class="empty">Đang tải kho tài khoản…</span></div>
+                        </section>
+
+                        <section id="group-manager-section" class="management-section hidden" aria-labelledby="group-manager-title">
+                            <div class="management-hero">
+                                <div><span class="workflow-kicker">GROUP PIPELINE</span><h3 id="group-manager-title">Group manager</h3><p>Store Group links, track manual request status, rate results, and keep operating notes in one place.</p></div>
+                                <button id="group-manager-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button>
+                            </div>
+                            <form id="group-manager-form" class="group-add-form">
+                                <div class="field-group"><label class="field-label" for="group-url-input">Facebook Group link</label><input id="group-url-input" class="field-input" type="url" placeholder="https://www.facebook.com/groups/example" required></div>
+                                <div class="field-group"><label class="field-label" for="group-name-input">Group name</label><input id="group-name-input" class="field-input" maxlength="120" placeholder="Example: Hue travel community"></div>
+                                <div class="field-group"><label class="field-label" for="group-type-input">Group type</label><select id="group-type-input" class="field-input"><option value="unknown">Unknown</option><option value="public">Public</option><option value="private">Private</option></select></div>
+                                <div class="field-group"><label class="field-label" for="group-member-count-input">Members</label><input id="group-member-count-input" class="field-input" type="number" min="0" max="2000000000" step="1" placeholder="e.g. 12000"></div>
+                                <button class="btn btn-primary" type="submit">+ Add Group</button>
+                            </form>
+                            <div class="manual-request-notice">Group actions are manual. “Open in dashboard browser” opens your normal browser, not a GPM profile. Open the assigned GPM profile from GPM Login itself, review Group rules, then act yourself if allowed.</div>
+                            <div id="group-manager-list" class="management-list"><span class="empty">Loading Groups...</span></div>
+                            <section class="manual-group-queue" aria-labelledby="manual-group-queue-title">
+                                <div class="management-hero compact"><div><span class="workflow-kicker">HUMAN CONFIRMATION</span><h3 id="manual-group-queue-title">Manual Group queue</h3><p>Prepare a reviewed post, assign one responsible profile, then open the Group and confirm the action yourself.</p></div><button id="manual-group-queue-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button></div>
+                                <form id="manual-group-queue-form" class="manual-group-queue-form">
+                                    <div class="field-group"><label class="field-label" for="manual-group-select">Group</label><select id="manual-group-select" class="field-input" required><option value="">Load a Group first</option></select></div>
+                                    <div class="field-group"><label class="field-label" for="manual-profile-select">Responsible profile</label><select id="manual-profile-select" class="field-input" required><option value="">Load a profile first</option></select></div>
+                                    <div class="field-group"><label class="field-label" for="manual-planned-at">Planned time</label><input id="manual-planned-at" class="field-input" type="datetime-local"></div>
+                                    <div class="field-group manual-content-field"><label class="field-label" for="manual-group-content">Approved content</label><textarea id="manual-group-content" class="field-textarea" rows="3" minlength="15" maxlength="60000" required placeholder="Write the approved post content…"></textarea></div>
+                                    <button class="btn btn-primary" type="submit">+ Add for review</button>
+                                </form>
+                                <div id="manual-group-queue-list" class="management-list"><span class="empty">No manual Group tasks yet.</span></div>
+                            </section>
+                        </section>
 
                         <!-- Shared control parts for posting -->
                         <div class="composer-divider" id="composer-divider-bar"></div>
@@ -605,6 +775,6 @@
     <!-- Toast message overlay -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5.4.7"></script>
 </body>
 </html>

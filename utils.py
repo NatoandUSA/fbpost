@@ -97,6 +97,24 @@ def save_accounts(accounts):
         if temporary_path and os.path.exists(temporary_path):
             os.unlink(temporary_path)
 
+
+def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=20):
+    """Wait for a GPM-launched browser to expose its local CDP endpoint."""
+    deadline = time.monotonic() + timeout_seconds
+    last_error = None
+    attempt = 0
+    while time.monotonic() < deadline:
+        attempt += 1
+        try:
+            return playwright.chromium.connect_over_cdp(cdp_url)
+        except Exception as error:
+            last_error = error
+            if attempt == 1:
+                print("GPM has started the profile; waiting for its debugging port to become ready...")
+            time.sleep(0.75)
+    raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
+
+
 def launch_browser(account, p, api_url=None):
     """
     Launches browser for a given account. Unifies local profile and GPM profile methods.
@@ -108,43 +126,69 @@ def launch_browser(account, p, api_url=None):
     
     if acc_type == "gpm":
         if not api_url:
-            api_url = "http://127.0.0.1:13926"
-            
+            # GPM Login v4 (Legacy) exposes its local API on this address.
+            api_url = "http://127.0.0.1:19995"
+
         import requests
         browser = None
-        
-        # Try GPM V2 API
-        try:
-            url = f"{api_url}/api/v2/start?profileId={profile_id}"
-            print(f"Gọi GPM V2 API: {url}")
-            res = requests.get(url, timeout=10).json()
-            if res.get("success") or "data" in res:
-                browser_url = res["data"].get("browser_url")
-                if browser_url:
-                    if not browser_url.startswith("http"):
-                        browser_url = f"http://{browser_url}"
-                    print(f"Đang kết nối Playwright tới địa chỉ CDP: {browser_url}")
-                    browser = p.chromium.connect_over_cdp(browser_url)
-        except Exception as e:
-            print(f"Thử gọi GPM V2 API thất bại: {e}")
-            
-        # Try GPM V3 API
-        if not browser:
+        gpm_error = None
+        api_base = api_url.rstrip("/").split("/api/")[0]
+        profile_id_match = re.search(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", profile_id)
+        if profile_id_match:
+            profile_id = profile_id_match.group(0)
+
+        api_is_v1 = api_url.rstrip("/").endswith("/api/v1")
+        if api_is_v1:
             try:
-                v3_api = api_url if "19995" in api_url else "http://127.0.0.1:19995"
-                url = f"{v3_api}/api/v3/profiles/start?id={profile_id}"
-                print(f"Gọi GPM V3 API: {url}")
-                res = requests.get(url, timeout=10).json()
-                if res.get("success") or "data" in res:
-                    ws_endpoint = res["data"].get("wsEndpoint")
-                    if ws_endpoint:
-                        print(f"Đang kết nối Playwright tới wsEndpoint: {ws_endpoint}")
-                        browser = p.chromium.connect_over_cdp(ws_endpoint)
+                url = f"{api_url.rstrip('/')}/profiles/start/{profile_id}"
+                print(f"Calling GPM Local API: {url}")
+                payload = requests.get(url, timeout=10).json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                ws_endpoint = data.get("websocket_debugging_url") if isinstance(data, dict) else None
+                if payload.get("success") and ws_endpoint:
+                    browser = connect_over_cdp_when_ready(p, ws_endpoint)
+                elif isinstance(payload, dict):
+                    gpm_error = f"GPM Local API: {payload.get('message', 'no connection data returned')}"
+                    print(f"GPM Local API did not start the profile: {payload.get('message', 'no connection data returned')}")
             except Exception as e:
-                print(f"Thử gọi GPM V3 API thất bại: {e}")
+                gpm_error = f"GPM Local API connection failed: {e}"
+                print(f"GPM Local API attempt failed: {e}")
+
+        # GPM Login v4 (Legacy): GET /api/v3/profiles/start/{id}.
+        # It returns a CDP address rather than a websocket endpoint.
+        if not browser and not api_is_v1:
+            try:
+                url = f"{api_base}/api/v3/profiles/start/{profile_id}"
+                print(f"Calling GPM Login v4 API: {url}")
+                payload = requests.get(url, timeout=10).json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                cdp_address = data.get("remote_debugging_address") if isinstance(data, dict) else None
+                if payload.get("success") and cdp_address:
+                    cdp_url = cdp_address if cdp_address.startswith("http") else f"http://{cdp_address}"
+                    browser = connect_over_cdp_when_ready(p, cdp_url)
+                elif isinstance(payload, dict):
+                    gpm_error = f"GPM Login v4: {payload.get('message', 'no CDP address returned')}"
+                    print(f"GPM Login v4 did not start the profile: {payload.get('message', 'no CDP address returned')}")
+            except Exception as e:
+                gpm_error = f"GPM Login v4 CDP connection failed: {e}"
+                print(f"GPM Login v4 API attempt failed: {e}")
+
+        # Backward-compatible GPM v2 fallback.
+        if not browser and not api_is_v1:
+            try:
+                url = f"{api_base}/api/v2/start?profileId={profile_id}"
+                payload = requests.get(url, timeout=10).json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                browser_url = data.get("browser_url") if isinstance(data, dict) else None
+                if browser_url:
+                    cdp_url = browser_url if browser_url.startswith("http") else f"http://{browser_url}"
+                    browser = connect_over_cdp_when_ready(p, cdp_url)
+            except Exception as e:
+                if not gpm_error:
+                    gpm_error = f"GPM v2 fallback connection failed: {e}"
                 
         if not browser:
-            raise Exception("Không thể khởi chạy profile GPM qua API. Hãy kiểm tra xem app GPM Login có đang chạy hay không.")
+            raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
             
         context = browser.contexts[0]
         page = context.pages[0] if context.pages else context.new_page()
@@ -191,15 +235,24 @@ def close_browser(browser_or_context, account, api_url=None):
     
     if acc_type == "gpm":
         if not api_url:
-            api_url = "http://127.0.0.1:13926"
+            api_url = "http://127.0.0.1:19995"
         import requests
+        api_base = api_url.rstrip("/").split("/api/")[0]
+        profile_id_match = re.search(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", profile_id)
+        if profile_id_match:
+            profile_id = profile_id_match.group(0)
+        if api_url.rstrip("/").endswith("/api/v1"):
+            try:
+                requests.get(f"{api_url.rstrip('/')}/profiles/stop/{profile_id}", timeout=5)
+            except Exception:
+                pass
+        else:
+            try:
+                requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=5)
+            except Exception:
+                pass
         try:
-            requests.get(f"{api_url}/api/v2/close?profileId={profile_id}", timeout=5)
-        except Exception:
-            pass
-        try:
-            v3_api = api_url if "19995" in api_url else "http://127.0.0.1:19995"
-            requests.get(f"{v3_api}/api/v3/profiles/close?id={profile_id}", timeout=5)
+            requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=5)
         except Exception:
             pass
             

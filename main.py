@@ -2,6 +2,18 @@ import sys
 import argparse
 import os
 
+
+def configure_unicode_output():
+    """Keep a Windows legacy console from crashing when a log contains Vietnamese."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
+
+
+configure_unicode_output()
+
 def check_state():
     pass
 
@@ -47,6 +59,15 @@ def main():
     scrape_parser.add_argument("url", help="The full URL of the Facebook post")
     scrape_parser.add_argument("--limit", type=int, default=50, help="Maximum number of comments to scan")
     
+    # Comment command (Comment vào danh sách bài viết chỉ định)
+    comment_parser = subparsers.add_parser("comment", help="Comment on specific Facebook posts (Group or Page)")
+    comment_parser.add_argument("url", nargs="?", help="The full URL of the Facebook post")
+    comment_parser.add_argument("content", nargs="?", help="The text content of your comment")
+    comment_parser.add_argument("--urls-file", default=None, help="Path to text file containing list of post URLs")
+    comment_parser.add_argument("--like", action="store_true", default=False, help="Like the post before commenting")
+    comment_parser.add_argument("--min-delay", type=int, default=25, help="Min delay between comments in seconds")
+    comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
+    
     args = parser.parse_args()
     
     if args.command == "auth":
@@ -67,6 +88,16 @@ def main():
     elif args.command == "scrape":
         from fb_scraper import scrape_comments
         scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
+    elif args.command == "comment":
+        from fb_comment import comment_on_post, comment_on_list
+        if args.urls_file and os.path.exists(args.urls_file):
+            with open(args.urls_file, "r", encoding="utf-8") as f:
+                urls = [l.strip() for l in f if l.strip()]
+            comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay)
+        elif args.url and args.content:
+            comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like)
+        else:
+            comment_parser.print_help()
     else:
         parser.print_help()
 

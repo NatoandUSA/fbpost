@@ -25,6 +25,8 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
             print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
             return
 
+    browser_obj = None
+    context = None
     with sync_playwright() as p:
         try:
             if account:
@@ -101,6 +103,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
             
         except Exception as e:
             print(f"❌ Có lỗi xảy ra khi nuôi nick: {e}")
+            raise
         finally:
             if account:
                 close_browser(browser_obj if browser_obj else context, account, gpm_api_url)

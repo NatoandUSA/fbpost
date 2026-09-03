@@ -34,6 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const scrapeResultsContainer = document.getElementById('scrape-results-container');
     const scrapeTableBody = document.getElementById('scrape-table-body');
     const downloadCsvBtn = document.getElementById('download-csv-btn');
+    const commentSection = document.getElementById('comment-section');
+    const commentTargets = document.getElementById('comment-targets');
+    const commentContent = document.getElementById('comment-content');
+    const commentLikePost = document.getElementById('comment-like-post');
     const addToPostBar = document.getElementById('add-to-post-bar');
     const composerDividerBar = document.getElementById('composer-divider-bar');
 
@@ -635,7 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
         interact: 'Nuôi Nick — Tương tác Newsfeed',
         scrape: 'Quét & Lọc Bình Luận',
         'content-hub': 'Content Hub — Tạo Nội Dung AI',
-        'page-scheduler': 'Page Scheduler — Lên Lịch Đăng Bài'
+        'page-scheduler': 'Page Scheduler — Lên Lịch Đăng Bài',
+        comment: 'Bình luận bài viết theo Link (Group & Fanpage)'
     };
 
     const workspaceTitleEl = document.getElementById('active-workspace-title');
@@ -658,6 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scrapeSection.classList.add('hidden');
             contentHubSection.classList.add('hidden');
             schedSection.classList.add('hidden');
+            commentSection.classList.add('hidden');
             modeToggleContainer.classList.add('hidden');
             addToPostBar.classList.add('hidden');
             composerDividerBar.classList.add('hidden');
@@ -681,6 +687,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 accountSelectorContainer.classList.add('hidden');
                 loadSchedConfig();
                 loadSchedStatus();
+            } else if (currentMode === 'comment') {
+                commentSection.classList.remove('hidden');
+                postBtn.classList.remove('hidden');
+                postBtn.textContent = 'Bắt đầu bình luận bài viết';
             } else {
                 // Standard modes (Group, Page, Thread)
                 modeToggleContainer.classList.remove('hidden');
@@ -1075,6 +1085,21 @@ document.addEventListener('DOMContentLoaded', () => {
             scrapeResultsContainer.classList.add('hidden');
             initProgressDashboard('Quét bình luận bài viết', [target]);
             runCommand('scrape', { target, limit });
+        } else if (currentMode === 'comment') {
+            const rawTargets = commentTargets.value.trim();
+            const content = commentContent.value.trim();
+            if (!rawTargets || !content) {
+                showToast('Vui lòng nhập danh sách link bài viết và nội dung bình luận!', 'error');
+                return;
+            }
+            const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
+            const tasks = targets.map(t => ({ target: t, content: content }));
+            initProgressDashboard('Bình luận bài viết theo link', targets);
+            runCommand('comment', {
+                tasks,
+                likePost: commentLikePost ? commentLikePost.checked : true,
+                accountId: accountSelector.value
+            });
         } else {
             // Standard posting modes
             let tasks = [];

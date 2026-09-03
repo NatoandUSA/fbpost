@@ -2,13 +2,14 @@ import sys
 import os
 import time
 import random
+import re
 from playwright.sync_api import sync_playwright
 from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser, add_feeling, add_checkin, scrape_post_link
 
 STATE_FILE = "state.json"
 
 def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False):
-    print(f"Attempting to post to page: {page_url}")
+    print(f"👉 Bắt đầu mở Page quản trị và đăng bài: {page_url}")
     content = process_spintax(content)
     
     # Load account if provided
@@ -20,80 +21,161 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
             return
 
-    with sync_playwright() as p:
-        try:
+    browser_obj = None
+    context = None
+    try:
+        with sync_playwright() as p:
             if account:
                 browser_obj, context, page = launch_browser(account, p, gpm_api_url)
             else:
-                print("No account specified, fallback to default state.json.")
+                print("Dùng session mặc định (state.json).")
                 browser_obj = p.chromium.launch(headless=False)
                 state_arg = STATE_FILE if os.path.exists(STATE_FILE) else None
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
+            page.set_default_timeout(30000)
+
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            page.goto(page_url)
-            page.wait_for_load_state("networkidle")
-            time.sleep(random.uniform(2.0, 4.0))
+            page.goto(page_url, wait_until="domcontentloaded")
+            time.sleep(random.uniform(3.0, 5.0))
             
-            page.mouse.wheel(0, random.randint(200, 600))
-            time.sleep(random.uniform(1.0, 2.0))
-            page.mouse.wheel(0, -random.randint(100, 300))
-            
-            print("Looking for post input area...")
+            # 1. Kiểm tra New Page Experience: Có nút "Chuyển sang trang" / "Switch now" hay không
             try:
-                write_box = page.locator("div[role='button']").filter(has_text="What's on your mind").first
-                if not write_box.is_visible():
-                    write_box = page.get_by_text("Write something...", exact=False).first
-                write_box.click()
-            except Exception:
-                print("Could not find the initial post box. Ensure you are logged in and have admin rights to this page.")
+                switch_button = page.locator("div[role='button']").filter(
+                    has_text=re.compile(r"Chuyển ngay|Chuyển sang|Switch now|Switch into page|Tương tác với vai trò", re.IGNORECASE)
+                ).first
+                if switch_button.is_visible(timeout=4000):
+                    print("🔄 Phát hiện Fanpage New Page Experience. Đang bấm chuyển đổi danh tính sang Trang quản trị...")
+                    switch_button.click()
+                    time.sleep(random.uniform(4.0, 6.0))
+                    page.wait_for_load_state("domcontentloaded")
+            except Exception as e:
+                pass
+
+            # Cuộn trang nhẹ nhàng
+            page.mouse.wheel(0, random.randint(200, 500))
+            time.sleep(random.uniform(1.0, 2.0))
+            page.mouse.wheel(0, -random.randint(100, 250))
+            time.sleep(random.uniform(1.0, 2.0))
+            
+            print("🔍 Đang tìm ô đăng bài trên Fanpage...")
+            composer_box = None
+            page_composer_patterns = [
+                r"Bạn đang nghĩ gì",
+                r"Tạo bài viết",
+                r"Tạo bài đăng",
+                r"Viết gì đó",
+                r"What's on your mind",
+                r"Create post",
+                r"Write something"
+            ]
+            combined_regex = re.compile("|".join(page_composer_patterns), re.IGNORECASE)
+
+            # Tìm qua button hoặc text
+            buttons = page.locator("div[role='button']").filter(has_text=combined_regex)
+            if buttons.count() > 0:
+                for idx in range(buttons.count()):
+                    btn = buttons.nth(idx)
+                    if btn.is_visible():
+                        composer_box = btn
+                        break
+
+            if not composer_box:
+                try:
+                    fallback_box = page.get_by_text(combined_regex).first
+                    if fallback_box.is_visible():
+                        composer_box = fallback_box
+                except Exception:
+                    pass
+
+            if not composer_box:
+                fallback_aria = page.locator("div[aria-label*='Tạo bài viết' i], div[aria-label*='Create post' i]").first
+                if fallback_aria.is_visible():
+                    composer_box = fallback_aria
+
+            if not composer_box:
+                print("❌ Không tìm thấy ô đăng bài trên Page. Vui lòng đảm bảo tài khoản đã được cấp quyền Quản trị viên hoặc Biên tập viên trên Page này.")
                 return
             
-            time.sleep(random.uniform(1.5, 3.0))
+            print("👉 Click mở ô soạn thảo bài viết...")
+            composer_box.click()
+            time.sleep(random.uniform(2.0, 3.5))
+
+            # Chờ Dialog modal hiện lên
+            dialog = page.locator("div[role='dialog']").first
+            textbox = None
+
+            if dialog.is_visible():
+                textbox = dialog.locator("div[role='textbox']").first
+            else:
+                textbox = page.locator("div[role='textbox']").first
             
+            # Đính kèm ảnh nếu có
             if image_path and os.path.exists(image_path):
-                print(f"Attaching image: {image_path}")
+                print(f"📸 Đang đính kèm hình ảnh: {image_path}")
                 try:
                     file_input = page.locator("input[type='file'][accept*='image']").first
                     file_input.set_input_files(image_path)
-                    print("Waiting for image to upload...")
+                    print("⏳ Đang chờ ảnh tải lên...")
                     time.sleep(random.uniform(4.0, 7.0))
                 except Exception as e:
-                    print(f"Warning: Could not attach image. Error: {e}")
+                    print(f"⚠️ Cảnh báo: Không thể đính kèm ảnh: {e}")
             
-            print("Typing content...")
-            textbox = page.get_by_role("textbox").filter(has_text="").first
-            human_type(page, textbox, content)
-            time.sleep(random.uniform(1.0, 2.0))
+            print("✍️ Đang nhập nội dung bài viết...")
+            if textbox and textbox.is_visible():
+                human_type(page, textbox, content)
+            else:
+                page.keyboard.type(content)
+            time.sleep(random.uniform(1.5, 2.5))
             
-            # Add Feeling
+            # Thêm Feeling
             if feeling:
                 add_feeling(page)
                 
-            # Add Check-in
+            # Thêm Check-in
             if checkin:
                 add_checkin(page)
             
-            print("Clicking 'Post' button...")
-            post_button = page.get_by_role("button", name="Post", exact=True)
-            if post_button.is_visible() and post_button.is_enabled():
+            print("🚀 Đang bấm nút 'Đăng' bài viết...")
+            post_button = None
+            post_selectors = [
+                "div[role='dialog'] div[aria-label='Đăng']",
+                "div[role='dialog'] div[aria-label='Post']",
+                "div[role='dialog'] div[role='button']:has-text('Đăng')",
+                "div[role='dialog'] div[role='button']:has-text('Post')",
+                "div[aria-label='Đăng']",
+                "div[aria-label='Post']"
+            ]
+
+            for btn_sel in post_selectors:
+                btn = page.locator(btn_sel).first
+                if btn.is_visible() and btn.is_enabled():
+                    post_button = btn
+                    break
+
+            if post_button:
                 post_button.click()
             else:
-                page.locator("div[aria-label='Post']").click()
+                page.get_by_role("button", name=re.compile(r"^(Đăng|Post)$", re.IGNORECASE)).first.click()
+
+            time.sleep(random.uniform(4.0, 6.0))
             
-            # Scrape post link
+            # Quét tìm liên kết bài đăng vừa tạo
             scrape_post_link(page)
-            print("✅ Successfully posted to page!")
+            print("✅ Đã đăng bài lên Fanpage quản trị thành công!")
             
-        except Exception as e:
-            print(f"❌ An error occurred: {e}")
-        finally:
-            if account:
-                close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
-            else:
-                if 'browser_obj' in locals() and browser_obj:
+    except Exception as e:
+        print(f"❌ Xảy ra lỗi khi đăng bài lên Page: {e}")
+    finally:
+        if account:
+            close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
+        else:
+            if browser_obj:
+                try:
                     browser_obj.close()
+                except Exception:
+                    pass
 
 if __name__ == "__main__":
     import argparse

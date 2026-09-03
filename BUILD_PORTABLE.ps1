@@ -1,8 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $release = Join-Path $root 'release'
-$bundle  = Join-Path $release 'FB-Automation-Portable'
-$zip     = Join-Path $release 'FB-Automation-Portable-Windows-x64.zip'
+$bundleName = 'FB-Automation-Portable-v5.4.7'
+$bundle  = Join-Path $release $bundleName
+$zip     = Join-Path $release "$bundleName-Windows-x64.zip"
 $installer = Join-Path $bundle 'runtime\python-3.12.10-amd64.exe'
 
 # Clean old bundle
@@ -10,7 +11,7 @@ if (Test-Path $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime') -Force | Out-Null
 
 # Excluded top-level names
-$excluded = @('.git', 'venv', '__pycache__', 'profiles', 'uploads', 'release', '.codex', '.gitignore')
+$excluded = @('.git', 'venv', '__pycache__', 'profiles', 'uploads', 'release', '.codex', '.gitignore', '.env')
 
 # Copy source files (top-level)
 Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -notin $excluded } | ForEach-Object {
@@ -19,13 +20,13 @@ Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -notin $exclude
 
 # Remove runtime data files that should NOT ship
 $runtimeFiles = @(
-    'state.json', 'scheduler_state.json', 'config.json',
-    'publication_queue.json', 'campaigns.json', 'accounts.json'
+    '.env', 'state.json', 'scheduler_state.json', 'config.json',
+    'publication_queue.json', 'campaigns.json', 'profile_activity.json', 'auth_status.json',
+    'group_registry.json', 'manual_group_queue.json', 'accounts.json'
 )
-foreach ($f in $runtimeFiles) {
-    $target = Join-Path $bundle $f
-    if (Test-Path $target) { Remove-Item -LiteralPath $target -Force }
-}
+Get-ChildItem -LiteralPath $bundle -Recurse -File -Force |
+    Where-Object { $_.Name -in $runtimeFiles -or $_.Extension -in @('.pyc', '.pyo', '.log') } |
+    Remove-Item -Force
 # Ship empty accounts.json (required by app on first run)
 Set-Content -LiteralPath (Join-Path $bundle 'accounts.json') -Value '[]' -Encoding UTF8
 

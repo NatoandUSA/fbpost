@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Hướng dẫn sử dụng FB Automation Dashboard">
+  <title>Hướng dẫn sử dụng — FB Automation Dashboard</title>
+  <style>
+    :root { --ink:#18212f; --muted:#5b6574; --line:#dfe5ec; --bg:#f5f7fa; --card:#fff; --accent:#1463d9; --ok:#087f5b; --warn:#b45309; --danger:#b42318; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; font:16px/1.62 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+    header { color:#fff; background:linear-gradient(135deg,#102a56,#1463d9); padding:48px max(24px,calc((100vw - 1100px)/2)); }
+    header p { max-width:780px; opacity:.9; margin:12px 0 0; }
+    h1 { margin:0; font-size:clamp(28px,5vw,42px); line-height:1.15; } h2 { margin:0 0 14px; font-size:26px; line-height:1.25; } h3 { margin:28px 0 8px; font-size:19px; }
+    nav { position:sticky; top:0; z-index:3; background:#fff; border-bottom:1px solid var(--line); padding:12px max(24px,calc((100vw - 1100px)/2)); display:flex; flex-wrap:wrap; gap:8px 18px; }
+    nav a { color:#25466f; text-decoration:none; font-size:14px; font-weight:650; } nav a:hover { color:var(--accent); }
+    main { width:min(1100px,calc(100% - 40px)); margin:30px auto 64px; } section { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:28px; margin:18px 0; box-shadow:0 2px 10px #15233a08; }
+    p { margin:8px 0 14px; } ol,ul { padding-left:23px; margin:8px 0 16px; } li { margin:6px 0; }
+    .lead { font-size:18px; color:#e7f0ff; } .eyebrow { font-weight:750; letter-spacing:.08em; text-transform:uppercase; font-size:12px; opacity:.8; }
+    .callout { border-left:4px solid var(--accent); background:#eef5ff; padding:14px 16px; border-radius:0 8px 8px 0; margin:16px 0; }
+    .warning { border-color:var(--warn); background:#fff7e8; } .danger { border-color:var(--danger); background:#fff0ef; } .success { border-color:var(--ok); background:#e9fbf3; }
+    code { background:#edf1f5; padding:2px 5px; border-radius:4px; font-size:.9em; } pre { overflow:auto; background:#17212e; color:#e7edf5; padding:15px; border-radius:8px; line-height:1.45; } pre code { padding:0; background:none; }
+    table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14px; } th,td { padding:10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; } th { background:#f1f5f9; }
+    .steps { counter-reset:item; list-style:none; padding:0; } .steps li { counter-increment:item; padding:10px 10px 10px 50px; position:relative; border-bottom:1px solid var(--line); } .steps li::before { content:counter(item); position:absolute; left:8px; top:10px; width:27px; height:27px; border-radius:50%; color:#fff; background:var(--accent); display:grid; place-items:center; font-weight:700; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; } .grid > div { border:1px solid var(--line); border-radius:10px; padding:15px; } .tag { display:inline-block; color:#075985; background:#e0f2fe; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:700; }
+    footer { text-align:center; color:var(--muted); padding:24px; font-size:14px; }
+    @media print { nav { display:none; } body { background:#fff; } section { box-shadow:none; break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="eyebrow">FB Automation Dashboard · Phiên bản portable</div>
+    <h1>Hướng dẫn sử dụng chi tiết</h1>
+    <p class="lead">Tài liệu vận hành từ cài đặt lần đầu, tạo nội dung, duyệt bài, lập lịch Page đến sao lưu và triển khai Cloudflare.</p>
+  </header>
+  <nav>
+    <a href="#tong-quan">Tổng quan</a><a href="#khoi-dong">Khởi động</a><a href="#bao-mat">Bảo mật</a>
+    <a href="#campaign">Campaign & Queue</a><a href="#content">Content Hub</a><a href="#dang-nhom">Đăng nhóm</a><a href="#scheduler">Page Scheduler</a>
+    <a href="#csv">Google Sheets</a><a href="#loi">Xử lý lỗi</a><a href="#cloudflare">Cloudflare</a>
+  </nav>
+  <main>
+    <section id="tong-quan">
+      <h2>1. Tool làm gì?</h2>
+      <p>Dashboard hỗ trợ chuẩn bị nội dung cho homestay, quản lý chiến dịch, lưu bài nháp vào hàng đợi duyệt, đăng thủ công và lập lịch đăng lên <strong>Facebook Page</strong> thông qua Graph API. Content Hub có thể tạo nội dung cục bộ hoặc gọi AI qua proxy phía máy chủ.</p>
+      <div class="grid">
+        <div><span class="tag">Campaign Manager</span><p>Tạo chiến dịch, thương hiệu và Page/target được phép; tạm dừng hoặc duyệt tất cả bản nháp.</p></div>
+        <div><span class="tag">Approval Queue</span><p>Kiểm tra nội dung trước, sau đó lưu nháp và yêu cầu một bước duyệt rõ ràng.</p></div>
+        <div><span class="tag">Content Hub</span><p>Tạo bài chính, biến thể cho Group, Reel/Story, comment, hashtag và chấm điểm nội dung.</p></div>
+        <div><span class="tag">Page Scheduler</span><p>Đọc CSV Google Sheets công khai, đăng đúng thời điểm và chống đăng trùng bằng state cục bộ.</p></div>
+      </div>
+      <div class="callout warning"><strong>Phạm vi:</strong> Queue/Campaign là luồng quản lý và phê duyệt; “đã duyệt” không tự chuyển thành auto-post. Scheduler Page đọc dữ liệu từ Google Sheets CSV riêng.</div>
+    </section>
+
+    <section id="khoi-dong">
+      <h2>2. Cài đặt và khởi động Windows</h2>
+      <h3>Cách dùng ZIP portable (khuyến nghị)</h3>
+      <ol class="steps">
+        <li>Giải nén toàn bộ file <code>FB-Automation-Portable-Windows-x64.zip</code> vào một thư mục có quyền ghi, ví dụ <code>D:\FB-Automation</code>. Không chạy trực tiếp bên trong ZIP.</li>
+        <li>Giữ kết nối Internet ở lần đầu. Script sẽ cài Python 3.12 cho tài khoản hiện tại nếu máy chưa có, tạo virtual environment và tải thư viện/Chromium cần thiết.</li>
+        <li>Double-click <code>RUN_FB_AUTOMATION.bat</code>. Chờ cửa sổ terminal báo Dashboard đang chạy.</li>
+        <li>Trình duyệt sẽ mở <code>http://127.0.0.1:5000</code>. Nếu không tự mở, dán địa chỉ này vào trình duyệt trên chính máy đó.</li>
+        <li>Để dừng tool, quay lại terminal và nhấn <code>Ctrl+C</code>. Không tắt máy khi Scheduler đang chạy.</li>
+      </ol>
+      <div class="callout success">Từ lần chạy sau, launcher tái sử dụng môi trường đã có và chỉ cài Playwright/Chromium khi thiếu.</div>
+      <h3>macOS / Linux</h3>
+      <p>Dùng <code>START_MAC.command</code> trên macOS hoặc <code>bash START_LINUX.sh</code> trên Linux. Hai cách này cần Python 3 và quyền chạy script trên máy.</p>
+    </section>
+
+    <section id="bao-mat">
+      <h2>3. Bảo mật, dữ liệu và sao lưu</h2>
+      <table><thead><tr><th>File / dữ liệu</th><th>Ý nghĩa</th><th>Quy tắc</th></tr></thead><tbody>
+        <tr><td><code>config.json</code></td><td>Page token, Page ID, URL Sheet, cấu hình Scheduler.</td><td>Không gửi qua chat, không commit Git, không chia sẻ cùng ZIP.</td></tr>
+        <tr><td><code>state.json</code></td><td>Phiên đăng nhập trình duyệt cục bộ.</td><td>Chỉ dùng trên máy sở hữu tài khoản; xóa khi đổi máy/ngừng sử dụng.</td></tr>
+        <tr><td><code>accounts.json</code></td><td>Cấu hình profile trong Dashboard.</td><td>Sao lưu riêng tư; release sạch chỉ chứa mẫu rỗng.</td></tr>
+        <tr><td><code>scheduler_state.json</code></td><td>Dấu vết các dòng Scheduler đã đăng.</td><td>Giữ lại để tránh đăng trùng; chỉ xóa khi bạn chủ động muốn chạy lại lịch sử.</td></tr>
+      </tbody></table>
+      <div class="callout danger"><strong>Tuyệt đối không</strong> để Page Access Token, API key AI, cookie/session hoặc proxy credential vào Google Sheets công khai, source code hoặc ZIP gửi cho người khác.</div>
+      <p><strong>Dành cho nhân viên:</strong> vào menu <strong>Bảo mật &amp; Cấu hình</strong> trong Dashboard để xem trạng thái Page, Google Sheets, phiên đăng nhập và Profiles. Màn hình này không hiển thị lại token hoặc session; dùng các nút dẫn sang Page Scheduler/Profile để cập nhật khi được phân quyền.</p>
+      <p>Trước khi nâng cấp hoặc chuyển máy: dừng Scheduler, sao chép riêng các file dữ liệu cần thiết vào ổ mã hóa, rồi khởi động và xác thực lại nếu cần.</p>
+    </section>
+
+    <section id="campaign">
+      <h2>4. Campaign Manager và hàng đợi duyệt</h2>
+      <h3>Tạo chiến dịch</h3>
+      <ol class="steps">
+        <li>Ở thẻ đăng bài, nhập <strong>Tên chiến dịch</strong>, <strong>Thương hiệu</strong> và <strong>Page/target được phép</strong>.</li>
+        <li>Chọn <strong>Tạo chiến dịch</strong>. Chiến dịch mới xuất hiện trong danh sách chọn “Thuộc chiến dịch”.</li>
+        <li>Chọn chiến dịch trước khi đưa bài vào Queue để báo cáo đếm đúng theo chiến dịch.</li>
+        <li>Dùng nút <strong>Tạm dừng</strong> khi muốn ngăn tạo nháp mới cho chiến dịch; dùng <strong>Kích hoạt</strong> để mở lại.</li>
+      </ol>
+      <h3>Quy trình duyệt an toàn</h3>
+      <ol class="steps">
+        <li>Điền target và nội dung trong Composer, hoặc đẩy nội dung từ Content Hub vào bảng đăng bài.</li>
+        <li>Nhấn <strong>Kiểm tra bài</strong> và sửa các cảnh báo nếu có.</li>
+        <li>Nhấn <strong>Thêm vào hàng đợi</strong>. Mục mới có trạng thái <code>draft</code>.</li>
+        <li>Mở <strong>Hàng đợi cần duyệt</strong>, đọc lại target/nội dung rồi duyệt từng bài; hoặc dùng nút <strong>Duyệt N</strong> trong báo cáo Campaign để duyệt toàn bộ nháp của một chiến dịch đang active.</li>
+      </ol>
+      <div class="callout">Duyệt là bằng chứng kiểm soát nội dung, không phải lệnh đăng tự động. Với Page Scheduler, hãy dùng CSV và token Page theo phần 6–7.</div>
+    </section>
+
+    <section id="content">
+      <h2>5. Content Hub: tạo và dùng nội dung</h2>
+      <ol class="steps">
+        <li>Chọn brand: Lacasa, UMEE hoặc Về Huế.</li>
+        <li>Điền mục đích, ý chính, ngày/phòng/giá nếu có; chọn đối tượng, tông giọng, độ dài và CTA.</li>
+        <li>Chọn <strong>Tạo Cục Bộ</strong> để dùng mẫu offline ngay, hoặc <strong>Tạo bằng AI</strong> nếu proxy AI đã được cấu hình.</li>
+        <li>Kiểm tra các tab Bài chính, Group, Reel/Story, Comment, Hashtag và Điểm. Copy hoặc chọn <strong>Đưa vào Bảng đăng bài</strong>.</li>
+        <li>Tiếp tục qua bước kiểm tra và Queue trước khi dùng nội dung.</li>
+      </ol>
+      <h3>Cấu hình AI tùy chọn</h3>
+      <p>Thiết lập hai biến môi trường <em>trước khi</em> chạy server. Khóa chỉ nằm ở máy chủ, không nằm trong trình duyệt.</p>
+      <pre><code>CONTENT_AI_PROXY_URL=https://your-ai-proxy.example
+CONTENT_AI_APP_KEY=your-private-key</code></pre>
+      <p>Nếu không cấu hình hoặc proxy lỗi, Dashboard hiện thông báo lý do và chuyển sang tạo Offline. Kiểm tra lại URL HTTPS, key và log server; không dán key vào form web.</p>
+    </section>
+
+    <section id="dang-nhom">
+      <h2>6. Đăng bài Nhóm: cách dùng và cách hoạt động</h2>
+      <p>Chức năng này dành cho bài đăng vào các Group mà tài khoản của bạn có quyền tham gia và đăng bài. Hãy dùng đúng nội dung đã được duyệt, tôn trọng quy tắc từng Group và chỉ gửi tới các Group phù hợp.</p>
+      <h3>Đăng thủ công</h3>
+      <ol class="steps">
+        <li>Chọn menu <strong>Đăng bài Nhóm</strong>.</li>
+        <li>Nếu Dashboard báo chưa đăng nhập, nhấn <strong>Đăng nhập</strong>, tự đăng nhập Facebook trong cửa sổ mở ra, rồi hoàn tất tại máy của bạn.</li>
+        <li>Chọn Profile nếu doanh nghiệp đã cấu hình nhiều profile; nếu không, để chế độ mặc định.</li>
+        <li>Dán URL Group, mỗi dòng một URL. Nhập nội dung bài; có thể dùng Spintax như <code>{Chào bạn|Xin chào}</code> để chọn một biến thể.</li>
+        <li>Thêm ảnh nếu cần, đọc lại nội dung, rồi nhấn <strong>Kiểm tra bài</strong> và đưa vào Queue để duyệt nội bộ.</li>
+        <li>Sau khi được duyệt, nhấn <strong>Đăng bài ngay</strong> và theo dõi tiến trình/nhật ký ở panel bên phải.</li>
+      </ol>
+      <h3>Chế độ Google Sheets CSV cho Group</h3>
+      <p>Chuyển sang <strong>Google Sheets CSV</strong>, dùng Sheet có ba cột: URL Group, nội dung và đường dẫn ảnh cục bộ (không bắt buộc). Publish Sheet thành CSV công khai, dán URL CSV vào Dashboard và kiểm tra dữ liệu trước khi chạy.</p>
+      <div class="callout warning"><strong>Lưu ý:</strong> URL Sheet công khai không được chứa token, cookie, secret 2FA, proxy credential hoặc dữ liệu khách hàng. Chức năng Group không phải Page Scheduler: file mẫu năm cột của Scheduler chỉ dùng cho đăng Page theo lịch.</div>
+      <h3>Tool xử lý gì?</h3>
+      <ul>
+        <li>Dashboard gửi danh sách target và nội dung đến backend cục bộ; backend chạy Playwright trên máy đang mở tool.</li>
+        <li><strong>Một batch dùng một Profile được chọn:</strong> tool không tự luân phiên hoặc xoay nhiều profile trong cùng batch. Mỗi profile cần được nhân viên đăng nhập và quản lý riêng.</li>
+        <li>Mỗi target được ghi vào tiến trình và log để nhân viên biết dòng nào thành công hoặc lỗi.</li>
+        <li>Giữa các tác vụ batch, tool có khoảng chờ vận hành. Không có cơ chế nào bảo đảm bài được Facebook phê duyệt hoặc tài khoản không bị hạn chế.</li>
+        <li><strong>Facebook Page trong Group:</strong> Page chỉ có thể tham gia/đăng nếu Group và quản trị viên cho phép Page participation. Tool hiện đăng Group theo identity của profile đã đăng nhập, không tự tạo Page hoặc chuyển identity sang Page để đăng.</li>
+        <li>Nếu Group yêu cầu duyệt bài, chỉ quản trị viên Group mới quyết định việc xuất bản cuối cùng.</li>
+      </ul>
+    </section>
+
+    <section id="scheduler">
+      <h2>7. Page Scheduler: cấu hình và vận hành</h2>
+      <h3>Bước 1 — Token Page</h3>
+      <ol class="steps">
+        <li>Mở menu <strong>Page Scheduler</strong>.</li>
+        <li>Dán <strong>Facebook Page Access Token</strong> của Page bạn quản trị vào ô token.</li>
+        <li>Nhấn <strong>Xác thực &amp; Lưu</strong>. Chỉ tiếp tục khi tên và Page ID trả về đúng Page mong muốn.</li>
+      </ol>
+      <h3>Bước 2 — Sheet và chu kỳ</h3>
+      <ol class="steps">
+        <li>Đặt URL CSV công khai của Google Sheets vào ô “Đường dẫn CSV”.</li>
+        <li>Chọn chu kỳ 5, 15, 30 hoặc 60 phút. Chu kỳ là tần suất tool kiểm tra Sheet, không phải thời gian đăng chính xác từng bài.</li>
+        <li>Nhấn <strong>Lưu Cấu hình</strong>, sau đó <strong>Xem trước dữ liệu Sheet</strong>. Xác nhận Page ID, giờ và trạng thái trước khi bật Scheduler.</li>
+      </ol>
+      <h3>Bước 3 — chạy và giám sát</h3>
+      <ul>
+        <li><strong>Kích hoạt Scheduler:</strong> chạy nền và kiểm tra theo chu kỳ đã chọn.</li>
+        <li><strong>Kiểm tra &amp; Chạy ngay:</strong> chạy một lượt ngay để kiểm tra, phù hợp khi thử nghiệm.</li>
+        <li><strong>Tạm dừng:</strong> dừng các lượt tương lai. Dùng trước khi đổi token, Sheet hoặc bảo trì.</li>
+        <li><strong>Nhật ký Scheduler:</strong> xem lý do một dòng bị bỏ qua, lỗi giờ, lỗi Graph API hoặc kết quả đăng.</li>
+      </ul>
+      <p><strong>Giãn cách ngẫu nhiên:</strong> nếu nhiều bài đã đến giờ trong cùng một lượt, chọn khung 5–10, 5–15 hoặc 10–20 phút. Tool chờ một khoảng ngẫu nhiên trong khung đó giữa các bài thành công; mức thấp nhất khi bật là 5 phút. Tùy chọn này không thay đổi “Thời gian đăng” của từng dòng trong Sheet.</p>
+      <div class="callout warning">Máy chạy Dashboard phải luôn bật và có Internet thì Scheduler cục bộ mới hoạt động. Lịch dùng múi giờ của máy chạy tool; thống nhất giờ trong Sheet trước khi vận hành.</div>
+    </section>
+
+    <section id="csv">
+      <h2>8. Chuẩn bị Google Sheets CSV cho Page Scheduler</h2>
+      <p>Publish Sheet dưới dạng CSV công khai (File → Share/Publish to web → CSV). Để tránh lỗi mã hóa khi mở bằng Excel, dùng <strong>English-only headers và sample content</strong> như bảng bên dưới.</p>
+      <table><thead><tr><th>Cột</th><th>Ví dụ header</th><th>Giá trị</th></tr></thead><tbody>
+        <tr><td>A</td><td><code>Page ID</code></td><td>Numeric Facebook Page ID.</td></tr>
+        <tr><td>B</td><td><code>Content</code></td><td>Post text; Spintax is supported, for example <code>{Hello|Hi}</code>.</td></tr>
+        <tr><td>C</td><td><code>Image URL</code></td><td>HTTPS image URL; leave empty when no image is needed.</td></tr>
+        <tr><td>D</td><td><code>Scheduled Time</code></td><td><code>YYYY-MM-DD HH:MM</code> or <code>DD/MM/YYYY HH:MM</code>.</td></tr>
+        <tr><td>E</td><td><code>Status</code></td><td>Use <code>pending</code> for a scheduled row; other values are skipped.</td></tr>
+      </tbody></table>
+      <pre><code>Page ID,Content,Image URL,Scheduled Time,Status
+1234567890,"Weekend room offer",https://example.com/photo.jpg,2026-12-31 09:00,pending</code></pre>
+      <p>Sau một lần đăng thành công, tool lưu dấu vết cục bộ để không đăng lại cùng tổ hợp Page ID/nội dung/ảnh/thời gian. Không đổi một dòng đã đăng thành <code>pending</code> trừ khi bạn thực sự muốn tạo một lịch đăng mới.</p>
+    </section>
+
+    <section id="loi">
+      <h2>8. Xử lý lỗi thường gặp</h2>
+      <table><thead><tr><th>Triệu chứng</th><th>Nguyên nhân thường gặp</th><th>Cách xử lý</th></tr></thead><tbody>
+        <tr><td>Không mở được Dashboard</td><td>Launcher đang cài dependency, port 5000 đã dùng, hoặc terminal bị đóng.</td><td>Chờ terminal hoàn tất; mở <code>127.0.0.1:5000</code>; đóng tiến trình cũ rồi chạy lại.</td></tr>
+        <tr><td>AI chuyển Offline</td><td>Chưa đặt biến môi trường AI, key sai hoặc proxy không phản hồi.</td><td>Đọc toast/status, kiểm tra hai biến môi trường và restart tool.</td></tr>
+        <tr><td>Scheduler không đăng</td><td>Token/CSV sai, giờ chưa đến, status khác pending hoặc Page API trả lỗi.</td><td>Nhấn Xem trước, kiểm tra log Scheduler và xác minh token/Page ID.</td></tr>
+        <tr><td>Dữ liệu Sheet thành một dòng header</td><td>Header không đúng vị trí hoặc CSV không có đủ bốn cột.</td><td>Dùng cấu trúc 5 cột ở phần 7; test lại bằng Xem trước.</td></tr>
+        <tr><td>Bị trùng lịch</td><td>Đã xóa state hoặc thay đổi nội dung/giờ khiến dòng thành bản ghi mới.</td><td>Giữ <code>scheduler_state.json</code>; chỉ chạy lại sau khi chủ động kiểm tra.</td></tr>
+      </tbody></table>
+    </section>
+
+    <section id="cloudflare">
+      <h2>9. Có đưa lên Cloudflare để chạy online được không?</h2>
+      <p><strong>Có, nhưng không nên deploy nguyên project hiện tại trực tiếp lên Workers.</strong> Tool hiện dùng Flask, filesystem cục bộ, session trình duyệt và Playwright. Các thành phần này không phù hợp với Workers isolate/serverless theo cách “copy source rồi chạy” và session local không nên đưa lên cloud.</p>
+      <h3>Ba phương án</h3>
+      <table><thead><tr><th>Phương án</th><th>Dùng cho</th><th>Đánh giá</th></tr></thead><tbody>
+        <tr><td><strong>A. Local-first</strong></td><td>Toàn bộ tool chạy trên máy; truy cập bằng <code>127.0.0.1</code>.</td><td>Đơn giản, phù hợp browser session; Scheduler chỉ chạy khi máy bật.</td></tr>
+        <tr><td><strong>B. Hybrid</strong></td><td>Cloudflare Pages/Workers cho Dashboard, API nội dung, Campaign/Queue; máy local/VM riêng xử lý browser-only tác vụ.</td><td><strong>Khuyến nghị</strong>: secret tách biệt, dễ mở dashboard online, giảm thay đổi code rủi ro.</td></tr>
+        <tr><td><strong>C. Cloud-native</strong></td><td>Viết lại backend Worker/Python Worker, D1 cho dữ liệu, R2 cho ảnh, Cron Trigger cho lịch; Page Graph API chạy từ Worker.</td><td>Tốt cho Page Scheduler/API, nhưng là dự án migration độc lập; không mang Playwright/profile local sang nguyên trạng.</td></tr>
+      </tbody></table>
+      <h3>Kiến trúc Cloudflare khuyến nghị cho bản online</h3>
+      <pre><code>Người dùng
+  └─ Cloudflare Pages / Worker (Dashboard + API, Access/Turnstile)
+       ├─ D1: Campaign, Queue, audit log
+       ├─ R2: ảnh upload
+       ├─ Secrets: Page token, AI proxy key
+       └─ Cron Trigger: kiểm tra lịch Page API
+
+Máy local hoặc VM riêng (nếu vẫn cần browser automation)
+  └─ worker agent xác thực, chạy tác vụ browser có phê duyệt rõ ràng</code></pre>
+      <ul>
+        <li><strong>Page Scheduler:</strong> rất phù hợp để chuyển sang Worker + Cron Trigger; Cron chạy theo UTC, cần quy đổi rõ lịch Việt Nam.</li>
+        <li><strong>Data:</strong> thay các file JSON bằng D1; dùng R2 cho ảnh. Không ghi token vào D1/plain config.</li>
+        <li><strong>Secrets:</strong> lưu bằng Cloudflare Secrets, giới hạn quyền token Page và luân chuyển token khi cần.</li>
+        <li><strong>Browser automation:</strong> giữ local/VM và không triển khai session Facebook lên Workers. Đây là phần có rủi ro tài khoản và cần kiểm soát chủ sở hữu, nhật ký, phê duyệt.</li>
+        <li><strong>Containers:</strong> Cloudflare Containers có thể chạy ứng dụng cần filesystem/Linux và ngôn ngữ bất kỳ, nhưng yêu cầu Workers Paid và thêm lớp Worker/Durable Object; không phải đường “deploy một click” cho app hiện tại.</li>
+      </ul>
+      <div class="callout">Nếu mục tiêu chỉ là <strong>lập lịch đăng Page online</strong>, nên làm phương án C thu gọn: Worker + D1 + R2 + Secrets + Cron, không cần container. Nếu muốn giữ mọi tính năng browser hiện tại, chọn phương án B.</div>
+      <p>Nguồn tham khảo chính thức: <a href="https://developers.cloudflare.com/workers/configuration/cron-triggers/">Cron Triggers</a>, <a href="https://developers.cloudflare.com/workers/languages/python/">Python Workers</a>, và <a href="https://developers.cloudflare.com/containers/">Cloudflare Containers</a>.</p>
+    </section>
+  </main>
+  <footer>Hướng dẫn nội bộ · Cập nhật 02/09/2026 · Luôn kiểm tra quyền quản trị Page và nội dung trước khi đăng.</footer>
+</body>
+</html>

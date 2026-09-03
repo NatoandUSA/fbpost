@@ -1,12 +1,15 @@
 @echo off
 setlocal EnableExtensions
+chcp 65001 >nul
+set "PYTHONUTF8=1"
+set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
 
 set "PYTHON_EXE="
 set "VENV_DIR=%CD%\runtime\venv"
 set "PYTHON_INSTALLER=%CD%\runtime\python-3.12.10-amd64.exe"
 
-REM === 1. Venv da co san → dung luon (fast path) ===
+REM === 1. Venv da co san ? dung luon (fast path) ===
 if exist "%VENV_DIR%\Scripts\python.exe" (
     set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
     goto :check_libs
@@ -62,7 +65,7 @@ if not exist "%VENV_DIR%\Lib\site-packages\flask" (
 start "" http://127.0.0.1:5000
 echo.
 echo =====================================================
-echo  FB Automation Panel V4 - Dang chay
+echo  FB Automation Panel v5.4.7 - Build 2026-09-03 - Dang chay
 echo  Mo trinh duyet: http://127.0.0.1:5000
 echo  Bam Ctrl+C de dung server
 echo =====================================================

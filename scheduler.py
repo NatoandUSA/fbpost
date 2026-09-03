@@ -4,8 +4,11 @@ import logging
 import io
 import os
 import hashlib
+import random
 import tempfile
 import threading
+import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 import requests
@@ -62,6 +65,30 @@ def row_key(row):
     identity = "\x1f".join(str(row.get(key, "")) for key in ("page_id", "content", "image_url", "scheduled_time"))
     return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
+
+def normalize_header(value):
+    """Normalize a CSV header so Vietnamese and English aliases compare reliably."""
+    vietnamese_safe = value.replace("đ", "d").replace("Đ", "D")
+    ascii_value = unicodedata.normalize("NFKD", vietnamese_safe).encode("ascii", "ignore").decode("ascii")
+    return "".join(character for character in ascii_value.lower() if character.isalnum())
+
+
+def is_header_row(row):
+    """Recognize a column header structurally instead of relying on a single Page label."""
+    expected_headers = (
+        {"pageid", "page", "id", "target", "targeturl"},
+        {"content", "noidung", "message", "caption"},
+        {"image", "imageurl", "anh", "duongdananh"},
+        {"scheduled", "scheduledtime", "time", "thoigiandang"},
+        {"status", "trangthai"},
+    )
+    matches = sum(
+        index < len(row) and normalize_header(row[index].strip()) in aliases
+        for index, aliases in enumerate(expected_headers)
+    )
+    return matches >= 2
+
+
 def fetch_sheets_data(csv_url):
     """Fetch and parse Google Sheets CSV. Returns list of row dicts."""
     try:
@@ -72,8 +99,8 @@ def fetch_sheets_data(csv_url):
         for i, row in enumerate(reader):
             if len(row) < 4:
                 continue
-            # Skip header if first row looks like a header
-            if i == 0 and not row[0].strip().lstrip('-').isdigit() and 'page' in row[0].lower():
+            # Skip common English/Vietnamese headers without mistaking ordinary rows for headers.
+            if i == 0 and is_header_row(row):
                 continue
             rows.append({
                 "row_index": i,
@@ -108,6 +135,8 @@ def _run_scheduler_job():
     config = load_config()
     token = config.get("page_access_token", "")
     csv_url = config.get("sheets_csv_url", "")
+    post_delay_min = int(config.get("post_delay_min_minutes", 0) or 0)
+    post_delay_max = int(config.get("post_delay_max_minutes", 0) or 0)
 
     if not token or not csv_url:
         logger.warning("Chưa cấu hình token hoặc Sheets URL. Bỏ qua.")
@@ -135,6 +164,14 @@ def _run_scheduler_job():
         if sched_time > now:
             logger.info(f"Row {row['row_index']}: Chưa đến giờ đăng ({row['scheduled_time']})")
             continue
+
+        if posted_count and post_delay_min >= 5 and post_delay_max >= post_delay_min:
+            delay_seconds = random.uniform(post_delay_min * 60, post_delay_max * 60)
+            logger.info(
+                f"⏳ Giãn cách vận hành {delay_seconds / 60:.1f} phút trước bài kế tiếp "
+                f"(khung {post_delay_min}–{post_delay_max} phút)."
+            )
+            time.sleep(delay_seconds)
 
         # Time to post!
         page_id = row["page_id"]
