@@ -142,8 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v5.5.0';
-            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-03 23:05';
+            const verText = data.version ? `v${data.version}` : 'v5.5.1';
+            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-04 00:07';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
             const sidebarBuild = document.getElementById('sidebar-build-time');
@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (sidebarVer) sidebarVer.textContent = verText;
             if (sidebarBuild) sidebarBuild.textContent = buildText;
-            if (headerVer) headerVer.textContent = verText;
+            if (headerVer) headerVer.textContent = `Phiên bản: ${verText}`;
             if (headerBuild) headerBuild.textContent = buildText;
             if (buildInfoEl) buildInfoEl.textContent = `UI ${verText} · Server ${verText} (${buildText})`;
         } catch (e) {
@@ -2650,5 +2650,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {}
     }
     // ====== END PAGE SCHEDULER JS ======
+
+    // In phiên bản hệ thống vào nhật ký hoạt động
+    setTimeout(() => {
+        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.5.1 [Build: 2026-09-04 00:07]');
+        appendLog('💡 Hệ thống đã sẵn sàng với tài khoản GPM M14 và 3 nhóm Homestay tại Huế.');
+    }, 500);
 });
 
