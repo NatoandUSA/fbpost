@@ -34,10 +34,13 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
-            page.set_default_timeout(30000)
+            page.set_default_timeout(45000)
 
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            page.goto(page_url, wait_until="domcontentloaded")
+            try:
+                page.goto(page_url, wait_until="domcontentloaded", timeout=45000)
+            except Exception as nav_err:
+                print(f"⚠️ Cảnh báo tải trang Fanpage: {nav_err}. Tiếp tục tìm ô đăng bài...")
             time.sleep(random.uniform(3.0, 5.0))
             
             # 1. Kiểm tra New Page Experience: Có nút "Chuyển sang trang" / "Switch now" hay không

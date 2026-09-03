@@ -651,7 +651,9 @@
                                 <div class="field-group"><label class="field-label" for="group-member-count-input">Members</label><input id="group-member-count-input" class="field-input" type="number" min="0" max="2000000000" step="1" placeholder="e.g. 12000"></div>
                                 <button class="btn btn-primary" type="submit">+ Add Group</button>
                             </form>
-                            <div class="manual-request-notice">Group actions are manual. “Open in dashboard browser” opens your normal browser, not a GPM profile. Open the assigned GPM profile from GPM Login itself, review Group rules, then act yourself if allowed.</div>
+                            <div class="manual-request-notice" style="background:#EFF6FF; border-left:4px solid #2563EB; color:#1E40AF; padding:8px 12px; border-radius:4px; margin:10px 0; font-size:13px;">
+                                💡 Nhấn <strong>"🚀 Mở Group bằng Profile GPM"</strong> để hệ thống tự động khởi chạy đúng Profile Facebook đã gán cho Group này qua GPM Login.
+                            </div>
                             <div id="group-manager-list" class="management-list"><span class="empty">Loading Groups...</span></div>
                             <section class="manual-group-queue" aria-labelledby="manual-group-queue-title">
                                 <div class="management-hero compact"><div><span class="workflow-kicker">HUMAN CONFIRMATION</span><h3 id="manual-group-queue-title">Manual Group queue</h3><p>Prepare a reviewed post, assign one responsible profile, then open the Group and confirm the action yourself.</p></div><button id="manual-group-queue-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button></div>

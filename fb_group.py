@@ -34,11 +34,14 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
-            page.set_default_timeout(30000)
+            page.set_default_timeout(45000)
 
             # Mô phỏng di chuyển chuột và vào nhóm
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            page.goto(group_url, wait_until="domcontentloaded")
+            try:
+                page.goto(group_url, wait_until="domcontentloaded", timeout=45000)
+            except Exception as nav_err:
+                print(f"⚠️ Cảnh báo tải trang Group: {nav_err}. Tiếp tục tìm ô đăng bài...")
             time.sleep(random.uniform(3.0, 5.0))
             
             # Cuộn trang nhẹ nhàng

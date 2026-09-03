@@ -749,6 +749,54 @@ def delete_account(id):
     else:
         return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
 
+
+@app.route('/api/profiles/open-browser', methods=['POST'])
+def open_profile_browser():
+    """Khởi chạy Profile GPM hoặc Local Profile được chỉ định và mở trực tiếp link (Group/Page)."""
+    from utils import load_accounts
+    data = json_body()
+    account_id = data.get('accountId', '').strip()
+    target_url = data.get('url', 'https://www.facebook.com/').strip()
+    gpm_api_url = data.get('gpmApiUrl', 'http://127.0.0.1:19995').strip()
+
+    accounts = load_accounts()
+    account = None
+    if account_id:
+        account = next((a for a in accounts if a.get("id") == account_id or a.get("name") == account_id or a.get("profile_path_or_id") == account_id), None)
+
+    if not account and accounts:
+        account = accounts[0]
+
+    if not account:
+        return jsonify({"error": "Chưa có tài khoản nào được cấu hình trong kho tài khoản."}), 400
+
+    def start_browser_background(acc, url, gpm_url):
+        try:
+            import time
+            from playwright.sync_api import sync_playwright
+            from utils import launch_browser
+            with sync_playwright() as p:
+                browser_obj, context, page = launch_browser(acc, p, gpm_url)
+                if page:
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                while True:
+                    try:
+                        time.sleep(1)
+                        if not context.pages:
+                            break
+                    except Exception:
+                        break
+        except Exception as e:
+            print(f"Error opening profile browser: {e}")
+
+    threading.Thread(target=start_browser_background, args=(account, target_url, gpm_api_url), daemon=True).start()
+    return jsonify({
+        "success": True,
+        "message": f"Đang khởi chạy Profile '{account.get('name')}' và mở liên kết: {target_url}",
+        "profile": account.get("name")
+    })
+
+
 @app.route('/api/2fa', methods=['POST'])
 def generate_2fa():
     data = json_body()
