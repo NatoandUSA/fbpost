@@ -26,8 +26,8 @@ VAULT_FILE = "account_vault.json"
 UPLOAD_DIR = Path("uploads").resolve()
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment"}
-APP_VERSION = "5.5.1"
-BUILD_TIME = "2026-09-04 00:07"
+APP_VERSION = "5.5.2"
+BUILD_TIME = "2026-09-04 06:45"
 
 
 def app_build_info():
