@@ -88,7 +88,20 @@ def login_account(account_id=None, gpm_api_url=None):
             browser_obj, context, page = launch_browser(account, p, gpm_api_url)
             
             print("Đang mở Facebook...")
-            page.goto("https://www.facebook.com/")
+            try:
+                page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=45000)
+            except Exception as goto_err:
+                print(f"⚠️ Cảnh báo kết nối Facebook: {goto_err}. Đang kiểm tra màn hình SSL...")
+                time.sleep(2)
+                try:
+                    if page.locator("#details-button").is_visible(timeout=3000):
+                        page.click("#details-button")
+                        time.sleep(1)
+                        if page.locator("#proceed-link").is_visible(timeout=3000):
+                            page.click("#proceed-link")
+                            time.sleep(3)
+                except Exception:
+                    pass
             
             print("\n" + "="*50)
             print("*** YÊU CẦU THAO TÁC HÀNH ĐỘNG ***")

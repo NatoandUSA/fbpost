@@ -192,6 +192,14 @@ def launch_browser(account, p, api_url=None):
             
         context = browser.contexts[0]
         page = context.pages[0] if context.pages else context.new_page()
+        
+        # Bỏ qua lỗi SSL / Certificate từ Proxy (ERR_CERT_COMMON_NAME_INVALID)
+        try:
+            cdp_client = context.new_cdp_session(page)
+            cdp_client.send("Security.setIgnoreCertificateErrors", {"ignore": True})
+        except Exception:
+            pass
+            
         return browser, context, page
         
     else:
@@ -217,12 +225,14 @@ def launch_browser(account, p, api_url=None):
         context = p.chromium.launch_persistent_context(
             user_data_dir=profile_dir,
             headless=False,
+            ignore_https_errors=True,
             proxy=proxy,
             user_agent=ua,
             viewport=viewport,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--disable-notifications",
+                "--ignore-certificate-errors",
                 "--start-maximized"
             ]
         )

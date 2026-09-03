@@ -310,15 +310,54 @@ document.addEventListener('DOMContentLoaded', () => {
                 approve.addEventListener('click', () => updateQueueItem(item.id, 'approve'));
                 row.appendChild(approve);
             }
-            if (item.state !== 'approved') {
-                const cancel = document.createElement('button');
-                cancel.className = 'btn btn-ghost btn-sm';
-                cancel.textContent = 'Hủy';
-                cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
-                row.appendChild(cancel);
+            if (item.state === 'approved') {
+                const postItemBtn = document.createElement('button');
+                postItemBtn.className = 'btn btn-primary btn-sm';
+                postItemBtn.textContent = '🚀 Đăng ngay';
+                postItemBtn.style.marginLeft = '8px';
+                postItemBtn.addEventListener('click', () => {
+                    const accId = accountSelector ? accountSelector.value : '';
+                    const isGroup = item.target.includes('/groups/');
+                    const mode = isGroup ? 'group' : 'page';
+                    showToast(`Bắt đầu đăng bài: ${item.target}`);
+                    runCommand(mode, {
+                        accountId: accId,
+                        tasks: [{ target: item.target, content: item.content, image: null }]
+                    });
+                });
+                row.appendChild(postItemBtn);
             }
+            const cancel = document.createElement('button');
+            cancel.className = 'btn btn-ghost btn-sm';
+            cancel.textContent = 'Xóa';
+            cancel.style.marginLeft = '4px';
+            cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
+            row.appendChild(cancel);
             approvalQueueList.appendChild(row);
         });
+
+        // Xử lý nút Đăng tất cả bài đã duyệt
+        const postAllApprovedBtn = document.getElementById('post-all-approved-btn');
+        if (postAllApprovedBtn) {
+            postAllApprovedBtn.onclick = () => {
+                const approvedItems = items.filter(i => i.state === 'approved');
+                if (!approvedItems.length) {
+                    showToast('Không có bài nào ở trạng thái "Đã duyệt" để đăng!', 'error');
+                    return;
+                }
+                const accId = accountSelector ? accountSelector.value : '';
+                const groupTasks = approvedItems.filter(i => i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
+                const pageTasks = approvedItems.filter(i => !i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
+
+                if (groupTasks.length > 0) {
+                    showToast(`Đang chạy đăng ${groupTasks.length} bài Nhóm đã duyệt...`);
+                    runCommand('group', { accountId: accId, tasks: groupTasks });
+                } else if (pageTasks.length > 0) {
+                    showToast(`Đang chạy đăng ${pageTasks.length} bài Trang đã duyệt...`);
+                    runCommand('page', { accountId: accId, tasks: pageTasks });
+                }
+            };
+        }
     }
 
     async function loadQueue() {

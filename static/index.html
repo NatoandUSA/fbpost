@@ -283,6 +283,13 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     💡 Spintax: <code>{Xin chào|Hello}</code> sẽ chọn ngẫu nhiên
                                 </div>
                             </div>
+
+                            <!-- Nút Đăng bài ngay trực tiếp -->
+                            <div style="margin-top: 18px;">
+                                <button id="post-btn" class="btn btn-primary" type="button" style="width: 100%; padding: 12px 20px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 4px rgba(37,99,235,0.2);">
+                                    🚀 ĐĂNG BÀI NGAY (Lên các mục tiêu đã chọn)
+                                </button>
+                            </div>
                         </div>
 
                         <!-- 2. CSV Input Section -->
@@ -751,7 +758,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                     <div class="card" id="approval-queue-card">
                         <div class="card-header">
                             <div class="card-title-group"><span>📋</span><h3>Hàng đợi cần duyệt</h3></div>
-                            <button id="refresh-queue-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                            <div style="display:flex; gap:6px;">
+                                <button id="post-all-approved-btn" class="btn btn-primary btn-xs" type="button">🚀 Đăng bài đã duyệt</button>
+                                <button id="refresh-queue-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                            </div>
                         </div>
                         <div id="approval-queue-list" class="posted-links-list"><span class="empty">Chưa có bài nào trong hàng đợi.</span></div>
                     </div>

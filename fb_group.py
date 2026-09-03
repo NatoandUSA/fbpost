@@ -41,7 +41,17 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             try:
                 page.goto(group_url, wait_until="domcontentloaded", timeout=45000)
             except Exception as nav_err:
-                print(f"⚠️ Cảnh báo tải trang Group: {nav_err}. Tiếp tục tìm ô đăng bài...")
+                print(f"⚠️ Cảnh báo tải trang Group: {nav_err}. Đang kiểm tra bỏ qua cảnh báo SSL...")
+                time.sleep(1.5)
+                try:
+                    if page.locator("#details-button").is_visible(timeout=2000):
+                        page.click("#details-button")
+                        time.sleep(1)
+                        if page.locator("#proceed-link").is_visible(timeout=2000):
+                            page.click("#proceed-link")
+                            time.sleep(2)
+                except Exception:
+                    pass
             time.sleep(random.uniform(3.0, 5.0))
             
             # Cuộn trang nhẹ nhàng
