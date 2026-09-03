@@ -294,27 +294,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         items.forEach(item => {
             const row = document.createElement('div');
-            row.className = 'posted-link-item';
-            const text = document.createElement('div');
-            const title = document.createElement('strong');
-            title.textContent = `${item.state === 'approved' ? '✅ Đã duyệt' : item.state === 'cancelled' ? '⏹ Đã hủy' : '📝 Nháp'} · ${item.target}`;
+            row.className = 'queue-item-card';
+            row.style.cssText = 'background: #ffffff; border: 1px solid #ced0d4; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
+
+            const title = document.createElement('div');
+            title.style.cssText = 'font-weight: 600; font-size: 13px; color: #1877f2; word-break: break-all;';
+            const statusBadge = item.state === 'approved' 
+                ? '<span style="background:#e6f4ea; color:#1e7e34; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">✅ Đã duyệt</span>' 
+                : item.state === 'cancelled' 
+                ? '<span style="background:#fdecea; color:#c62828; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">⏹ Đã hủy</span>' 
+                : '<span style="background:#fff3cd; color:#856404; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">📝 Nháp</span>';
+            title.innerHTML = `${statusBadge} <strong>${item.target}</strong>`;
+
             const preview = document.createElement('div');
-            preview.className = 'text-small';
-            preview.textContent = item.content.slice(0, 100);
-            text.append(title, preview);
-            row.appendChild(text);
+            preview.style.cssText = 'font-size: 12px; color: #65676b; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; background: #f0f2f5; padding: 6px 8px; border-radius: 6px;';
+            preview.textContent = item.content;
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-top: 4px;';
+
             if (item.state === 'draft') {
                 const approve = document.createElement('button');
                 approve.className = 'btn btn-primary btn-sm';
-                approve.textContent = 'Duyệt';
+                approve.style.cssText = 'flex: 1; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;';
+                approve.textContent = '✅ Duyệt bài này';
                 approve.addEventListener('click', () => updateQueueItem(item.id, 'approve'));
-                row.appendChild(approve);
+                actions.appendChild(approve);
             }
+
             if (item.state === 'approved') {
                 const postItemBtn = document.createElement('button');
                 postItemBtn.className = 'btn btn-primary btn-sm';
-                postItemBtn.textContent = '🚀 Đăng ngay';
-                postItemBtn.style.marginLeft = '8px';
+                postItemBtn.style.cssText = 'flex: 1; padding: 8px 14px; font-size: 13px; font-weight: 700; background: #1877f2; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;';
+                postItemBtn.innerHTML = '🚀 <strong>ĐĂNG BÀI NÀY NGAY</strong>';
                 postItemBtn.addEventListener('click', () => {
                     const accId = accountSelector ? accountSelector.value : '';
                     const isGroup = item.target.includes('/groups/');
@@ -325,18 +337,48 @@ document.addEventListener('DOMContentLoaded', () => {
                         tasks: [{ target: item.target, content: item.content, image: null }]
                     });
                 });
-                row.appendChild(postItemBtn);
+                actions.appendChild(postItemBtn);
             }
+
             const cancel = document.createElement('button');
             cancel.className = 'btn btn-ghost btn-sm';
-            cancel.textContent = 'Xóa';
-            cancel.style.marginLeft = '4px';
+            cancel.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #888; border: none; background: transparent; cursor: pointer;';
+            cancel.textContent = '🗑️ Xóa';
             cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
-            row.appendChild(cancel);
+            actions.appendChild(cancel);
+
+            row.append(title, preview, actions);
             approvalQueueList.appendChild(row);
         });
 
-        // Xử lý nút Đăng tất cả bài đã duyệt
+        // Nút to ở dưới cùng để đăng toàn bộ bài đã duyệt
+        const approvedCount = items.filter(i => i.state === 'approved').length;
+        if (approvedCount > 0) {
+            const bottomPostAllDiv = document.createElement('div');
+            bottomPostAllDiv.style.cssText = 'margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ced0d4;';
+            const bottomPostAllBtn = document.createElement('button');
+            bottomPostAllBtn.className = 'btn btn-primary';
+            bottomPostAllBtn.style.cssText = 'width: 100%; padding: 10px; font-size: 14px; font-weight: 700; background: #1877f2; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.3);';
+            bottomPostAllBtn.innerHTML = `🚀 ĐĂNG TẤT CẢ ${approvedCount} BÀI ĐÃ DUYỆT NGAY`;
+            bottomPostAllBtn.onclick = () => {
+                const accId = accountSelector ? accountSelector.value : '';
+                const approvedItems = items.filter(i => i.state === 'approved');
+                const groupTasks = approvedItems.filter(i => i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
+                const pageTasks = approvedItems.filter(i => !i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
+
+                if (groupTasks.length > 0) {
+                    showToast(`Đang chạy đăng ${groupTasks.length} bài Nhóm đã duyệt...`);
+                    runCommand('group', { accountId: accId, tasks: groupTasks });
+                } else if (pageTasks.length > 0) {
+                    showToast(`Đang chạy đăng ${pageTasks.length} bài Trang đã duyệt...`);
+                    runCommand('page', { accountId: accId, tasks: pageTasks });
+                }
+            };
+            bottomPostAllDiv.appendChild(bottomPostAllBtn);
+            approvalQueueList.appendChild(bottomPostAllDiv);
+        }
+
+        // Xử lý nút Đăng tất cả bài đã duyệt trên Header
         const postAllApprovedBtn = document.getElementById('post-all-approved-btn');
         if (postAllApprovedBtn) {
             postAllApprovedBtn.onclick = () => {
