@@ -448,14 +448,23 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Populate account selector
             const selectedVal = accountSelector.value;
-            accountSelector.innerHTML = '<option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>';
+            accountSelector.innerHTML = '';
             accountsList.forEach(acc => {
                 const opt = document.createElement('option');
                 opt.value = acc.id;
                 opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
                 accountSelector.appendChild(opt);
             });
-            if (selectedVal) accountSelector.value = selectedVal;
+            const fallbackOpt = document.createElement('option');
+            fallbackOpt.value = '';
+            fallbackOpt.textContent = '-- Mặc định (state.json) --';
+            accountSelector.appendChild(fallbackOpt);
+
+            if (selectedVal && [...accountSelector.options].some(o => o.value === selectedVal)) {
+                accountSelector.value = selectedVal;
+            } else if (accountsList.length > 0) {
+                accountSelector.value = accountsList[0].id;
+            }
             
             // Render accounts table
             accountsTableBody.innerHTML = '';
@@ -641,18 +650,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ---- Tabs Switcher ----
+    const DEFAULT_HUE_GROUPS = `https://www.facebook.com/groups/timhomestaytaihue/\nhttps://www.facebook.com/groups/1384618231608931/\nhttps://www.facebook.com/groups/648990015540886/`;
+    const DEFAULT_HUE_PAGE = `https://www.facebook.com/nhatruc.bui.77`;
+
     const tabConfig = {
         group: {
             label: '🔗 Đường dẫn Group (mỗi link 1 dòng)',
-            placeholder: 'https://facebook.com/groups/...'
+            placeholder: 'https://facebook.com/groups/...',
+            defaultVal: DEFAULT_HUE_GROUPS
         },
         page: {
-            label: '🔗 Đường dẫn Page (mỗi link 1 dòng)',
-            placeholder: 'https://facebook.com/your-page'
+            label: '🔗 Đường dẫn Page Quản trị (mỗi link 1 dòng)',
+            placeholder: 'https://www.facebook.com/nhatruc.bui.77',
+            defaultVal: DEFAULT_HUE_PAGE
         },
         thread: {
             label: '🔗 Thread ID / Username (mỗi dòng 1 ID)',
-            placeholder: 'markzuckerberg\njohndoe'
+            placeholder: 'markzuckerberg\njohndoe',
+            defaultVal: ''
         }
     };
 
@@ -736,8 +751,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const config = tabConfig[currentMode];
-                targetLabel.textContent = config.label;
-                targetInput.placeholder = config.placeholder;
+                if (config) {
+                    targetLabel.textContent = config.label;
+                    targetInput.placeholder = config.placeholder;
+                    if (config.defaultVal && (!targetInput.value.trim() || targetInput.value.trim() === DEFAULT_HUE_GROUPS || targetInput.value.trim() === DEFAULT_HUE_PAGE)) {
+                        targetInput.value = config.defaultVal;
+                    }
+                }
             }
         });
     });

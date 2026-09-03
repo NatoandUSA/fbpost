@@ -1,10 +1,10 @@
 [
   {
     "id": "90f6878b",
-    "name": "M14",
+    "name": "M14 (GPM Huế)",
     "type": "gpm",
     "profile_path_or_id": "8e7342b5-4385-4ff4-8038-b669c60bd3fd-3522",
     "proxy": "",
-    "status": "Chưa xác thực"
+    "status": "Đã cấu hình"
   }
 ]
