@@ -803,14 +803,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Workspace title map for each mode
     const workspaceTitleMap = {
-        group: 'Đăng Bài Nhóm (Group)',
-        page: 'Đăng Bài Trang (Page)',
-        thread: 'Gửi Tin Nhắn Cá Nhân (Thread)',
-        interact: 'Nuôi Nick — Tương tác Newsfeed',
-        scrape: 'Quét & Lọc Bình Luận',
+        group: '👥 Đăng Bài Nhóm (Group Facebook)',
+        page: '🚩 Đăng Bài Trang (Fanpage Quản Trị)',
+        comment: '💬 Comment Theo Link Bài Viết (Group & Page)',
+        thread: '✉️ Gửi Tin Nhắn Cá Nhân (Thread)',
+        interact: '🌾 Nuôi Nick — Tương Tác Bảng Tin (Newsfeed)',
+        scrape: '🔎 Quét & Lọc Bình Luận Bài Viết',
         'content-hub': 'Content Hub — Tạo Nội Dung AI',
-        'page-scheduler': 'Page Scheduler — Lên Lịch Đăng Bài',
-        comment: 'Bình luận bài viết theo Link (Group & Fanpage)'
+        'page-scheduler': '📅 Page Scheduler — Lên Lịch Tự Động Bằng Google Sheets',
+        profiles: '📁 Quản Lý Profiles & Tài Khoản GPM',
+        settings: '🛡️ Bảo Mật & Cấu Hình Hệ Thống'
     };
 
     const workspaceTitleEl = document.getElementById('active-workspace-title');
