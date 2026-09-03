@@ -171,11 +171,11 @@
                                 <h3>Quản lý Profiles & Tài khoản</h3>
                             </div>
                             <div class="card-header-actions">
-                                <button id="manage-accounts-btn" class="btn btn-ghost btn-xs" type="button">Quản lý</button>
-                                <button id="add-account-toggle-btn" class="btn btn-secondary btn-xs" type="button">➕ Thêm Profile</button>
+                                <button id="manage-accounts-btn" class="btn btn-ghost btn-xs" type="button">Thu gọn</button>
+                                <button id="add-account-toggle-btn" class="btn btn-primary btn-xs" type="button">➕ Thêm Profile</button>
                             </div>
                         </div>
-                        <div id="accounts-content" class="accounts-content hidden">
+                        <div id="accounts-content" class="accounts-content">
                         <div id="add-account-form" class="add-account-form hidden">
                             <div class="form-grid">
                                 <div class="field-group">
@@ -186,12 +186,12 @@
                                     <label class="field-label">Loại Profile</label>
                                     <select id="acc-type" class="field-input">
                                         <option value="local">📁 Profile Cục bộ (Local)</option>
-                                        <option value="gpm">🌐 Profile GPM Login</option>
+                                        <option value="gpm" selected>🌐 Profile GPM Login</option>
                                     </select>
                                 </div>
                                 <div class="field-group">
-                                    <label class="field-label" id="acc-profile-id-label">Tên thư mục Local (tùy chọn)</label>
-                                    <input type="text" id="acc-profile-id" class="field-input" placeholder="Ví dụ: lacasa-local-01">
+                                    <label class="field-label" id="acc-profile-id-label">ID Profile GPM</label>
+                                    <input type="text" id="acc-profile-id" class="field-input" placeholder="Ví dụ: 8e7342b5-4385-4ff4-8038-b669c60bd3fd-3522">
                                 </div>
                                 <div class="field-group">
                                     <label class="field-label">Proxy (Tùy chọn)</label>
@@ -224,7 +224,7 @@
                     </section>
 
                     <!-- Composer Workspace Section -->
-                    <div class="card" id="campaign-manager-card">
+                    <div class="card hidden" id="campaign-manager-card">
                         <div class="card-header">
                             <div class="card-title-group"><span>📣</span><h3>Campaign Manager</h3></div>
                             <button id="refresh-campaigns-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
@@ -238,7 +238,7 @@
                             <button id="create-campaign-btn" class="btn btn-primary btn-full" type="button">Tạo chiến dịch</button>
                         </div>
                     </div>
-                    <div class="card" id="compliance-card">
+                    <div class="card hidden" id="compliance-card">
                         <div class="card-header">
                             <div class="card-title-group"><span>🛡️</span><h3>Kiểm tra &amp; duyệt bài đăng</h3></div>
                             <span id="preflight-status" class="sched-badge badge-error">Chưa kiểm tra</span>

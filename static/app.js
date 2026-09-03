@@ -54,6 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const gpmApiInput = document.getElementById('gpm-api-input');
     const accountSelector = document.getElementById('account-selector');
     const accountSelectorContainer = document.getElementById('account-selector-container');
+    const manageAccountsBtn = document.getElementById('manage-accounts-btn');
+    const accountsContent = document.getElementById('accounts-content');
     const addAccountToggleBtn = document.getElementById('add-account-toggle-btn');
     const addAccountForm = document.getElementById('add-account-form');
     const cancelAccountBtn = document.getElementById('cancel-account-btn');
@@ -489,11 +491,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 const proxyCell = makeCell(acc.proxy || 'Trực tiếp (Không dùng)');
                 const actions = document.createElement('td');
                 actions.className = 'acc-action-btns';
+                
+                if (acc.type === 'gpm') {
+                    const openGpmBtn = document.createElement('button');
+                    openGpmBtn.className = 'btn btn-primary btn-sm';
+                    openGpmBtn.textContent = '🚀 Mở GPM';
+                    openGpmBtn.style.marginRight = '4px';
+                    openGpmBtn.title = 'Khởi chạy trình duyệt GPM với Profile này';
+                    openGpmBtn.addEventListener('click', async () => {
+                        const gpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
+                        showToast(`Đang kết nối GPM Login v4 mở profile: ${acc.name}...`);
+                        try {
+                            const res = await fetch('/api/profiles/open-browser', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({ accountId: acc.id, gpmApiUrl: gpmUrl })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                showToast(`✅ ${data.message}`);
+                            } else {
+                                showToast(`❌ ${data.error}`, 'error');
+                            }
+                        } catch (e) {
+                            showToast(`Lỗi: ${e.message}`, 'error');
+                        }
+                    });
+                    actions.appendChild(openGpmBtn);
+                }
+
                 for (const [label, className] of [['🔑 Xác thực', 'btn-auth-acc'], ['❌ Xóa', 'btn-delete-acc']]) {
                     const button = document.createElement('button');
                     button.className = `btn btn-${className === 'btn-delete-acc' ? 'danger' : 'secondary'} btn-sm ${className}`;
                     button.dataset.id = acc.id;
                     button.textContent = label;
+                    button.style.marginRight = '4px';
                     actions.appendChild(button);
                 }
                 tr.append(nameCell, typeCell, profileCell, proxyCell, actions);
@@ -533,10 +565,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Toggle accounts panel
+    if (manageAccountsBtn && accountsContent) {
+        manageAccountsBtn.addEventListener('click', () => {
+            const isHidden = accountsContent.classList.toggle('hidden');
+            manageAccountsBtn.textContent = isHidden ? 'Quản lý' : 'Thu gọn';
+        });
+    }
+
     // Toggle add form
-    addAccountToggleBtn.addEventListener('click', () => {
-        addAccountForm.classList.toggle('hidden');
-    });
+    if (addAccountToggleBtn) {
+        addAccountToggleBtn.addEventListener('click', () => {
+            if (accountsContent) {
+                accountsContent.classList.remove('hidden');
+                if (manageAccountsBtn) manageAccountsBtn.textContent = 'Thu gọn';
+            }
+            addAccountForm.classList.toggle('hidden');
+            if (!addAccountForm.classList.contains('hidden')) {
+                accName.focus();
+            }
+        });
+    }
 
     cancelAccountBtn.addEventListener('click', () => {
         addAccountForm.classList.add('hidden');
