@@ -4,7 +4,7 @@ import time
 import random
 import re
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser, add_feeling, add_checkin, scrape_post_link
+from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser, add_feeling, add_checkin, scrape_post_link, attach_image_to_composer
 
 STATE_FILE = "state.json"
 
@@ -140,15 +140,8 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                         break
 
             # Đính kèm ảnh nếu có
-            if image_path and os.path.exists(image_path):
-                print(f"📸 Đang đính kèm hình ảnh: {image_path}")
-                try:
-                    file_input = page.locator("input[type='file'][accept*='image']").first
-                    file_input.set_input_files(image_path)
-                    print("⏳ Đang chờ ảnh tải lên...")
-                    time.sleep(random.uniform(4.0, 7.0))
-                except Exception as e:
-                    print(f"⚠️ Cảnh báo: Không thể đính kèm ảnh: {e}")
+            if image_path:
+                attach_image_to_composer(page, dialog, image_path)
             
             print("✍️ Đang nhập nội dung bài viết...")
             if textbox and textbox.is_visible():

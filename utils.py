@@ -288,7 +288,88 @@ def close_browser(browser_or_context, account, api_url=None):
             except Exception:
                 pass
 
-# ---- Advanced Composer Features (Feeling, Checkin, Link Scraping) ----
+# ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
+
+def attach_image_to_composer(page, dialog, image_path):
+    """
+    Đính kèm hình ảnh chuẩn xác vào khung soạn thảo Facebook (Group & Page).
+    Tự động bấm nút Ảnh/video để mở vùng chọn file, sau đó gán file ảnh vào đúng input file.
+    """
+    if not image_path or not os.path.exists(image_path):
+        return False
+
+    print(f"📸 Đang đính kèm hình ảnh: {image_path}")
+    attached = False
+
+    # 1. Tìm nút "Ảnh/video" trong Dialog
+    photo_btn = None
+    photo_selectors = [
+        "div[role='dialog'] div[aria-label*='Ảnh/video' i]",
+        "div[role='dialog'] div[aria-label*='Photo/video' i]",
+        "div[role='dialog'] div[aria-label*='Ảnh' i]",
+        "div[role='dialog'] div[role='button']:has-text('Ảnh/video')",
+        "div[role='dialog'] div[role='button']:has-text('Photo/video')"
+    ]
+    for sel in photo_selectors:
+        btn = page.locator(sel).first
+        if btn.is_visible(timeout=1500):
+            photo_btn = btn
+            break
+
+    # 2. Thử kích hoạt file chooser bằng cách bấm nút Ảnh/video
+    if photo_btn:
+        try:
+            with page.expect_file_chooser(timeout=3500) as fc_info:
+                photo_btn.click(force=True)
+            fc = fc_info.value
+            fc.set_files(image_path)
+            attached = True
+            print("✅ Đã chọn ảnh thành công qua File Chooser.")
+        except Exception:
+            pass
+
+    # 3. Nếu chưa attach được: bấm vào vùng "Thêm ảnh/video" hoặc gán thẳng vào input file trong dialog
+    if not attached:
+        try:
+            dropzone = page.locator("div[role='dialog'] div:has-text('Thêm ảnh/video'), div[role='dialog'] div:has-text('Add photos/videos')").first
+            if dropzone.is_visible(timeout=1500):
+                try:
+                    with page.expect_file_chooser(timeout=3500) as fc_info:
+                        dropzone.click(force=True)
+                    fc = fc_info.value
+                    fc.set_files(image_path)
+                    attached = True
+                    print("✅ Đã chọn ảnh thành công qua Dropzone File Chooser.")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # 4. Fallback gán trực tiếp vào input[type='file'] của dialog
+    if not attached:
+        try:
+            inputs = page.locator("div[role='dialog'] input[type='file'], input[type='file'][accept*='image']")
+            for idx in range(inputs.count()):
+                inp = inputs.nth(idx)
+                try:
+                    inp.set_input_files(image_path)
+                    attached = True
+                    print("✅ Đã gán ảnh thành công vào thẻ input file của Facebook.")
+                    break
+                except Exception:
+                    continue
+        except Exception as err:
+            print(f"⚠️ Không thể gán file ảnh: {err}")
+
+    # 5. Chờ xem preview ảnh có xuất hiện trong dialog không
+    if attached:
+        print("⏳ Đang chờ ảnh tải lên hoàn tất...")
+        try:
+            page.wait_for_selector("div[role='dialog'] img[src*='blob:'], div[role='dialog'] img[src*='data:'], div[role='dialog'] img", timeout=7000)
+            print("✅ Đã xác nhận hình ảnh hiển thị trong khung bài viết!")
+        except Exception:
+            time.sleep(4.0)
+    return attached
 
 def add_feeling(page):
     """
