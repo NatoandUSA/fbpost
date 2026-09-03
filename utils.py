@@ -296,34 +296,31 @@ def add_feeling(page):
     """
     print("Đang thêm cảm xúc ngẫu nhiên cho bài viết...")
     try:
-        # Find feeling/activity button
-        feeling_btn = page.locator("div[role='button'], div[aria-label]").filter(
-            has_text=re.compile("Feeling/activity|Cảm xúc/hoạt động", re.IGNORECASE)
+        feeling_btn = page.locator("div[role='dialog'] div[role='button'], div[role='dialog'] div[aria-label]").filter(
+            has_text=re.compile("Feeling/activity|Cảm xúc/hoạt động|Cảm xúc", re.IGNORECASE)
         ).first
         
-        if feeling_btn.is_visible():
-            feeling_btn.click()
+        if feeling_btn.is_visible(timeout=3000):
+            feeling_btn.click(force=True, timeout=5000)
             time.sleep(random.uniform(1.5, 2.5))
             
             feelings_list = ["Vui vẻ", "Hạnh phúc", "Tuyệt vời", "Hào hứng", "Biết ơn", "Năng động", "Hài lòng"]
             selected_feeling = random.choice(feelings_list)
             
-            # Locate search textbox inside the feelings popover
             search_input = page.locator("input[placeholder*='Search'], input[placeholder*='Tìm kiếm']").first
-            if search_input.is_visible():
+            if search_input.is_visible(timeout=3000):
                 search_input.fill(selected_feeling)
                 time.sleep(random.uniform(1.5, 2.5))
                 
-                # Choose the first matching feeling
                 first_option = page.locator("div[role='button']").filter(
                     has_text=re.compile(selected_feeling, re.IGNORECASE)
                 ).first
-                if first_option.is_visible():
-                    first_option.click()
+                if first_option.is_visible(timeout=3000):
+                    first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã gắn cảm xúc: {selected_feeling}")
                     time.sleep(random.uniform(1.0, 2.0))
     except Exception as e:
-        print(f"⚠️ Cảnh báo: Không thể thêm cảm xúc. Lỗi: {e}")
+        print(f"⚠️ Cảnh báo: Bỏ qua thêm cảm xúc ({e}).")
 
 def add_checkin(page):
     """
@@ -331,12 +328,12 @@ def add_checkin(page):
     """
     print("Đang check-in địa điểm ngẫu nhiên cho bài viết...")
     try:
-        checkin_btn = page.locator("div[role='button'], div[aria-label]").filter(
+        checkin_btn = page.locator("div[role='dialog'] div[role='button'], div[role='dialog'] div[aria-label]").filter(
             has_text=re.compile("Check in|Check-in|Địa điểm", re.IGNORECASE)
         ).first
         
-        if checkin_btn.is_visible():
-            checkin_btn.click()
+        if checkin_btn.is_visible(timeout=3000):
+            checkin_btn.click(force=True, timeout=5000)
             time.sleep(random.uniform(1.5, 2.5))
             
             locations_list = [
@@ -354,20 +351,19 @@ def add_checkin(page):
             selected_location = random.choice(locations_list)
             
             search_input = page.locator("input[placeholder*='Where are you'], input[placeholder*='Bạn đang ở đâu'], input[placeholder*='Tìm kiếm']").first
-            if search_input.is_visible():
+            if search_input.is_visible(timeout=3000):
                 search_input.fill(selected_location)
-                time.sleep(random.uniform(2.5, 4.0)) # Wait for suggestions to load
+                time.sleep(random.uniform(2.5, 4.0))
                 
-                # Select the first option
                 first_option = page.locator("div[role='button']").filter(
                     has_text=re.compile(selected_location, re.IGNORECASE)
                 ).first
-                if first_option.is_visible():
-                    first_option.click()
+                if first_option.is_visible(timeout=3000):
+                    first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã check-in địa điểm: {selected_location}")
                     time.sleep(random.uniform(1.0, 2.0))
     except Exception as e:
-        print(f"⚠️ Cảnh báo: Không thể check-in. Lỗi: {e}")
+        print(f"⚠️ Cảnh báo: Bỏ qua check-in ({e}).")
 
 def scrape_post_link(page):
     """
