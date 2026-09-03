@@ -32,9 +32,12 @@ def send_message(thread_id, content, image_path=None, account_id=None, gpm_api_u
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
+            page.set_default_timeout(45000)
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            page.goto(thread_url)
-            page.wait_for_load_state("networkidle")
+            try:
+                page.goto(thread_url, wait_until="domcontentloaded", timeout=45000)
+            except Exception as nav_err:
+                print(f"⚠️ Cảnh báo tải trang thread: {nav_err}. Tiếp tục xử lý...")
             time.sleep(random.uniform(2.0, 4.0))
             
             if image_path and os.path.exists(image_path):

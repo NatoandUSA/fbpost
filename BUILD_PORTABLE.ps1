@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $release = Join-Path $root 'release'
-$bundleName = 'FB-Automation-Portable-v5.4.7'
+$bundleName = 'FB-Automation-Portable-v5.5.0'
 $bundle  = Join-Path $release $bundleName
 $zip     = Join-Path $release "$bundleName-Windows-x64.zip"
 $installer = Join-Path $bundle 'runtime\python-3.12.10-amd64.exe'

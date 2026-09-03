@@ -38,10 +38,13 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
+            page.set_default_timeout(45000)
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
             print("Đang mở trang chủ Facebook...")
-            page.goto("https://www.facebook.com/")
-            page.wait_for_load_state("networkidle")
+            try:
+                page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=45000)
+            except Exception as nav_err:
+                print(f"⚠️ Cảnh báo tải trang: {nav_err}. Tiếp tục xử lý giao diện...")
             time.sleep(random.uniform(3.0, 5.0))
             
             interacted_count = 0

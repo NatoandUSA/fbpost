@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hồ Sơ Kháng Nghị Etsy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<style>
+:root{
+  --bg:#e9ecf0;
+  --surface:#ffffff;
+  --surface-2:#f4f6f9;
+  --ink:#141820;
+  --muted:#5b6673;
+  --line:#d2d8e0;
+  --line-soft:#e3e8ee;
+  --accent:#1f4d8f;
+  --accent-soft:#e6edf7;
+  --danger:#a8231c;
+  --danger-soft:#fbeae9;
+  --warn:#8a5d00;
+  --warn-soft:#fcf3e0;
+  --ok:#186c42;
+  --ok-soft:#e6f4ec;
+  --shadow:0 1px 2px rgba(20,24,32,.06),0 8px 24px -12px rgba(20,24,32,.18);
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1116;
+    --surface:#171c24;
+    --surface-2:#1e242e;
+    --ink:#e6eaf0;
+    --muted:#98a3b2;
+    --line:#2c3441;
+    --line-soft:#232a34;
+    --accent:#7aa7e0;
+    --accent-soft:#1a2739;
+    --danger:#f0908a;
+    --danger-soft:#2e1a1a;
+    --warn:#e0b45f;
+    --warn-soft:#2b2313;
+    --ok:#6fcb9a;
+    --ok-soft:#132a20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1116;
+  --surface:#171c24;
+  --surface-2:#1e242e;
+  --ink:#e6eaf0;
+  --muted:#98a3b2;
+  --line:#2c3441;
+  --line-soft:#232a34;
+  --accent:#7aa7e0;
+  --accent-soft:#1a2739;
+  --danger:#f0908a;
+  --danger-soft:#2e1a1a;
+  --warn:#e0b45f;
+  --warn-soft:#2b2313;
+  --ok:#6fcb9a;
+  --ok-soft:#132a20;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:15px;line-height:1.6;
+}
+h1,h2,h3,h4,.disp{font-family:Archivo,"IBM Plex Sans",sans-serif;text-wrap:balance}
+code,kbd,.mono,textarea.out{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace}
+
+/* ---------- masthead ---------- */
+.mast{
+  background:var(--surface);border-bottom:1px solid var(--line);
+}
+.mast-in{max-width:1520px;margin:0 auto;padding:22px 26px 20px;
+  display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.mast h1{margin:0 0 5px;font-size:23px;font-weight:800;letter-spacing:-.4px}
+.mast p{margin:0;color:var(--muted);font-size:14px;max-width:60ch}
+.filecode{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--muted);
+  border:1px solid var(--line);border-radius:5px;padding:4px 9px;white-space:nowrap;
+}
+.mast-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ---------- alert bar ---------- */
+.honesty{
+  background:var(--danger-soft);border-bottom:1px solid var(--line);
+  color:var(--ink);
+}
+.honesty-in{max-width:1520px;margin:0 auto;padding:12px 26px;display:flex;gap:12px;align-items:flex-start}
+.honesty .mark{
+  font-family:Archivo,sans-serif;font-weight:800;font-size:11px;letter-spacing:.8px;
+  background:var(--danger);color:#fff;padding:3px 8px;border-radius:4px;white-space:nowrap;margin-top:1px
+}
+.honesty p{margin:0;font-size:13.6px;max-width:100ch}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1520px;margin:0 auto;padding:22px 26px 90px;
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,540px);gap:22px;align-items:start}
+@media(max-width:1140px){.wrap{grid-template-columns:1fr}}
+
+/* ---------- form sections ---------- */
+.sec{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  margin-bottom:14px;box-shadow:var(--shadow);overflow:hidden}
+.sec-h{display:flex;gap:12px;align-items:baseline;padding:14px 18px 12px;
+  border-bottom:1px solid var(--line-soft);background:var(--surface-2)}
+.sec-h .tag{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;
+  color:var(--accent);background:var(--accent-soft);padding:2px 7px;border-radius:4px}
+.sec-h h2{margin:0;font-size:15.5px;font-weight:700;letter-spacing:-.2px}
+.sec-h .hint{margin-left:auto;font-size:12.3px;color:var(--muted);text-align:right}
+.sec-b{padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px}
+
+.f{display:flex;flex-direction:column;gap:5px}
+.f>label{font-size:13.2px;font-weight:600;letter-spacing:.1px}
+.f .sub{font-size:12.4px;color:var(--muted);line-height:1.45}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:640px){.row,.row3{grid-template-columns:1fr}}
+
+input[type=text],input[type=number],input[type=date],select,textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:14px;
+}
+input[type=text],input[type=number]{font-family:"IBM Plex Mono",monospace;font-size:13.4px}
+textarea{font-size:13.4px;line-height:1.55;resize:vertical;min-height:66px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px}
+select{cursor:pointer}
+
+.opts{display:flex;flex-wrap:wrap;gap:7px}
+.opt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  border-radius:20px;padding:5px 11px;font-size:13px;cursor:pointer;background:var(--surface);user-select:none}
+.opt:hover{border-color:var(--accent)}
+.opt input{accent-color:var(--accent);width:14px;height:14px;margin:0;cursor:pointer}
+.opt.on{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+.opt.on-bad{background:var(--danger-soft);border-color:var(--danger);color:var(--danger);font-weight:600}
+
+.namecmp{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface-2)}
+.namecmp .hd{padding:8px 12px;font-size:12.2px;font-weight:600;color:var(--muted);
+  border-bottom:1px solid var(--line-soft);letter-spacing:.3px;text-transform:uppercase;
+  font-family:"IBM Plex Mono",monospace}
+.namecmp .bd{padding:11px 12px;display:flex;flex-direction:column;gap:7px}
+.nrow{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center;font-size:13px}
+.nrow b{color:var(--muted);font-weight:600;font-size:12.4px}
+.nval{font-family:"IBM Plex Mono",monospace;font-size:13px;padding:3px 7px;border-radius:4px;
+  background:var(--surface);border:1px solid var(--line-soft);overflow-x:auto;white-space:nowrap}
+.verdict{margin-top:3px;padding:9px 11px;border-radius:7px;font-size:13.2px;line-height:1.5}
+.verdict.ok{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok)}
+.verdict.warn{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
+.verdict.bad{background:var(--danger-soft);color:var(--danger);border:1px solid var(--danger)}
+.verdict.idle{background:var(--surface);color:var(--muted);border:1px dashed var(--line)}
+
+/* ---------- right panel ---------- */
+.panel{position:sticky;top:18px;display:flex;flex-direction:column;gap:14px}
+@media(max-width:1140px){.panel{position:static}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden}
+.card-h{padding:13px 17px;border-bottom:1px solid var(--line-soft);background:var(--surface-2);
+  display:flex;align-items:center;gap:10px}
+.card-h h3{margin:0;font-size:14.5px;font-weight:700;letter-spacing:-.1px}
+.card-h .n{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.card-b{padding:15px 17px}
+
+/* diagnosis list */
+.dx{display:flex;flex-direction:column;gap:9px}
+.dxi{display:grid;grid-template-columns:4px 1fr;gap:11px;align-items:stretch}
+.dxi .stripe{border-radius:2px}
+.dxi.crit .stripe{background:var(--danger)}
+.dxi.warn .stripe{background:var(--warn)}
+.dxi.info .stripe{background:var(--accent)}
+.dxi.good .stripe{background:var(--ok)}
+.dxb strong{display:block;font-size:13.6px;font-weight:600;margin-bottom:2px;font-family:Archivo,sans-serif}
+.dxb span{font-size:12.9px;color:var(--muted);line-height:1.5}
+.src{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10px;font-weight:600;
+  letter-spacing:.5px;padding:1px 6px;border-radius:3px;margin-left:7px;vertical-align:2px;text-transform:uppercase}
+.src.etsy{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok)}
+.src.infer{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
+.src.heur{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
+.src.case{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.tbl{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface-2)}
+.tbl-h{display:grid;gap:6px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--line);
+  font-family:"IBM Plex Mono",monospace;font-size:10.6px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+.tbl-r{display:grid;gap:6px;padding:7px 10px;border-bottom:1px solid var(--line-soft);align-items:center}
+.tbl-r:last-child{border-bottom:none}
+.tbl-r input,.tbl-r select{padding:5px 7px;font-size:12.4px;border-radius:5px}
+.tbl-empty{padding:13px;text-align:center;color:var(--muted);font-size:12.8px}
+.tbl-foot{padding:8px 10px;background:var(--surface);border-top:1px solid var(--line);display:flex;gap:7px}
+.xbtn{background:none;border:1px solid var(--line);border-radius:5px;color:var(--muted);
+  width:26px;height:26px;line-height:1;font-size:14px;padding:0;flex:none}
+.xbtn:hover{border-color:var(--danger);color:var(--danger)}
+.gO{grid-template-columns:1.1fr .9fr .9fr 1.5fr .8fr .7fr 1fr 1.2fr 26px}
+.gP{grid-template-columns:1.3fr 1.1fr 1fr 1.1fr 1.1fr 26px}
+@media(max-width:900px){.gO,.gP{grid-template-columns:1fr}.tbl-h{display:none}
+  .tbl-r{border-bottom:2px solid var(--line);padding:10px}}
+.mrow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+  padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:var(--surface-2)}
+.mrow b{font-size:13.4px;font-family:Archivo,sans-serif;display:block}
+.mrow small{font-size:12.2px;color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.legend{display:flex;flex-direction:column;gap:8px}
+.legend div{display:flex;gap:9px;align-items:flex-start;font-size:12.7px;line-height:1.5;color:var(--muted)}
+.legend .src{margin-left:0;flex:none;margin-top:1px}
+.dxi.crit .dxb strong{color:var(--danger)}
+.dxi.warn .dxb strong{color:var(--warn)}
+.dxi.good .dxb strong{color:var(--ok)}
+.empty{color:var(--muted);font-size:13.2px;padding:6px 0}
+
+/* must-do */
+.todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.todo li{display:flex;gap:9px;align-items:flex-start;font-size:13.3px;line-height:1.5}
+.todo li::before{content:"";flex:none;width:15px;height:15px;margin-top:2px;border-radius:4px;
+  border:1.5px solid var(--danger);background:var(--danger-soft)}
+
+/* output */
+.outblock{margin-bottom:13px}
+.outlab{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.outlab .k{font-family:"IBM Plex Mono",monospace;font-size:11.4px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.7px;color:var(--muted)}
+.outlab button{margin-left:auto}
+textarea.out{width:100%;border:1px solid var(--line);border-radius:7px;padding:10px 11px;
+  background:var(--surface-2);color:var(--ink);font-size:12.4px;line-height:1.65;min-height:60px}
+.pick{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);
+  border-radius:6px;padding:7px 10px;font-size:13px;font-weight:600;font-family:"IBM Plex Mono",monospace}
+
+button{font:inherit;cursor:pointer}
+.btn{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:7px;
+  padding:7px 14px;font-size:13.2px;font-weight:600;font-family:Archivo,sans-serif}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none}
+.btn.sm{padding:3px 9px;font-size:11.7px}
+.btn.ok{background:var(--ok);border-color:var(--ok)}
+
+.note{font-size:12.6px;color:var(--muted);line-height:1.55;margin:0}
+.divider{height:1px;background:var(--line-soft);margin:4px 0}
+.pillrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.pill{font-size:11.6px;padding:2px 8px;border-radius:20px;border:1px solid var(--line);
+  color:var(--muted);font-family:"IBM Plex Mono",monospace}
+.pill.on{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.pill.off{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+
+footer{max-width:1520px;margin:0 auto;padding:0 26px 50px;color:var(--muted);font-size:12.5px;line-height:1.6}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="mast-in">
+    <div>
+      <h1>Hồ Sơ Kháng Nghị Etsy</h1>
+      <p>Nhập tình huống thật của bạn. Công cụ đối chiếu với các quy định Etsy công bố, chỉ ra rủi ro, và sinh đơn kháng nghị bằng tiếng Anh theo văn phong của những đơn đã được duyệt.</p>
+    </div>
+    <div class="mast-actions">
+      <span class="filecode" id="filecode">HS · CHƯA CÓ DỮ LIỆU</span>
+      <span class="filecode" id="seedFlag" style="background:var(--warn);color:#fff;border-color:var(--warn)">⚠ ĐANG XEM DỮ LIỆU MẪU</span>
+      <button class="btn ghost sm" id="themeBtn" type="button">Giao diện</button>
+      <button class="btn ghost sm" id="clearBtn" type="button">Xoá mẫu, nhập của tôi</button>
+      <button class="btn ghost sm" id="exportBtn" type="button">Lưu ra file</button>
+      <button class="btn ghost sm" id="importBtn" type="button">Mở file đã lưu</button>
+      <button class="btn ghost sm" id="wipeBtn" type="button" style="border-color:var(--danger);color:var(--danger)">Xoá sạch dữ liệu</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+      <button class="btn sm" id="sendBtn" type="button">Gửi cho quản lý</button>
+      <button class="btn ghost sm" id="masterBtn" type="button">Màn hình quản lý</button>
+    </div>
+  </div>
+</header>
+
+<div class="honesty">
+  <div class="honesty-in">
+    <span class="mark">ĐỌC TRƯỚC</span>
+    <p><strong>Mọi câu trong đơn phải đúng sự thật.</strong> Etsy giữ log IP, thiết bị, thanh toán và hồ sơ định danh của bạn. Công cụ này chỉ sinh ra câu tương ứng với điều bạn xác nhận là đúng — nếu bạn chưa làm một việc, nó sẽ đưa việc đó vào mục <em>Phải làm trước khi nộp</em> thay vì viết là đã làm. Form ghi rõ đây là <em>cơ hội cuối</em> để lấy lại tài khoản; một chi tiết bịa bị đối chiếu ra là mất luôn.</p>
+  </div>
+</div>
+
+<div class="honesty" style="background:var(--ok-soft)">
+  <div class="honesty-in">
+    <span class="mark" style="background:var(--ok)">DỮ LIỆU</span>
+    <p><strong>Bạn tự điền, tự giữ.</strong> Nội dung được lưu trong trình duyệt máy bạn để quay lại điền tiếp; không dùng máy/trình duyệt dùng chung và bấm <em>Xoá sạch</em> khi xong. Chỉ khi bạn bấm <strong>Gửi cho quản lý</strong> thì hồ sơ mới được gửi về hệ thống của quản lý nhóm; hồ sơ gửi sẽ tự xóa sau 90 ngày. <span id="saveState" style="font-weight:600"></span></p>
+  </div>
+</div>
+
+<div class="wrap">
+
+<!-- ================= FORM ================= -->
+<div>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">A</span><h2>Định danh</h2>
+      <span class="hint">Nguyên nhân số 1 gây trượt xác minh</span></div>
+    <div class="sec-b">
+      <div class="f">
+        <label for="a1">Họ tên đầy đủ trên CCCD — viết KHÔNG DẤU, đúng thứ tự trên thẻ</label>
+        <input type="text" id="a1" placeholder="NGUYEN VAN A">
+      </div>
+      <div class="row">
+        <div class="f"><label for="a2">Etsy — ô First name</label><input type="text" id="a2" placeholder="NGA"></div>
+        <div class="f"><label for="a3">Etsy — ô Last name</label><input type="text" id="a3" placeholder="NGUYEN VAN"></div>
+      </div>
+      <div class="f">
+        <label for="a4">Tên chủ tài khoản ngân hàng — copy đúng chuỗi app banking hiển thị</label>
+        <input type="text" id="a4" placeholder="NGUYEN VAN A">
+      </div>
+
+      <div class="namecmp">
+        <div class="hd">Đối chiếu ba chuỗi</div>
+        <div class="bd">
+          <div class="nrow"><b>CCCD</b><span class="nval" id="nv1">—</span></div>
+          <div class="nrow"><b>Etsy ghép lại</b><span class="nval" id="nv2">—</span></div>
+          <div class="nrow"><b>Ngân hàng</b><span class="nval" id="nv3">—</span></div>
+          <div class="verdict idle" id="nverdict">Nhập đủ ba ô để đối chiếu.</div>
+        </div>
+      </div>
+
+      <div class="row3">
+        <div class="f"><label for="a7">Ngày tạo tài khoản Etsy (mua hàng)</label><input type="date" id="a7"></div>
+        <div class="f"><label for="a8">Số đơn đã MUA với tư cách buyer</label><input type="number" id="a8" min="0" placeholder="12"></div>
+        <div class="f"><label for="a9">Ngày nâng cấp lên seller</label><input type="date" id="a9"></div>
+      </div>
+      <div class="row">
+        <div class="f"><label for="a10">Tạo tài khoản buyer ở đâu</label>
+          <input type="text" id="a10" placeholder="Hue - dien thoai ca nhan - wifi nha"></div>
+        <div class="f"><label for="a11">Nâng cấp lên seller ở đâu</label>
+          <input type="text" id="a11" placeholder="Hue - laptop ca nhan - wifi nha"></div>
+      </div>
+      <div class="f">
+        <label for="a12">Email đăng ký tài khoản Etsy</label>
+        <input type="text" id="a12" placeholder="ten@gmail.com">
+      </div>
+      <div class="f">
+        <label for="a5">Số CCCD 12 chữ số đã khai ở Legal and tax information chưa?</label>
+        <select id="a5">
+          <option value="">— chọn —</option>
+          <option value="yes">Rồi, đã khai đủ 12 số</option>
+          <option value="no">Chưa khai</option>
+          <option value="unsure">Không nhớ / không xem được</option>
+        </select>
+        <span class="sub">Etsy khấu trừ thuế Việt Nam tại nguồn. Cá nhân và hộ kinh doanh khai <strong>CCCD 12 số</strong>; doanh nghiệp khai <strong>mã số ĐKKD 10 số (ERC)</strong> thay vì CCCD.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">B</span><h2>Shop &amp; lệnh khoá</h2>
+      <span class="hint">Câu chữ trong email quyết định hướng đơn</span></div>
+    <div class="sec-b">
+      <div class="row3">
+        <div class="f"><label for="b1">Tên shop</label><input type="text" id="b1" placeholder="UtHandmade"></div>
+        <div class="f"><label for="b2">Ngày mở shop</label><input type="date" id="b2"></div>
+        <div class="f"><label for="b3">Ngày bị khoá</label><input type="date" id="b3"></div>
+      </div>
+      <div class="row">
+        <div class="f"><label for="b4">Tỉnh / thành phố bạn đang ở</label><input type="text" id="b4" placeholder="Hue"></div>
+        <div class="f"><label for="b5">Lần bị khoá thứ mấy</label>
+          <select id="b5"><option value="1">Lần đầu</option><option value="2">Lần thứ hai trở lên</option></select></div>
+      </div>
+      <div class="f">
+        <label for="b6">Lý do Etsy nêu trong email — chọn câu khớp nhất</label>
+        <select id="b6">
+          <option value="">— chọn —</option>
+          <option value="fraud">"potentially fraudulent activity in your seller account"</option>
+          <option value="handmade">Không đạt chính sách handmade / vintage / craft supply</option>
+          <option value="ip">Vi phạm sở hữu trí tuệ / nhãn hiệu</option>
+          <option value="fees">Nợ phí / số dư chưa thanh toán</option>
+          <option value="none">Email không nêu lý do cụ thể</option>
+          <option value="other">Lý do khác</option>
+        </select>
+        <span class="sub">Nhóm "fraudulent activity" nói về <em>tài khoản và định danh</em>, không phải về sản phẩm. Chọn đúng nhóm thì đơn mới nhắm đúng chỗ.</span>
+      </div>
+      <div class="f">
+        <label for="b8">Dán NGUYÊN VĂN câu nêu lý do trong email Etsy</label>
+        <textarea id="b8" rows="5" placeholder="Dan CA email suspend vao day, bao gom ca dong tieu de va ngay gio nhan."></textarea>
+        <span class="sub">Dán cả email, không chỉ một câu. Câu chữ chính xác quan trọng hơn cách bạn diễn giải, và nó quyết định đơn nhắm vào nhóm vi phạm nào.</span>
+      </div>
+      <div class="row">
+        <div class="f"><label for="b9">Giờ nhận email suspend</label><input type="text" id="b9" placeholder="15:39"></div>
+        <div class="f"><label for="b10">URL shop</label><input type="text" id="b10" placeholder="etsy.com/shop/TenShop"></div>
+      </div>
+      <div class="f">
+        <label for="b7">Trước khi mở shop, bạn dùng tài khoản này để MUA hàng bao lâu?</label>
+        <select id="b7">
+          <option value="">— chọn —</option>
+          <option value="none">Không, tạo mới để bán luôn</option>
+          <option value="short">Dưới 1 năm</option>
+          <option value="long">Từ 1 năm trở lên</option>
+        </select>
+        <span class="sub">Lịch sử mua hàng lâu năm là tín hiệu chính danh mạnh — nếu có, đơn sẽ nêu.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">C</span><h2>Tài khoản khác</h2>
+      <span class="hint">Etsy cho phép nhiều shop — nhưng phải khai</span></div>
+    <div class="sec-b">
+      <div class="f">
+        <label for="c1">Bạn có tài khoản Etsy nào khác không?</label>
+        <select id="c1">
+          <option value="">— chọn —</option>
+          <option value="only">Đây là tài khoản Etsy duy nhất của tôi</option>
+          <option value="declared">Có shop khác, đã khai trong Public Profile của từng shop</option>
+          <option value="undeclared">Có shop khác, chưa khai</option>
+        </select>
+        <span class="sub">Etsy Help: được chạy nhiều shop, mỗi shop một email, nhưng <strong>phải liệt kê tất cả shop bạn vận hành trong Public Profile của từng tài khoản</strong>.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">D</span><h2>Sản phẩm &amp; hình ảnh</h2>
+      <span class="hint">Ảnh listing là nhóm vi phạm bị bỏ sót nhiều nhất</span></div>
+    <div class="sec-b">
+      <div class="f"><label for="d1">Bạn bán gì</label>
+        <input type="text" id="d1" placeholder="Ao ni theu tay, qua tang ca nhan hoa"></div>
+      <div class="f">
+        <label for="d7">Ai THIẾT KẾ sản phẩm?</label>
+        <select id="d7">
+          <option value="">— chọn —</option>
+          <option value="me">Tôi tự thiết kế</option>
+          <option value="hired">Tôi thuê designer làm theo yêu cầu của tôi</option>
+          <option value="bought">Tôi mua file design có sẵn</option>
+          <option value="none">Tôi không thiết kế gì</option>
+        </select>
+      </div>
+      <div class="f">
+        <label for="d2">Ai SẢN XUẤT ra sản phẩm?</label>
+        <select id="d2">
+          <option value="">— chọn —</option>
+          <option value="self">Chỉ mình tôi làm, không ai khác</option>
+          <option value="staff">Nhân viên của tôi, trong xưởng của tôi</option>
+          <option value="partner">Xưởng bên ngoài sản xuất cho tôi</option>
+          <option value="both">Vừa xưởng của tôi vừa thuê ngoài</option>
+          <option value="resell">Mua hàng có sẵn về bán lại</option>
+          <option value="dropship">Dropship theo listing của nơi khác</option>
+        </select>
+        <span class="sub">Etsy định nghĩa <strong>production partner là bên thứ ba</strong> giúp sản xuất theo thiết kế gốc của bạn.<span class="src etsy">Etsy</span> Nhân viên trong xưởng của chính bạn không phải bên thứ ba — họ là <strong>shop member</strong>.<span class="src infer">Suy luận</span></span>
+      </div>
+      <div class="row" id="staffRow" hidden>
+        <div class="f"><label for="d9">Bao nhiêu người làm cùng bạn</label>
+          <input type="number" id="d9" min="0" placeholder="2"></div>
+        <div class="f"><label for="d11">Đã khai họ là shop member trên Etsy chưa?</label>
+          <select id="d11"><option value="">— chọn —</option>
+            <option value="yes">Rồi</option>
+            <option value="no">Chưa</option></select></div>
+      </div>
+      <div class="f" id="wsRow" hidden>
+        <label for="d10">Xưởng đặt ở đâu</label>
+        <input type="text" id="d10" placeholder="Hue, Vietnam - xuong tai nha">
+      </div>
+      <div class="f">
+        <label for="d3">Đã khai Production Partner trong Shop Manager chưa?</label>
+        <select id="d3">
+          <option value="">— chọn —</option>
+          <option value="yes">Rồi, và đã gắn vào từng listing</option>
+          <option value="no">Chưa khai</option>
+          <option value="na">Không cần — tôi tự làm hết</option>
+        </select>
+      </div>
+      <div class="f">
+        <label>Ảnh chính của listing là loại nào? Chọn tất cả những gì bạn có dùng.</label>
+        <div class="opts" id="d4">
+          <label class="opt"><input type="checkbox" value="real"> Ảnh thật tôi tự chụp</label>
+          <label class="opt"><input type="checkbox" value="ai"> Ảnh AI tạo ra</label>
+          <label class="opt"><input type="checkbox" value="licensed"> Mockup có bản quyền</label>
+          <label class="opt"><input type="checkbox" value="stolen"> Ảnh lấy từ shop khác</label>
+        </div>
+        <span class="sub">Etsy Listing Image Requirements: <em>"you must use your own photos"</em>, ảnh phải thể hiện <em>sản phẩm hoàn thiện thật</em>. Mockup dựng máy tính chỉ được dùng làm ảnh phụ, hoặc khi đối tác sản xuất in thiết kế của bạn lên phôi có sẵn.</span>
+      </div>
+      <div class="f">
+        <label for="d5">Title, tag hoặc thiết kế có chứa tên thương hiệu, tên phim, nhân vật, lời bài hát không?</label>
+        <select id="d5">
+          <option value="">— chọn —</option>
+          <option value="no">Không, tất cả đều do tôi tự đặt</option>
+          <option value="maybe">Có thể có, tôi chưa tra kỹ</option>
+          <option value="yes">Có</option>
+        </select>
+      </div>
+      <div class="f"><label for="d6">Số listing đang live</label><input type="number" id="d6" min="0" placeholder="101"></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">E</span><h2>Tài chính</h2>
+      <span class="hint">Nợ phí là lý do đình chỉ được Etsy ghi rõ</span></div>
+    <div class="sec-b">
+      <div class="row">
+        <div class="f">
+          <label for="e1">Tình trạng nợ phí</label>
+          <select id="e1">
+            <option value="">— chọn —</option>
+            <option value="none">Không nợ gì</option>
+            <option value="paid">Có nợ, tôi đã trả hết rồi</option>
+            <option value="unpaid">Có nợ, chưa trả</option>
+            <option value="cant">Có nợ, không trả được vì bị khoá</option>
+          </select>
+        </div>
+        <div class="f">
+          <label for="e2">Auto-billing có lần nào thất bại không?</label>
+          <select id="e2">
+            <option value="">— chọn —</option>
+            <option value="no">Không</option>
+            <option value="funds">Có — thẻ không đủ tiền</option>
+            <option value="card">Có — thẻ lỗi / hết hạn / chưa mở thanh toán quốc tế</option>
+          </select>
+        </div>
+      </div>
+      <div class="f">
+        <label for="e3">Đã verify tài khoản ngân hàng chưa?</label>
+        <select id="e3">
+          <option value="">— chọn —</option>
+          <option value="done">Đã verify XONG — đã nhập số tiền test, Etsy xác nhận</option>
+          <option value="submitted">Mới nhập thông tin bank / vừa bấm verify, chưa xong</option>
+          <option value="never">Chưa nhập thông tin ngân hàng</option>
+        </select>
+        <span class="sub">Verify bank là bước Etsy đối chiếu tên chủ tài khoản với tên trên giấy tờ. Nếu bạn vừa bấm verify sát ngày bị khoá, rất đáng nghi là mắt xích kích hoạt.</span>
+      </div>
+      <div class="row">
+        <div class="f"><label for="e4">Etsy Ads đã chi (USD)</label><input type="number" id="e4" min="0" step="1" placeholder="36"></div>
+        <div class="f"><label for="e5">Mã giảm giá sâu nhất từng chạy (%)</label><input type="number" id="e5" min="0" max="100" placeholder="20"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">F</span><h2>Đơn hàng</h2>
+      <span class="hint">Rất nhiều shop bị khoá ngay sau đơn đầu tiên</span></div>
+    <div class="sec-b">
+      <div class="row">
+        <div class="f"><label for="f1">Tổng số đơn đã bán</label><input type="number" id="f1" min="0" placeholder="1"></div>
+        <div class="f">
+          <label for="f2">Đơn đã giao chưa?</label>
+          <select id="f2">
+            <option value="">— chọn —</option>
+            <option value="shipped">Đã ship, có tracking hợp lệ</option>
+            <option value="noship">Chưa ship được vì bị khoá</option>
+            <option value="notrack">Đã ship nhưng không có tracking</option>
+            <option value="na">Chưa có đơn nào</option>
+          </select>
+        </div>
+      </div>
+      <div class="f">
+        <label>Chi tiết từng đơn hàng</label>
+        <span class="sub">Điền hết các đơn đã có. Mã đơn và tracking là bằng chứng cụ thể nhất trong đơn kháng nghị.</span>
+        <div class="tbl">
+          <div class="tbl-h gO"><span>Mã đơn</span><span>Ngày đặt</span><span>Ngày ship</span><span>Sản phẩm</span><span>Giá USD</span><span>KM %</span><span>Nước khách</span><span>Tracking</span><span></span></div>
+          <div id="ordRows"></div>
+          <div class="tbl-foot"><button class="btn ghost sm" id="addOrd" type="button">+ Thêm đơn</button></div>
+        </div>
+      </div>
+      <div class="f">
+        <label for="f3">Có tranh chấp, case, hay khiếu nại nào từ khách không?</label>
+        <select id="f3">
+          <option value="">— chọn —</option>
+          <option value="no">Không có gì</option>
+          <option value="yes">Có</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">G</span><h2>Thiết bị &amp; đường mạng</h2>
+      <span class="hint">Etsy thấy hết — khai đúng</span></div>
+    <div class="sec-b">
+      <div class="f">
+        <label>Bạn vào shop bằng đường mạng nào? Chọn tất cả.</label>
+        <div class="opts" id="g1">
+          <label class="opt"><input type="checkbox" value="home"> Wifi nhà</label>
+          <label class="opt"><input type="checkbox" value="mobile"> 4G / 5G điện thoại</label>
+          <label class="opt"><input type="checkbox" value="office"> Mạng văn phòng</label>
+          <label class="opt"><input type="checkbox" value="vps"> VPS / máy chủ</label>
+          <label class="opt"><input type="checkbox" value="vpn"> VPN</label>
+          <label class="opt"><input type="checkbox" value="proxy"> Proxy</label>
+          <label class="opt"><input type="checkbox" value="anti"> Antidetect browser</label>
+        </div>
+        <span class="sub">IP datacenter và công cụ che giấu là tín hiệu rủi ro nặng. IP động của mạng nhà thì hoàn toàn bình thường với Etsy.</span>
+      </div>
+      <div class="row">
+        <div class="f"><label for="g2">Số người từng đăng nhập tài khoản</label>
+          <select id="g2"><option value="">— chọn —</option>
+            <option value="1">Chỉ mình tôi</option>
+            <option value="2">Từ 2 người trở lên</option></select></div>
+        <div class="f"><label for="g3">Có đăng nhập từ tỉnh/nước khác không?</label>
+          <select id="g3"><option value="">— chọn —</option>
+            <option value="no">Không, chỉ một nơi</option>
+            <option value="cities">Có, vài tỉnh trong nước</option>
+            <option value="abroad">Có, từ nước ngoài</option></select></div>
+      </div>
+      <div class="f">
+        <label>Lịch sử nơi đăng nhập</label>
+        <span class="sub">Form Etsy hỏi thẳng "list all the locations where your shop members are signing into your account". Khai đủ — Etsy đã có log IP của bạn.</span>
+        <div class="tbl">
+          <div class="tbl-h gP"><span>Việc gì</span><span>Thành phố</span><span>Nước</span><span>Thiết bị</span><span>Mạng</span><span></span></div>
+          <div id="plcRows"></div>
+          <div class="tbl-foot"><button class="btn ghost sm" id="addPlc" type="button">+ Thêm dòng</button></div>
+        </div>
+      </div>
+      <div class="f">
+        <label for="g4">Thiết bị hoặc đường mạng này từng dùng cho tài khoản Etsy nào đã bị khoá chưa?</label>
+        <select id="g4">
+          <option value="">— chọn —</option>
+          <option value="no">Chưa bao giờ</option>
+          <option value="yes">Có</option>
+          <option value="unsure">Không chắc</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="tag">H</span><h2>Cảnh báo &amp; hành động sau khi bị khoá</h2></div>
+    <div class="sec-b">
+      <div class="row">
+        <div class="f"><label for="h1">Trước khi bị khoá có nhận cảnh báo nào không?</label>
+          <select id="h1"><option value="">— chọn —</option>
+            <option value="no">Không có cảnh báo nào</option>
+            <option value="yes">Có cảnh báo hoặc listing bị gỡ</option></select></div>
+        <div class="f"><label for="h2">Sau khi bị khoá, bạn đã tạo tài khoản Etsy mới chưa?</label>
+          <select id="h2"><option value="">— chọn —</option>
+            <option value="no">Chưa và sẽ không tạo</option>
+            <option value="yes">Đã tạo rồi</option></select></div>
+      </div>
+      <div class="f" id="h2bWrap" hidden>
+        <label for="h2b">Tài khoản mới đó bạn đã đóng chưa?</label>
+        <select id="h2b">
+          <option value="">— chọn —</option>
+          <option value="closed">Đã đóng rồi</option>
+          <option value="open">Chưa đóng, vẫn còn</option>
+        </select>
+        <span class="sub">Đơn chỉ viết "tôi đã đóng nó" khi bạn chọn đã đóng. Chưa đóng thì việc đó nằm ở mục Phải làm trước khi nộp.</span>
+      </div>
+      <div class="f">
+        <label for="i1">Có biến cố cá nhân nào ảnh hưởng tới việc vận hành shop không?</label>
+        <textarea id="i1" rows="2" placeholder="Vi du: nam vien mot thang, tang gia dinh, bao lut... De trong neu khong co."></textarea>
+        <span class="sub">Ô 7 của form Etsy hỏi đúng điều này. Chỉ điền nếu có thật.</span>
+      </div>
+      <div class="f">
+        <label for="h3">Bạn đã liên hệ khách hàng ngoài sàn Etsy chưa?</label>
+        <select id="h3">
+          <option value="">— chọn —</option>
+          <option value="no">Chưa</option>
+          <option value="yes">Đã nhắn khách qua kênh ngoài</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ================= PANEL ================= -->
+<aside class="panel">
+
+  <div class="card">
+    <div class="card-h"><h3>Nguồn &amp; độ tin cậy</h3></div>
+    <div class="card-b">
+      <div class="legend">
+        <div><span class="src etsy">Etsy</span><span>Trích từ tài liệu Etsy công bố. Đây là thứ duy nhất mang tính bắt buộc — phần còn lại chỉ để tham khảo.</span></div>
+        <div><span class="src infer">Suy luận</span><span>Kết luận rút ra từ một quy định Etsy, không phải câu chữ Etsy viết. Hợp lý nhưng Etsy chưa xác nhận.</span></div>
+        <div><span class="src heur">Kinh nghiệm</span><span>Kinh nghiệm vận hành của cộng đồng seller. <strong>Etsy chưa bao giờ công bố con số hay ngưỡng nào ở nhóm này.</strong> Đừng coi là luật.</span></div>
+        <div><span class="src case">Case</span><span>Quan sát từ trường hợp có thật đã ghi nhận. Một vài case không phải là quy luật.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Chẩn đoán rủi ro</h3><span class="n" id="dxn">—</span></div>
+    <div class="card-b"><div class="dx" id="dx"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Phải làm trước khi nộp</h3><span class="n" id="todon">—</span></div>
+    <div class="card-b">
+      <ul class="todo" id="todo"></ul>
+      <p class="note" id="todonote" style="margin-top:10px"></p>
+    </div>
+  </div>
+
+  <div class="card" id="sendWrap" hidden>
+    <div class="card-h"><h3>Gửi hồ sơ cho quản lý</h3></div>
+    <div class="card-b">
+      <div class="f" style="margin-bottom:10px">
+        <label for="sName">Tên bạn (để quản lý biết hồ sơ của ai)</label>
+        <input type="text" id="sName" placeholder="Nga">
+      </div>
+      <div class="f" style="margin-bottom:10px">
+        <label for="sTeam">Mã nhóm</label>
+        <input type="password" id="sTeam" autocomplete="off" placeholder="quản lý cung cấp">
+      </div>
+      <div class="f" style="margin-bottom:10px">
+        <label class="opt"><input type="checkbox" id="sConsent"> Tôi đồng ý gửi hồ sơ cho quản lý.</label>
+      </div>
+      <div id="turnstileBox" style="margin-bottom:10px"></div>
+      <p class="note" style="margin-bottom:10px">Hồ sơ có thể gồm thông tin định danh và ngân hàng. Chỉ gửi khi bạn được phép chia sẻ; hệ thống tự xoá hồ sơ sau 90 ngày. Mã nhóm không được lưu trên thiết bị này.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ok" id="doSend" type="button">Tôi đồng ý — gửi hồ sơ</button>
+        <button class="btn ghost" id="cancelSend" type="button">Huỷ</button>
+      </div>
+      <p class="note" id="sendMsg" style="margin-top:10px"></p>
+    </div>
+  </div>
+
+  <div class="card" id="masterWrap" hidden style="border-color:var(--accent);border-width:2px">
+    <div class="card-h" style="background:var(--accent-soft)"><h3 style="color:var(--accent)">Màn hình quản lý</h3>
+      <span class="n" id="mCount"></span></div>
+    <div class="card-b">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="password" id="mKey" autocomplete="current-password" placeholder="Master key" style="flex:1;min-width:170px">
+        <button class="btn" id="mLoad" type="button">Xem tất cả</button>
+        <button class="btn ghost" id="mClose" type="button">Đóng</button>
+      </div>
+      <div id="mList"></div>
+      <p class="note" id="mMsg" style="margin-top:9px"></p>
+    </div>
+  </div>
+
+  <div class="card" id="exportWrap" hidden>
+    <div class="card-h"><h3>Bản sao dữ liệu</h3>
+      <button class="btn sm" id="copyJson" type="button" style="margin-left:auto">Copy</button></div>
+    <div class="card-b">
+      <p class="note" style="margin-bottom:8px">Nếu trình duyệt không tự tải file xuống, copy toàn bộ đoạn dưới và dán vào một file <code>.json</code> để giữ lại. Mở lại bằng nút <em>Mở file đã lưu</em>.</p>
+      <textarea class="out" id="jsonOut" rows="7" readonly></textarea>
+    </div>
+  </div>
+
+  <div class="card" id="blockWrap" hidden style="border-color:var(--danger);border-width:2px">
+    <div class="card-h" style="background:var(--danger-soft)"><h3 style="color:var(--danger)">Dừng lại trước khi viết đơn</h3></div>
+    <div class="card-b">
+      <p class="note" style="color:var(--ink);font-size:13.4px">Bạn chọn mô hình <strong>resale hoặc dropship</strong>. Etsy Seller Policy không cho phép các mô hình này, trừ ngoại lệ cụ thể như craft supplies.<span class="src etsy">Etsy</span></p>
+      <p class="note" style="margin-top:9px">Công cụ không sinh đơn “tôi đã tuân thủ” khi loại hàng chưa được xác minh là ngoại lệ hợp lệ. Rà soát nguồn hàng và cách khai báo trước. Nếu thực tế bạn có thiết kế riêng và chỉ dùng xưởng in, hãy chọn lại mục D cho đúng.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Đơn kháng nghị</h3>
+      <button class="btn sm" id="copyAll" type="button" style="margin-left:auto">Copy tất cả</button></div>
+    <div class="card-b">
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 1 · Legal full name</span>
+          <button class="btn ghost sm" data-copytext="o1">Copy</button></div>
+        <div class="pick" id="o1">—</div>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 2 · Kind of items</span>
+          <button class="btn ghost sm" data-copytext="o2">Copy</button></div>
+        <div class="pick" id="o2">—</div>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 3 · Sign-in locations</span>
+          <button class="btn ghost sm" data-copy="o3">Copy</button></div>
+        <textarea class="out" id="o3" rows="6" readonly></textarea>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 4 · Why appealing</span>
+          <button class="btn ghost sm" data-copytext="o4">Copy</button></div>
+        <div class="pick" id="o4">—</div>
+        <div id="o4note" hidden style="margin-top:7px"></div>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 5 · Actions taken</span>
+          <button class="btn ghost sm" data-copy="o5">Copy</button></div>
+        <textarea class="out" id="o5" rows="11" readonly></textarea>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 6 · How practices change</span>
+          <button class="btn ghost sm" data-copy="o6">Copy</button></div>
+        <textarea class="out" id="o6" rows="9" readonly></textarea>
+      </div>
+      <div class="outblock">
+        <div class="outlab"><span class="k">Ô 7 · Extenuating circumstances</span>
+          <button class="btn ghost sm" data-copy="o7">Copy</button></div>
+        <textarea class="out" id="o7" rows="10" readonly></textarea>
+      </div>
+      <div class="divider"></div>
+      <div id="guard" hidden style="background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);border-radius:7px;padding:9px 11px;font-size:12.9px;line-height:1.5;margin-bottom:10px;font-weight:600"></div>
+      <div class="pillrow" id="pills"></div>
+      <p class="note" style="margin-top:9px"><strong>Bảy ô này là form xuất hiện trên tài khoản của một số seller, không phải bố cục cố định của Etsy.</strong> Hướng dẫn chính thức chỉ nêu bốn phần: lý do kháng nghị, hành động đã thực hiện, thay đổi sắp tới, và tài liệu đính kèm.<span class="src etsy">Etsy</span> Hãy đối chiếu nhãn field thật trên màn hình của bạn rồi mới dán.</p>
+      <p class="note" style="margin-top:9px">Đơn được viết theo văn phong của những đơn kháng nghị đã được duyệt: ngắn, khiêm tốn, nhận trách nhiệm, không kỹ thuật, kết bằng lời đề nghị review thủ công. Đọc lại toàn bộ trước khi dán — mỗi câu phải đúng với bạn.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Sau khi nộp</h3></div>
+    <div class="card-b">
+      <ul class="todo" style="gap:7px">
+        <li>Nộp <strong>một lần</strong>. Không nộp lại lần hai.<span class="src heur">Kinh nghiệm</span></li>
+        <li>Chỉ trả lời đúng specialist đã gửi mail.<span class="src heur">Kinh nghiệm</span></li>
+        <li>Giữ email tài khoản, không đổi mật khẩu, kiểm tra hộp thư spam mỗi ngày.</li>
+        <li>Không tạo tài khoản Etsy mới — email đình chỉ ghi rõ lệnh áp dụng cho cả tài khoản bạn tạo mới.<span class="src etsy">Etsy</span></li>
+        <li>Đính kèm tài liệu hỗ trợ ngay trong đơn — Appeals Centre có bước này.<span class="src etsy">Etsy</span></li>
+      </ul>
+      <p class="note" style="margin-top:11px">Form Etsy ghi thời gian phản hồi khoảng hai tuần. Có trường hợp được trả lời trong ngày.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h"><h3>Bộ hồ sơ chứng minh</h3><span class="n">chuẩn bị trước</span></div>
+    <div class="card-b">
+      <p class="note" style="margin-bottom:11px"><strong>Etsy bảo bạn đính kèm.</strong> Hướng dẫn chính thức của Appeals Centre có bước <em>"Add any documents to support the appeal"</em>. Đính kèm những tài liệu chứng minh trực tiếp nguyên nhân bị khoá, và giữ bộ đầy đủ để gửi ngay khi specialist hỏi thêm.<span class="src etsy">Etsy</span></p>
+      <ul class="todo" style="gap:7px">
+        <li>PDF ghép: CCCD hai mặt + sao kê ngân hàng, tên hiển thị rõ và khớp nhau.</li>
+        <li>Video 30–60 giây: cầm CCCD tại bàn làm việc, quay cận sản phẩm thật.</li>
+        <li>Ảnh nguyên liệu, dụng cụ, hàng đang làm dở và thành phẩm — có ngày chụp.</li>
+        <li>Ảnh màn hình tracking của những đơn đã giao.</li>
+        <li>Nếu dùng xưởng đối tác: tin nhắn hoặc hợp đồng với xưởng.</li>
+      </ul>
+    </div>
+  </div>
+
+</aside>
+</div>
+
+<footer>
+  Công cụ tổng hợp từ tài liệu Etsy công bố công khai (Fees &amp; Payments Policy, Listing Image Requirements, hướng dẫn xác minh tài khoản ngân hàng, hướng dẫn mở shop thứ hai) và từ các đơn kháng nghị đã được duyệt. Đây không phải tư vấn pháp lý, và không có gì bảo đảm kết quả — Etsy quyết định độc lập. Cập nhật 09/2026.
+</footer>
+
+<script>
+(function(){
+"use strict";
+var $=function(s){return document.querySelector(s)};
+var $$=function(s,root){return Array.prototype.slice.call((root||document).querySelectorAll(s))};
+
+/* ---------- theme ---------- */
+$("#themeBtn").addEventListener("click",function(){
+  var r=document.documentElement, cur=r.getAttribute("data-theme");
+  var sysDark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var next = cur ? (cur==="dark"?"light":"dark") : (sysDark?"light":"dark");
+  r.setAttribute("data-theme",next);
+});
+
+/* ---------- helpers ---------- */
+function val(id){var e=$("#"+id);return e?e.value.trim():""}
+function up(id){return norm(val(id))}
+function checks(id){
+  return $$("#"+id+" input:checked").map(function(c){return c.value});
+}
+function norm(s){
+  return String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\u0110/g,"D").replace(/\u0111/g,"d")
+    .toUpperCase().replace(/[^A-Z ]/g,"").replace(/\s+/g," ").trim();
+}
+function tokens(s){return norm(s).split(" ").filter(Boolean).sort().join(" ")}
+
+/* ---------- dynamic tables: orders + places ---------- */
+var ORD_F=[["num","text","ORDER-123"],["placed","date",""],["shipped","date",""],
+  ["item","text","Example handmade item"],["price","number","25"],["promo","number","0"],
+  ["country","text","Country"],["track","text","TRACK-123"]];
+var PLC_F=[["event","text","Daily sign-in"],["city","text","City"],
+  ["country","text","Vietnam"],["device","text","Personal laptop"],["net","text","Home wifi"]];
+
+function mkRow(host,fields,cls,vals){
+  var r=document.createElement("div"); r.className="tbl-r "+cls;
+  fields.forEach(function(f){
+    var i=document.createElement("input");
+    i.type=f[1]; i.placeholder=f[2]; i.dataset.k=f[0];
+    if(f[1]==="number"){i.min="0";i.step="0.01";}
+    if(vals&&vals[f[0]]!=null) i.value=vals[f[0]];
+    r.appendChild(i);
+  });
+  var x=document.createElement("button");
+  x.type="button"; x.className="xbtn"; x.textContent="×"; x.title="Xoá dòng";
+  x.addEventListener("click",function(){ r.remove(); syncEmpty(); run(); save(); });
+  r.appendChild(x);
+  host.appendChild(r);
+  return r;
+}
+function syncEmpty(){
+  [["ordRows","Chưa có đơn nào. Bấm + Thêm đơn nếu shop đã bán được."],
+   ["plcRows","Chưa khai nơi đăng nhập nào."]].forEach(function(x){
+    var h=$("#"+x[0]); if(!h) return;
+    var e=h.querySelector(".tbl-empty");
+    if(!h.querySelector(".tbl-r")){
+      if(!e){ var d=document.createElement("div"); d.className="tbl-empty"; d.textContent=x[1]; h.appendChild(d); }
+    } else if(e) e.remove();
+  });
+}
+function readTable(id,fields){
+  return $$("#"+id+" .tbl-r").map(function(r){
+    var o={}; $$("input",r).forEach(function(i){ o[i.dataset.k]=i.value.trim(); });
+    return o;
+  }).filter(function(o){ return Object.keys(o).some(function(k){return o[k]}) });
+}
+function fillTable(id,fields,cls,arr){
+  var h=$("#"+id); if(!h) return; h.innerHTML="";
+  (arr||[]).forEach(function(v){ mkRow(h,fields,cls,v); });
+  syncEmpty();
+}
+$("#addOrd").addEventListener("click",function(){ mkRow($("#ordRows"),ORD_F,"gO"); syncEmpty(); });
+$("#addPlc").addEventListener("click",function(){ mkRow($("#plcRows"),PLC_F,"gP"); syncEmpty(); });
+
+/* ---------- name comparator ---------- */
+function nameCheck(){
+  var cccd=up("a1"), first=up("a2"), last=up("a3"), bank=up("a4");
+  var etsy=(first+" "+last).replace(/\s+/g," ").trim();
+  $("#nv1").textContent=cccd||"—";
+  $("#nv2").textContent=etsy||"—";
+  $("#nv3").textContent=bank||"—";
+  var v=$("#nverdict");
+  if(!cccd||!etsy||!bank){v.className="verdict idle";
+    v.textContent="Nhập đủ ba ô để đối chiếu.";return {state:"idle"};}
+  var same = (cccd===etsy && etsy===bank);
+  var sameTokens = (tokens(cccd)===tokens(etsy) && tokens(etsy)===tokens(bank));
+  if(same){v.className="verdict ok";
+    v.textContent="Ba chuỗi trùng khít. Không có rủi ro lệch tên.";return {state:"ok"};}
+  if(sameTokens){v.className="verdict warn";
+    v.innerHTML="<strong>Cùng các chữ nhưng khác thứ tự.</strong> Đây là tình huống rất phổ biến với người Việt: ngân hàng giữ thứ tự Việt, Etsy tách First / Last theo chuẩn phương Tây. Phép so khớp chuỗi nghiêm ngặt sẽ báo không khớp. Đơn sẽ nêu rõ và đề nghị Etsy chọn định dạng.";
+    return {state:"order"};}
+  v.className="verdict bad";
+  v.innerHTML="<strong>Các chuỗi khác nhau về nội dung, không chỉ thứ tự.</strong> Etsy yêu cầu tên chủ tài khoản ngân hàng khớp với tên ở Legal and tax information. Kiểm tra lại xem có gõ nhầm không. Nếu tài khoản ngân hàng đứng tên người khác, đơn kháng nghị không có nền để đứng — phải xử lý việc này trước.";
+  return {state:"mismatch"};
+}
+
+/* ---------- diagnosis ---------- */
+function diagnose(nm){
+  /* [severity, title, detail, source] — source: etsy | infer | heur | case */
+  var d=[];
+  var reason=val("b6"), net=checks("g1"), img=checks("d4");
+  var open=val("b2"), susp=val("b3"), days=null;
+  if(open&&susp){days=Math.round((new Date(susp)-new Date(open))/86400000);}
+
+  if(nm.state==="mismatch")
+    d.push(["crit","Tên không khớp giữa giấy tờ, Etsy và ngân hàng",
+      "Etsy Help: tên trên tài khoản ngân hàng phải khớp tên bạn khai ở trang Legal and tax information. Lệch nội dung là nhóm nặng nhất.","etsy"]);
+  else if(nm.state==="order")
+    d.push(["warn","Tên đúng chữ nhưng lệch thứ tự",
+      "Cùng các chữ, khác trật tự. Phép so khớp chuỗi tự động có thể báo trượt. Vô hại và sửa được — nêu thẳng trong đơn là lợi thế.","infer"]);
+
+  if(val("e3")==="submitted")
+    d.push(["crit","Vừa nhập thông tin ngân hàng, chưa verify xong",
+      "Verify bank là bước Etsy đối chiếu tên chủ tài khoản với tên trên hồ sơ. Nếu shop bị khoá ngay sau thao tác này thì đây là mắt xích đáng nghi nhất — nhưng đây là suy luận theo thời điểm, không phải điều Etsy xác nhận.","infer"]);
+  else if(val("e3")==="never")
+    d.push(["warn","Chưa nhập thông tin ngân hàng",
+      "Không verify thì không nhận được tiền dù có bán. Hồ sơ định danh dang dở kéo dài cũng làm điểm rủi ro nền cao hơn.","infer"]);
+
+  if(net.indexOf("vps")>-1||net.indexOf("proxy")>-1||net.indexOf("anti")>-1)
+    d.push(["crit","Đang dùng VPS, proxy hoặc antidetect browser",
+      "Cộng đồng seller coi IP datacenter và công cụ che giấu là tín hiệu rủi ro nặng. Etsy KHÔNG công bố điều này ở bất kỳ đâu — đây là kinh nghiệm, không phải luật. Dù vậy đơn sẽ không sinh câu phủ nhận việc dùng công cụ này.","heur"]);
+  else if(net.indexOf("vpn")>-1)
+    d.push(["crit","Đang dùng VPN",
+      "VPN làm quốc gia đăng nhập lệch với quốc gia khai trên shop. Mức độ ảnh hưởng là kinh nghiệm cộng đồng, Etsy không công bố. Đơn sẽ không sinh câu phủ nhận.","heur"]);
+
+  if(net.indexOf("mobile")>-1&&val("g3")==="no")
+    d.push(["info","Có dùng 4G — IP di động định vị lỏng",
+      "Mạng di động Việt Nam dùng CGNAT nên IP có thể hiện ra tỉnh khác dù bạn ngồi yên. Việc Etsy đọc log ra sao là suy luận. Đơn nói trước điều này để log không bị hiểu là mâu thuẫn.","infer"]);
+
+  if(val("g4")==="yes")
+    d.push(["crit","Thiết bị hoặc mạng từng dùng cho tài khoản đã bị khoá",
+      "Kinh nghiệm cộng đồng cho rằng Etsy quét liên kết theo thiết bị, IP, thẻ và email. Etsy không công bố cơ chế này.","heur"]);
+  else if(val("g4")==="unsure")
+    d.push(["warn","Không chắc thiết bị có sạch không","Xác minh lại trước khi nộp.","heur"]);
+
+  if(img.indexOf("stolen")>-1)
+    d.push(["crit","Có dùng ảnh của shop khác",
+      "Listing Image Requirements, nguyên văn: “you must use your own photos — either photos you took yourself or had someone take for you”. Vi phạm trực tiếp.","etsy"]);
+  if(img.indexOf("ai")>-1){
+    d.push(["crit","Ảnh AI dùng làm ảnh listing",
+      "Listing Image Requirements: ảnh phải là “your own photos — either photos you took yourself or had someone take for you”. Mockup dựng máy tính chỉ được dùng làm ảnh phụ cho hàng cá nhân hoá, hoặc khi đối tác sản xuất in thiết kế của bạn lên phôi có sẵn.","etsy"]);
+    d.push(["crit","Sản phẩm làm bằng AI phải được khai báo",
+      "Seller Policy, nguyên văn: “If an item is created through the use of artificial intelligence, you must disclose this in your relevant listings.” Dùng AI không tự động bị khoá — nhưng KHÔNG khai báo thì có. Hai việc khác nhau: ảnh listing phải là ảnh thật, và sản phẩm có yếu tố AI phải khai.","etsy"]);
+  }
+  if(val("d2")==="self"&&img.indexOf("ai")>-1)
+    d.push(["warn","Bạn tự làm hàng thật nhưng lại đăng ảnh AI",
+      "Ngoại lệ dành cho hàng do đối tác sản xuất không áp dụng cho bạn. Tin tốt: hàng có thật, chụp lại là hết vi phạm.","infer"]);
+
+  if(val("d2")==="staff"&&val("d11")==="no")
+    t.push("Cập nhật About section/listing để mô tả đúng những người làm hoặc vận hành shop trước khi nộp.");
+  if(val("d7")==="bought"||val("d7")==="none")
+    t.push("Rà soát quyền đối với mọi thiết kế trước khi nộp; không appeal theo hướng 'tôi tự thiết kế' nếu không đúng sự thật.");
+  if(val("d2")==="dropship"||val("d2")==="resell")
+    t.push("Xác minh hàng có thuộc ngoại lệ Etsy (ví dụ craft supplies/vintage) trước khi nộp; nếu không, dừng generator và xử lý listing trước.");
+  if(val("d2")==="partner"&&val("d3")==="no")
+    d.push(["crit","Dùng xưởng đối tác nhưng chưa khai Production Partner",
+      "Etsy yêu cầu khai đối tác sản xuất; chính sách hình ảnh cũng viện dẫn khái niệm này khi cho phép mockup. Chưa khai là thiếu sót thật.","etsy"]);
+  if(val("d5")==="yes")
+    d.push(["crit","Có tên thương hiệu, phim, nhân vật hoặc lời bài hát",
+      "Vi phạm chính sách sở hữu trí tuệ của Etsy. Gỡ trước khi nộp — và đừng nêu tên sản phẩm đó trong đơn.","etsy"]);
+  else if(val("d5")==="maybe")
+    d.push(["warn","Chưa tra nhãn hiệu",
+      "Tra USPTO cho mọi câu chữ và hình ảnh trước khi đăng. Đây là quy trình phòng ngừa của cộng đồng, không phải bước Etsy bắt buộc.","heur"]);
+
+  if(val("e1")==="cant")
+    d.push(["warn","Còn nợ phí nhưng bị khoá nên không trả được",
+      "Đây là tình huống khác hẳn với việc từ chối trả. Đơn sẽ nói rõ bạn sẵn sàng thanh toán và xin Etsy cho biết số tiền — đừng để nó trông giống nợ xấu.","infer"]);
+  if(val("e1")==="unpaid")
+    d.push(["crit","Còn nợ phí chưa thanh toán",
+      "Fees & Payments Policy, nguyên văn: người bán có 15 ngày kể từ ngày sao kê, và “Etsy may suspend your selling privileges at any time pending payment of your outstanding balance”.","etsy"]);
+  if(val("e2")==="funds")
+    d.push(["info","Thẻ từng bị từ chối vì không đủ tiền",
+      "Lý do vô hại và giải thích được. Đơn sẽ nói rõ thay vì để nó trông như từ chối thanh toán.","infer"]);
+
+  var ads=parseFloat(val("e4"))||0, orders=parseFloat(val("f1"));
+  if(ads>0&&!isNaN(orders)&&orders===0)
+    d.push(["warn","Đã chi quảng cáo nhưng chưa có đơn nào",
+      "Chạy Ads trên listing chưa được kiểm chứng là đốt tiền. Đây là lời khuyên vận hành, không liên quan chính sách Etsy.","heur"]);
+  var disc=parseFloat(val("e5"))||0;
+  if(disc>=40)
+    d.push(["warn","Giảm giá "+disc+"% trên shop mới",
+      "Etsy KHÔNG công bố ngưỡng giảm giá nào. Đây thuần tuý là kinh nghiệm: giảm quá sâu trên shop chưa có lịch sử vừa lỗ vừa dễ bị chú ý. Con số 15–20% là gợi ý của người viết công cụ, không phải quy định.","heur"]);
+
+  var live=parseFloat(val("d6"))||0;
+  if(live>=60&&days!==null&&days<=100)
+    d.push(["warn",live+" listing trong "+days+" ngày",
+      "Etsy KHÔNG công bố ngưỡng tốc độ đăng listing nào. Đây là kinh nghiệm vận hành: đăng dồn trên shop non thì khó biết cái nào bán được. Không phải quy định.","heur"]);
+
+  if(val("c1")==="undeclared")
+    d.push(["crit","Có shop khác nhưng chưa khai",
+      "Etsy Help: được chạy nhiều shop, nhưng phải liệt kê tất cả shop bạn vận hành trong Public Profile của từng tài khoản.","etsy"]);
+  if(val("g2")==="2"&&val("c1")!=="")
+    d.push(["warn","Có từ hai người đăng nhập",
+      "Etsy có tính năng shop member chính thức. Dùng chung mật khẩu thay vì thêm thành viên là chỗ dễ bị đọc thành chia sẻ tài khoản. Khai thẳng trong Ô 3.","etsy"]);
+
+  if(val("h2")==="yes"){
+    if(val("h2b")==="open")
+      d.push(["crit","Đã tạo tài khoản mới và vẫn đang mở",
+        "Email đình chỉ ghi rõ lệnh áp dụng cho cả tài khoản bạn tạo mới. Đóng nó lại trước khi nộp đơn.","etsy"]);
+    else
+      d.push(["warn","Đã từng tạo tài khoản mới sau khi bị khoá",
+        "Khai thẳng trong đơn tốt hơn để Etsy tự tìm ra.","etsy"]);
+  }
+  if(val("h3")==="yes")
+    d.push(["warn","Đã liên hệ khách ngoài sàn",
+      "Etsy yêu cầu mọi trao đổi với người mua nằm trong nền tảng. Dừng ngay.","etsy"]);
+
+  if(val("b5")==="2")
+    d.push(["warn","Đây là lần bị khoá thứ hai trở lên",
+      "Một trong các đơn thành công đã ghi nhận là của người từng được phục hồi trước đó, nên lần hai không phải án tử. Nhưng đơn phải cho thấy đã thay đổi thật sau lần một, không lặp lại lời hứa cũ.","case"]);
+  if(reason==="fraud")
+    d.push(["info","Nhóm vi phạm: định danh và tài khoản",
+      "Cách hiểu thường gặp là câu này thiên về tài khoản và định danh hơn là sản phẩm — nhưng đây là GIẢ THUYẾT hướng điều tra, không phải kết luận. Etsy không giải thích phân loại nội bộ của họ. Vẫn nên rà cả listing.","infer"]);
+  if(reason==="handmade"||reason==="ip")
+    d.push(["info","Nhóm vi phạm: sản phẩm và listing",
+      "Đơn nên xoay quanh nguồn gốc sản phẩm, khai báo đối tác sản xuất và bản quyền hình ảnh.","infer"]);
+
+  var bo=parseFloat(val("a8"))||0;
+  if(bo>=5)
+    d.push(["good",bo+" đơn mua với tư cách buyer",
+      "Lịch sử mua hàng thật là bằng chứng chính danh khó làm giả. Đưa con số cụ thể vào đơn mạnh hơn nói chung chung.","infer"]);
+  if(val("b7")==="long")
+    d.push(["good","Có lịch sử mua hàng từ một năm trở lên",
+      "Tín hiệu chính danh. Cả ba đơn kháng nghị thành công đã ghi nhận đều nhấn mạnh yếu tố người thật, làm thật.","case"]);
+  if(val("c1")==="only")
+    d.push(["good","Tài khoản Etsy duy nhất","Loại bỏ được nhóm rủi ro liên kết theo tài khoản. Liên kết vẫn có thể đến từ thiết bị, ngân hàng, địa chỉ hoặc người vận hành — không phải hết rủi ro.","infer"]);
+  if(val("f2")==="shipped")
+    d.push(["good","Đơn đã giao và có tracking hợp lệ","Bằng chứng vận hành thật, rất có giá trị khi specialist rà soát.","infer"]);
+  if(val("f3")==="no"&&val("h1")==="no")
+    d.push(["good","Không cảnh báo, không tranh chấp","Hồ sơ sạch — nêu trong đơn.","infer"]);
+  if(val("d2")==="self")
+    d.push(["good","Tự làm hàng bằng tay","Ảnh và video xưởng là bằng chứng mạnh nhất bạn có thể gửi.","infer"]);
+
+  var el=$("#dx"); el.innerHTML="";
+  if(!d.length){
+    el.innerHTML='<p class="empty">Điền form bên trái. Rủi ro và điểm mạnh sẽ hiện ở đây theo thời gian thực, kèm nhãn nguồn.</p>';
+    $("#dxn").textContent="—"; return;
+  }
+  var rank={crit:0,warn:1,info:2,good:3};
+  d.sort(function(a,b){return rank[a[0]]-rank[b[0]]});
+  var LBL={etsy:"Etsy",infer:"Suy luận",heur:"Kinh nghiệm",case:"Case"};
+  d.forEach(function(x){
+    var n=document.createElement("div");
+    n.className="dxi "+x[0];
+    n.innerHTML='<div class="stripe"></div><div class="dxb"><strong></strong><span></span></div>';
+    n.querySelector("strong").textContent=x[1];
+    var tag=document.createElement("span");
+    tag.className="src "+(x[3]||"heur");
+    tag.textContent=LBL[x[3]]||"Kinh nghiệm";
+    n.querySelector("strong").appendChild(tag);
+    n.querySelector("span").textContent=x[2];
+    el.appendChild(n);
+  });
+  var crit=d.filter(function(x){return x[0]==="crit"}).length;
+  var etsyN=d.filter(function(x){return x[3]==="etsy"}).length;
+  $("#dxn").textContent=(crit?crit+" nghiêm trọng · ":"")+etsyN+"/"+d.length+" có nguồn Etsy";
+}
+
+/* ---------- must-do ---------- */
+function mustDo(nm){
+  var t=[], img=checks("d4"), net=checks("g1");
+  if(nm.state==="mismatch") t.push("Làm rõ vì sao tên trên ngân hàng khác tên trên giấy tờ. Nếu tài khoản đứng tên người khác, xử lý việc này trước khi nộp đơn.");
+  if(val("e1")==="unpaid") t.push("Thanh toán hết số dư còn nợ. Ô 5 sẽ không viết là đã trả cho tới khi bạn chọn “đã trả hết”.");
+  if(val("e1")==="cant") t.push("Thử thanh toán qua trang billing nếu còn vào được. Nếu thật sự không vào được, đơn đã có sẵn câu đề nghị Etsy cho biết số tiền để bạn trả ngay.");
+  if(img.indexOf("stolen")>-1) t.push("Gỡ toàn bộ ảnh lấy từ shop khác.");
+  if(img.indexOf("ai")>-1) t.push("Chụp lại ảnh thật của sản phẩm. Nếu đang bị khoá không sửa được listing, đơn sẽ cam kết thay ảnh ngay khi có quyền truy cập.");
+  if(val("d5")==="yes") t.push("Gỡ mọi listing chứa tên thương hiệu, phim, nhân vật hoặc lời bài hát.");
+  if(val("d5")==="maybe") t.push("Tra USPTO cho toàn bộ câu chữ và hình ảnh đang dùng.");
+  if(val("d2")==="staff"&&val("d11")==="no")
+    t.push("Cập nhật About section/listing để mô tả đúng những người làm hoặc vận hành shop trước khi nộp.");
+  if(val("d7")==="bought"||val("d7")==="none")
+    t.push("Rà soát quyền đối với mọi thiết kế trước khi nộp; không appeal theo hướng 'tôi tự thiết kế' nếu không đúng sự thật.");
+  if(val("d2")==="dropship"||val("d2")==="resell")
+    t.push("Xác minh hàng có thuộc ngoại lệ Etsy (ví dụ craft supplies/vintage) trước khi nộp; nếu không, dừng generator và xử lý listing trước.");
+  if(val("d2")==="partner"&&val("d3")==="no") t.push("Khai Production Partner trong Shop Manager và gắn vào từng listing.");
+  if(val("c1")==="undeclared") t.push("Khai tất cả shop bạn vận hành trong Public Profile của từng tài khoản.");
+  if(val("h2")==="yes"&&val("h2b")==="open") t.push("Đóng tài khoản Etsy vừa tạo TRƯỚC khi nộp. Đơn sẽ không viết là “tôi đã đóng nó” cho tới khi bạn chọn đã đóng.");
+  if(val("h2")==="yes"&&val("h2b")==="") t.push("Cho biết tài khoản mới đó đã đóng chưa — đơn cần dữ kiện này để viết đúng.");
+  if(val("e3")==="submitted") t.push("Hoàn tất verify ngân hàng nếu còn vào được: chờ khoản test rất nhỏ về rồi nhập đúng số tiền. Đơn chỉ viết “đã submit thông tin”, không viết “đã verify xong”.");
+  if(val("h3")==="yes") t.push("Dừng mọi liên hệ với khách ngoài sàn Etsy.");
+  if(net.indexOf("vps")>-1||net.indexOf("vpn")>-1||net.indexOf("proxy")>-1||net.indexOf("anti")>-1)
+    t.push("Chuyển hẳn sang đường truyền dân cư bình thường. Nhưng NỘP ĐƠN từ đúng kết nối cũ đã dùng để vận hành shop — đổi mạng ngay lúc nộp tạo thêm một điểm bất nhất mới.");
+  if(val("a5")==="no") t.push("Khai số CCCD 12 chữ số ở Legal and tax information ngay khi có quyền truy cập.");
+
+  var ul=$("#todo"); ul.innerHTML="";
+  if(!t.length){
+    ul.innerHTML='<p class="empty">Chưa phát hiện việc nào phải xử lý trước. Điền tiếp form để kiểm tra đầy đủ.</p>';
+    $("#todon").textContent="—"; $("#todonote").textContent=""; return;
+  }
+  t.forEach(function(s){var li=document.createElement("li");li.textContent=s;ul.appendChild(li)});
+  $("#todon").textContent=t.length+" việc";
+  $("#todonote").textContent="Làm xong những việc này rồi mới nộp. “Tôi đã sửa rồi” thuyết phục hơn hẳn “tôi sẽ sửa”.";
+}
+
+/* ---------- appeal generator ---------- */
+function build(nm){
+  var city=val("b4")||"[TINH / THANH PHO]";
+  var cccd=up("a1")||"[TEN TREN CCCD]";
+  var etsyName=(up("a2")+" "+up("a3")).replace(/\s+/g," ").trim();
+  var bank=up("a4");
+  var net=checks("g1"), img=checks("d4");
+  var made=val("d2");
+
+  /* Ô 1 */
+  $("#o1").textContent=cccd;
+
+  /* Ô 2 */
+  var blocked = (made==="dropship"||made==="resell");
+  var kind={self:"Items that I make",
+            staff:"Items that I make",
+            partner:"Items that I design that other people help me make",
+            both:"Items that I design that other people help me make",
+            resell:"— DỪNG: xem cảnh báo —",
+            dropship:"— DỪNG: xem cảnh báo —"}[made]||"— chọn mục D trước —";
+  $("#o2").textContent=kind;
+  var bw=$("#blockWrap");
+  if(bw) bw.hidden=!blocked;
+  if(blocked){
+    ["o3","o5","o6","o7"].forEach(function(id){
+      $("#"+id).value="Công cụ không sinh đơn cho mô hình resale hoặc dropship chưa được xác minh là ngoại lệ Etsy cho phép.\n\nEtsy Seller Policy: dropshipping và reselling không được phép, trừ các ngoại lệ cụ thể như craft supplies.\n\nRà soát nguồn hàng, loại hàng và cách khai báo trước; không viết appeal khẳng định tuân thủ khi facts chưa rõ.";
+    });
+    $("#o1").textContent=cccd;
+    $("#o4").textContent="— chưa sinh —";
+    return;
+  }
+
+  /* Ô 3 */
+  var p3=[];
+  var who = val("g2")==="2"
+    ? "Everyone who signs in to this account is based in "+city+", Vietnam."
+    : "I am the only person managing and signing in to this account.";
+  var only = val("c1")==="only" ? " This is the only Etsy account I have ever had." : "";
+  p3.push(city+", Vietnam. "+who+only);
+
+  var plc=readTable("plcRows",PLC_F);
+  if(plc.length){
+    var seen={}, lines=[];
+    plc.forEach(function(r){
+      var loc=[r.city,r.country].filter(Boolean).join(", ");
+      var k=loc.toLowerCase();
+      if(loc&&!seen[k]){ seen[k]=1;
+        lines.push(loc+(r.device?" — "+r.device:"")+(r.net?", "+r.net:"")+(r.event?" ("+r.event+")":"")); }
+    });
+    if(lines.length) p3.push("Every place this account has been signed in from:\n- "+lines.join("\n- "));
+  }
+  var devices=[];
+  if(net.indexOf("home")>-1) devices.push("my laptop at home on my home wifi");
+  if(net.indexOf("mobile")>-1) devices.push("the Etsy app on my own phone, which runs on mobile data");
+  if(net.indexOf("office")>-1) devices.push("a computer at my workplace");
+  if(devices.length){
+    var s="I sign in from "+(devices.length===1?devices[0]:devices.slice(0,-1).join(", ")+" and "+devices[devices.length-1])+".";
+    p3.push(s);
+  }
+  if(val("g3")==="no"&&net.indexOf("vpn")<0&&net.indexOf("proxy")<0&&net.indexOf("anti")<0)
+    p3.push("This account has never been accessed from outside Vietnam, and I have never shared my password with anyone.");
+  else if(val("g3")==="cities")
+    p3.push("I have signed in from more than one province in Vietnam because I travel within the country. It has always been me, on my own devices, and I have never shared my password with anyone.");
+  else if(val("g3")==="abroad")
+    p3.push("I want to be open about my sign-in history: this account has been accessed from outside Vietnam. [HAY THAY DOAN NAY BANG LY DO THAT CUA BAN - vi du: toi di cong tac, toi song o hai noi, mot thanh vien gia dinh giup toi khi toi di vang.] It has always been me or a person I have named above, never a stranger, and I have never sold or shared access to this account.");
+  if(net.indexOf("vps")>-1)
+    p3.push("I want to be open about one thing rather than have you find it in your logs: I have been connecting through a Vietnamese virtual server instead of directly from my home line, because my home connection is unreliable. The server is in Vietnam and so am I. I was not trying to appear to be in another country, and I will use only an ordinary residential connection from now on.");
+  if(val("c1")==="undeclared")
+    p3.push("I also operate other Etsy shops. I now understand that I must list every shop I run in the Public Profile of each account, and I will do that as soon as I have access.");
+  $("#o3").value=p3.join("\n\n");
+
+  /* Ô 4 */
+  /* Ô 4: chỉ nhận "đã khắc phục" khi có vi phạm ĐƯỢC XÁC ĐỊNH và ĐÃ xử lý xong. */
+  var unresolved=[], resolved=[];
+  if(val("e1")==="unpaid"||val("e1")==="cant") unresolved.push("nợ phí");
+  else if(val("e1")==="paid") resolved.push("nợ phí");
+  if(val("d5")==="yes") unresolved.push("nhãn hiệu");
+  if(val("d2")==="partner"&&val("d3")==="no") unresolved.push("production partner");
+  if(val("c1")==="undeclared") unresolved.push("khai shop khác");
+  if(val("h2")==="yes"&&val("h2b")==="open") unresolved.push("đóng tài khoản mới");
+  else if(val("h2")==="yes"&&val("h2b")==="closed") resolved.push("tài khoản mới");
+  if(img.indexOf("stolen")>-1) unresolved.push("ảnh của shop khác");
+  if(img.indexOf("ai")>-1) resolved.push("ảnh listing");
+  if(val("h1")==="yes") resolved.push("cảnh báo trước đó");
+
+  var o4, o4note="";
+  if(unresolved.length){
+    o4="— hoàn tất mục Phải làm trước đã —";
+    o4note="Còn "+unresolved.length+" việc chưa xử lý ("+unresolved.join(", ")+"). Đừng chọn “I've resolved all issues” khi chưa thật sự xử lý xong.";
+  } else if(resolved.length){
+    o4="I've resolved all issues and will no longer violate Etsy's policies";
+    o4note="Chọn được vì đã có vi phạm xác định và bạn đã xử lý xong: "+resolved.join(", ")+".";
+  } else if(val("e1")===""&&val("h1")===""){
+    o4="— điền mục E và H trước —";
+  } else {
+    o4="Other";
+    o4note="Chưa xác định được vi phạm cụ thể nào, nên đừng tự nhận. Chọn “Other” và dán câu dưới vào ô lý do:";
+  }
+  $("#o4").textContent=o4;
+  var on=$("#o4note");
+  if(on){
+    on.hidden=!o4note;
+    on.innerHTML="";
+    if(o4note){
+      var t=document.createElement("div"); t.className="note"; t.textContent=o4note;
+      on.appendChild(t);
+      if(o4==="Other"){
+        var ta=document.createElement("textarea");
+        ta.className="out"; ta.rows=4; ta.readOnly=true; ta.style.marginTop="6px";
+        ta.value="I am not aware of a specific policy I have broken, and I do not want to guess at one. I am asking for a review of my account, and I am prepared to correct any specific issue you identify, immediately and in full. Please tell me what concerned you and I will address it the same day.";
+        on.appendChild(ta);
+      }
+    }
+  }
+
+  /* Ô 5 */
+  var p5=[];
+  var acts=[];
+  if(val("e1")==="paid") acts.push("paid all outstanding balances");
+  if(val("e3")==="done") acts.push("completed my bank account verification");
+  else if(val("e3")==="submitted") acts.push("submitted my bank details for verification");
+  var openLine="After my suspension, I immediately reviewed my seller account";
+  if(acts.length===1) openLine+=" and "+acts[0];
+  else if(acts.length>1) openLine+=", "+acts.slice(0,-1).join(", ")+" and "+acts[acts.length-1];
+  p5.push(openLine+".");
+
+  if(nm.state==="order"&&bank&&etsyName)
+    p5.push("While doing that I found a discrepancy I want to raise openly. My government ID and my bank account both read "+cccd+", which is the normal Vietnamese name order. My Etsy account holds the same words in the Western order, as "+etsyName+", because Etsy asks for a first and last name separately. It is the same person and the same words, only arranged differently, and I am ready to change my details to whichever format you prefer so that everything matches exactly.");
+
+  if(img.indexOf("ai")>-1||img.indexOf("stolen")>-1){
+    var imgLine="I have re-read Etsy's Seller Policies and the Listing Image Requirements. I understand now that my main listing image must be my own photograph of the actual finished item.";
+    if(made==="self") imgLine+=" I make every piece by hand myself, so I am able to photograph all of them,";
+    else imgLine+=" I am able to photograph the items I sell,";
+    imgLine+=" and I will replace any image that does not meet this standard as soon as I have access to my shop again.";
+    p5.push(imgLine);
+  } else {
+    p5.push("I have re-read Etsy's Seller Policies, the Handmade Policy and the Creativity Standards in full, and I audited my shop against them.");
+  }
+
+  var staffN=val("d9"), ws=val("d10");
+  if(made==="staff")
+    p5.push("So that there is no ambiguity about how my items are made: I design every piece myself, and production happens in my own small workshop"+(ws?" in "+ws:"")+", where "+(staffN&&staffN!=="0"?staffN+" people work with me":"a small team works with me")+" operating the machines. I will make sure my shop accurately describes everyone involved in making and running the business.");
+  else if(made==="both")
+    p5.push("So that there is no ambiguity about how my items are made: I design every piece myself. Some are produced in my own workshop"+(ws?" in "+ws:"")+" by my own staff, and some are produced by an outside partner. I will make sure the outside partner is declared in Shop Manager and attached to every listing it produces.");
+  if(val("d7")==="hired")
+    p5.push("My designs are drawn to my own briefs and specifications by a designer I commission; the concepts and direction are mine.");
+  if(val("d2")==="partner"&&val("d3")==="no")
+    p5.push("I had not declared my production partner in Shop Manager. That was my mistake, and I will declare it and attach it to every listing it produces as soon as I can.");
+  if(val("d5")==="yes")
+    p5.push("I have identified listings that may have used protected names or imagery and I will remove them immediately.");
+
+  var tail=[];
+  if(parseFloat(val("e4"))>0) tail.push("I have stopped all advertising spending");
+  var ords=readTable("ordRows",ORD_F);
+  var shipped=ords.filter(function(o){return o.track||o.shipped});
+  if(shipped.length){
+    p5.push("For completeness, here are the orders on my account:\n"+
+      ords.map(function(o){
+        return "- Order "+(o.num||"(no number)")+
+          (o.item?", "+o.item:"")+
+          (o.price?", US$"+o.price:"")+
+          (o.country?", shipped to "+o.country:"")+
+          (o.placed?", placed "+o.placed:"")+
+          (o.shipped?", dispatched "+o.shipped:"")+
+          (o.track?", tracking "+o.track:", no tracking yet")+".";
+      }).join("\n"));
+  } else if(val("f2")==="shipped") tail.push("I fulfilled and shipped my order with tracking");
+  if(val("f2")==="noship") tail.push("I am unable to ship or cancel my pending order, and I would be grateful if Etsy refunded that buyer in full so they are not left out of pocket");
+  if(tail.length) p5.push(tail.join(", ").replace(/^./,function(c){return c.toUpperCase()})+".");
+
+  if(val("e1")==="cant")
+    p5.push("I understand I still have an outstanding balance. I am not refusing to pay it: since the suspension I can no longer reach my billing page. Please tell me the exact amount owed and how you would like me to pay it, and I will settle it the same day.");
+  if(net.indexOf("vps")>-1||net.indexOf("vpn")>-1||net.indexOf("proxy")>-1||net.indexOf("anti")>-1)
+    p5.push("I have stopped accessing my account through that connection and will use only my ordinary home internet from now on.");
+  if(val("h2")==="no") p5.push("I have not created any other Etsy account and I will not create one.");
+  if(val("h2")==="yes"){
+    if(val("h2b")==="closed")
+      p5.push("After the suspension I created another Etsy account before I understood that this was not allowed. I have since closed it, and I am telling you rather than leaving it to be found.");
+    else
+      p5.push("After the suspension I created another Etsy account before I understood that this was not allowed. I am disclosing it to you here rather than leaving it to be found.");
+  }
+  if(val("c1")==="only") p5.push("This is the only Etsy account I have ever had.");
+  p5.push("I am ready to verify my identity again immediately, and to provide my government ID, a bank statement, or any other document you need.");
+  $("#o5").value=p5.join("\n\n");
+
+  /* Ô 6 */
+  var p6=[];
+  p6.push(val("b5")==="1"
+    ? "This is my first Etsy shop suspension and it has been a hard lesson. I genuinely want to build a long-term business here, and I understand that maintaining an Etsy shop requires continuous compliance, not just good products."
+    : "I have been reinstated before and it meant a great deal to me. I know how much I have to lose, and I do not take a second chance for granted.");
+
+  var c=[];
+  if(img.indexOf("ai")>-1||img.indexOf("stolen")>-1)
+    c.push("photograph every product myself and use only real photographs of the actual items as my main listing images");
+  if(nm.state==="order"||nm.state==="mismatch")
+    c.push("keep my legal name, my government ID and my bank account name identical so there can never be confusion again");
+  if(val("d2")==="partner"||val("d2")==="both")
+    c.push("keep my production partner declared in Shop Manager and attached to every listing it produces");
+  if(made==="staff"&&val("d11")==="no")
+    c.push("record the people who work with me as shop members in Shop Manager so my listings show accurately how and by whom my items are made");
+  if(net.indexOf("vps")>-1||net.indexOf("vpn")>-1||net.indexOf("proxy")>-1||net.indexOf("anti")>-1)
+    c.push("access my shop only from an ordinary residential connection, never through a server, VPN or proxy");
+  if(val("c1")==="undeclared")
+    c.push("list every shop I operate in the Public Profile of each account");
+  if(parseFloat(val("e4"))>0||val("e2")==="funds")
+    c.push("keep enough funds on my billing card to cover Etsy's invoice before spending anything on advertising, so a payment to Etsy never fails again");
+  c.push("prioritize policy compliance over rapid growth, and check every listing against your policies before publishing rather than after");
+
+  p6.push("If I am fortunate enough to regain access, I will "+
+    (c.length===1?c[0]:c.slice(0,-1).join(", ")+", and "+c[c.length-1])+
+    ". I never want to be in this position again.");
+  $("#o6").value=p6.join("\n\n");
+
+  /* Ô 7 */
+  var p7=[];
+  var lead="I am not trying to make excuses or avoid responsibility.";
+  var bOrders=val("a8"), bDate=val("a7");
+  if(val("b7")==="long") lead+=" I have been on Etsy"+(bDate?" since "+bDate:"")+
+    ", first as a buyer"+(bOrders&&bOrders!=="0"?" — I placed "+bOrders+" orders of my own before I ever sold anything":"")+
+    ", and this is the only Etsy account I have ever had.";
+  else if(val("b7")==="short") lead+=" I shopped on Etsy myself before I decided to try selling here, and this is the only Etsy account I have ever had.";
+  else if(val("c1")==="only") lead+=" I opened this shop myself to sell my own work, and it is the only Etsy account I have ever had.";
+  var what=val("d1");
+  if(made==="self") lead+=" I make and finish every item by hand myself"+(what?", "+what.toLowerCase():"")+".";
+  else if(made==="staff") lead+=" I design every piece myself"+(what?" — "+what.toLowerCase():"")+", and my small team makes them in my own workshop.";
+  else if(made==="both") lead+=" I design every piece myself"+(what?" — "+what.toLowerCase():"")+", made partly in my own workshop and partly by a partner I declare.";
+  else if(what) lead+=" My shop sells "+what.toLowerCase()+".";
+  p7.push(lead);
+
+  var m=[];
+  if(parseFloat(val("e4"))>0&&parseFloat(val("f1"))<=1) m.push("I spent money on advertising before my shop had proved itself");
+  if(val("e2")==="funds") m.push("which left me short when Etsy billed me");
+  if(val("e3")==="never"||val("e3")==="submitted") m.push("I left my bank verification unfinished for too long");
+  if(img.indexOf("ai")>-1) m.push("and I did not properly understand your requirements for listing photographs");
+  if(m.length)
+    p7.push("As a new seller I was still learning and I made real mistakes: "+m.join(", ")+". I take responsibility for all of it, and I have corrected what I can.");
+  else
+    p7.push("As a seller I was still learning your requirements, and I take responsibility for anything I got wrong.");
+
+  if(val("h1")==="no"&&val("f3")==="no")
+    p7.push("I have never had a policy warning, a dispute, or a case from a buyer.");
+  if(val("i1")) p7.push(val("i1"));
+
+  var offer="I respectfully ask for a manual review of my account. I am happy to provide my government ID, a bank statement";
+  if(made==="self"||made==="staff"||made==="both") offer+=", or photographs and video of my workshop, my machines, my team at work and my finished products, so you can see this is a real production workshop";
+  else if(made==="partner") offer+=", my original design files with their creation dates, or my correspondence with my production partner";
+  offer+=". Thank you for taking the time to review my appeal.";
+  p7.push(offer);
+  $("#o7").value=p7.join("\n\n");
+
+  /* placeholder + sample-data guard */
+  var joined=[$("#o3").value,$("#o5").value,$("#o6").value,$("#o7").value,$("#o1").textContent].join(" ");
+  var ph=joined.match(/\[[^\]]{3,}\]/g);
+  var g=$("#guard");
+  if(g){
+    var msgs=[];
+    if(!$("#seedFlag").hidden) msgs.push("Đây vẫn là DỮ LIỆU MẪU giả. Bấm “Xoá mẫu, nhập của tôi” trước khi dùng.");
+    if(ph) msgs.push("Đơn còn "+ph.length+" chỗ trống chưa điền: "+ph.join(" ")+" — điền hết trước khi dán vào form Etsy.");
+    g.hidden=!msgs.length;
+    g.textContent=msgs.join(" ");
+  }
+
+  /* pills */
+  var pills=[
+    ["Tài khoản duy nhất", val("c1")==="only"],
+    ["Đã trả hết nợ phí", val("e1")==="paid"||val("e1")==="none"],
+    ["Đơn đã ship có tracking", val("f2")==="shipped"],
+    ["Không cảnh báo, không tranh chấp", val("h1")==="no"&&val("f3")==="no"],
+    ["Ảnh thật tự chụp", img.indexOf("ai")<0&&img.indexOf("stolen")<0&&img.length>0],
+    ["Mạng dân cư, không che giấu", net.length>0&&net.indexOf("vps")<0&&net.indexOf("vpn")<0&&net.indexOf("proxy")<0&&net.indexOf("anti")<0]
+  ];
+  var pr=$("#pills"); pr.innerHTML="";
+  pills.forEach(function(p){
+    var s=document.createElement("span");
+    s.className="pill "+(p[1]?"on":"off");
+    s.textContent=(p[1]?"✓ ":"× ")+p[0];
+    pr.appendChild(s);
+  });
+
+  /* file code */
+  var shop=val("b1")||"CHUA DAT TEN";
+  $("#filecode").textContent="HS · "+shop.toUpperCase().replace(/\s+/g,"")+(val("b3")?" · "+val("b3"):"");
+}
+
+/* ---------- run ---------- */
+function run(){
+  var nm=nameCheck();
+  diagnose(nm);
+  mustDo(nm);
+  build(nm);
+  var w=$("#h2bWrap"); if(w) w.hidden = (val("h2")!=="yes");
+  var md=val("d2");
+  var sr=$("#staffRow"); if(sr) sr.hidden=!(md==="staff"||md==="both");
+  var wr=$("#wsRow");    if(wr) wr.hidden=!(md==="staff"||md==="both");
+  $$(".opt").forEach(function(l){
+    var i=l.querySelector("input"); if(!i)return;
+    var bad=["ai","stolen","vps","vpn","proxy","anti"].indexOf(i.value)>-1;
+    l.classList.toggle("on", i.checked&&!bad);
+    l.classList.toggle("on-bad", i.checked&&bad);
+  });
+}
+document.addEventListener("input",run);
+document.addEventListener("change",run);
+
+/* copy */
+$$("[data-copy]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var t=$("#"+b.getAttribute("data-copy"));
+    t.select(); t.setSelectionRange(0,999999);
+    try{ navigator.clipboard.writeText(t.value).then(function(){
+      var o=b.textContent; b.textContent="Đã copy";
+      setTimeout(function(){b.textContent=o},1400);
+    }).catch(function(){}); }catch(e){}
+  });
+});
+$$("[data-copytext]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var t=$("#"+b.getAttribute("data-copytext")).textContent;
+    try{ navigator.clipboard.writeText(t).then(function(){
+      var o=b.textContent; b.textContent="Đã copy";
+      setTimeout(function(){b.textContent=o},1400);
+    }).catch(function(){}); }catch(e){}
+  });
+});
+$("#copyAll").addEventListener("click",function(){
+  var txt=
+    "FIELD 1 - Legal full name\n"+$("#o1").textContent+
+    "\n\nFIELD 2 - Kind of items\n"+$("#o2").textContent+
+    "\n\nFIELD 3 - Sign-in locations\n"+$("#o3").value+
+    "\n\nFIELD 4 - Why appealing\n"+$("#o4").textContent+
+    "\n\nFIELD 5 - Actions taken\n"+$("#o5").value+
+    "\n\nFIELD 6 - How practices change\n"+$("#o6").value+
+    "\n\nFIELD 7 - Extenuating circumstances\n"+$("#o7").value;
+  var b=this;
+  try{ navigator.clipboard.writeText(txt).then(function(){
+    b.textContent="Đã copy"; setTimeout(function(){b.textContent="Copy tất cả"},1500);
+  }).catch(function(){}); }catch(e){}
+});
+
+/* clear */
+$("#clearBtn").addEventListener("click",function(){
+  $$("input[type=text],input[type=number],input[type=date]").forEach(function(i){i.value=""});
+  $$("select").forEach(function(s){s.value=""});
+  $$("input[type=checkbox]").forEach(function(c){c.checked=false});
+  $("#b5").value="1";
+  fillTable("ordRows",ORD_F,"gO",[]); fillTable("plcRows",PLC_F,"gP",[]);
+  $("#seedFlag").hidden=true;
+  run(); window.scrollTo({top:0,behavior:"smooth"});
+});
+
+/* ---------- persistence: browser-only, never leaves this device ---------- */
+var STORE="etsy_appeal_builder_v2";
+var FIELDS=["a1","a2","a3","a4","a5","b1","b2","b3","b4","b5","b6","b7","c1",
+  "b8","d1","d2","d3","d5","d6","d7","d9","d10","d11","e1","e2","e3","e4","e5","f1","f2","f3","f4","f5","i1",
+  "a7","a8","a9","a10","a11","a12","b9","b10","g2","g3","g4","h1","h2","h2b","h3"];
+var BOXES=["d4","g1"];
+
+function snapshot(){
+  var o={_v:1,_at:new Date().toISOString(),f:{},c:{}};
+  FIELDS.forEach(function(k){var e=$("#"+k); if(e) o.f[k]=e.value;});
+  BOXES.forEach(function(g){ o.c[g]=checks(g); });
+  o.orders=readTable("ordRows",ORD_F);
+  o.places=readTable("plcRows",PLC_F);
+  o.sample = !$("#seedFlag").hidden;
+  return o;
+}
+function apply(o){
+  if(!o||!o.f) return false;
+  FIELDS.forEach(function(k){var e=$("#"+k); if(e&&typeof o.f[k]==="string") e.value=o.f[k];});
+  BOXES.forEach(function(g){
+    $$("#"+g+" input").forEach(function(c){
+      c.checked = !!(o.c&&o.c[g]&&o.c[g].indexOf(c.value)>-1);
+    });
+  });
+  fillTable("ordRows",ORD_F,"gO",o.orders);
+  fillTable("plcRows",PLC_F,"gP",o.places);
+  $("#seedFlag").hidden = !o.sample;
+  return true;
+}
+var saveTimer=null;
+function save(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){
+    try{
+      localStorage.setItem(STORE, JSON.stringify(snapshot()));
+      var t=new Date();
+      $("#saveState").textContent="Đã lưu tạm lúc "+
+        String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0")+".";
+    }catch(e){
+      $("#saveState").textContent="Trình duyệt không cho lưu tạm — hãy bấm Lưu ra file để giữ dữ liệu.";
+    }
+  },400);
+}
+function restore(){
+  try{
+    var raw=localStorage.getItem(STORE);
+    if(!raw) return false;
+    return apply(JSON.parse(raw));
+  }catch(e){ return false; }
+}
+
+/* ---------- fictional example state, clearly labelled ---------- */
+function seed(){
+  var v={
+    a1:"NGUYEN VAN A", a2:"A", a3:"NGUYEN VAN", a4:"NGUYEN VAN A",
+    a7:"2023-01-01", a8:"5", a9:"2026-06-01",
+    a10:"Example City, Vietnam - personal phone - mobile data", a11:"Example City, Vietnam - personal laptop - home wifi",
+    a12:"example@example.invalid",
+    b1:"ExampleHandmadeShop", b2:"2026-06-01", b3:"2026-06-15", b4:"Example City",
+    b9:"10:00", b10:"etsy.com/shop/ExampleHandmadeShop",
+    b8:"EXAMPLE ONLY — replace this fictional suspension summary with the exact wording from your own Etsy email.",
+    d1:"handmade embroidered item", d6:"3", d9:"1",
+    d10:"Example City, Vietnam - home workshop",
+    e4:"0", e5:"0", f1:"0", i1:""
+  };
+  Object.keys(v).forEach(function(k){var e=$("#"+k); if(e) e.value=v[k];});
+  var sel={
+    a5:"yes", b5:"1", b6:"fraud", b7:"long", c1:"only",
+    d7:"me", d2:"staff", d3:"na", d11:"no", d5:"maybe",
+    e1:"paid", e2:"funds", e3:"submitted",
+    f2:"shipped", f3:"no",
+    g2:"1", g3:"no", g4:"no",
+    h1:"no", h2:"no", h3:"no"
+  };
+  Object.keys(sel).forEach(function(k){var e=$("#"+k); if(e) e.value=sel[k];});
+  ["home","mobile"].forEach(function(x){
+    var c=document.querySelector('#g1 input[value="'+x+'"]'); if(c) c.checked=true;});
+  var ai=document.querySelector('#d4 input[value="ai"]'); if(ai) ai.checked=true;
+
+  fillTable("ordRows",ORD_F,"gO",[
+    {num:"EXAMPLE-ORDER", placed:"2026-06-10", shipped:"2026-06-12",
+      item:"Example handmade item", price:"25", promo:"0", country:"Example country", track:"EXAMPLE-TRACK"}
+  ]);
+  fillTable("plcRows",PLC_F,"gP",[
+    {event:"Buyer account", city:"Example City", country:"Vietnam", device:"Personal phone", net:"Mobile data"},
+    {event:"Seller setup", city:"Example City", country:"Vietnam", device:"Personal laptop", net:"Home wifi"}
+  ]);
+  $("#seedFlag").hidden=false;
+}
+
+/* ---------- export / import / wipe ---------- */
+$("#exportBtn").addEventListener("click",function(){
+  var txt=JSON.stringify(snapshot(),null,2);
+  $("#jsonOut").value=txt;
+  $("#exportWrap").hidden=false;
+  try{
+    var name=(val("b1")||"etsy-appeal").replace(/[^A-Za-z0-9_-]/g,"")+"-"+
+      (new Date().toISOString().slice(0,10))+".json";
+    var url=URL.createObjectURL(new Blob([txt],{type:"application/json"}));
+    var a=document.createElement("a"); a.href=url; a.download=name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url)},2000);
+  }catch(e){}
+  $("#exportWrap").scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+$("#copyJson").addEventListener("click",function(){
+  var b=this;
+  try{ navigator.clipboard.writeText($("#jsonOut").value).then(function(){
+    b.textContent="Đã copy"; setTimeout(function(){b.textContent="Copy"},1400);
+  }).catch(function(){}); }catch(e){}
+});
+$("#importBtn").addEventListener("click",function(){ $("#importFile").click(); });
+$("#importFile").addEventListener("change",function(){
+  var f=this.files&&this.files[0]; if(!f) return;
+  var r=new FileReader();
+  r.onload=function(){
+    try{
+      if(apply(JSON.parse(r.result))){ run(); save();
+        $("#saveState").textContent="Đã mở file và nạp dữ liệu.";
+        window.scrollTo({top:0,behavior:"smooth"}); }
+    }catch(e){ $("#saveState").textContent="File không đọc được. Kiểm tra lại đúng file .json đã lưu từ trang này."; }
+  };
+  r.readAsText(f); this.value="";
+});
+$("#wipeBtn").addEventListener("click",function(){
+  if(!window.confirm("Xoá sạch toàn bộ dữ liệu đã nhập trên máy này? Không khôi phục được.")) return;
+  try{ localStorage.removeItem(STORE); }catch(e){}
+  $$("input[type=text],input[type=number],input[type=date]").forEach(function(i){i.value=""});
+  $$("select").forEach(function(x){x.value=""});
+  $$("input[type=checkbox]").forEach(function(c){c.checked=false});
+  $("#b5").value="1"; $("#seedFlag").hidden=true;
+  fillTable("ordRows",ORD_F,"gO",[]); fillTable("plcRows",PLC_F,"gP",[]);
+  $("#exportWrap").hidden=true;
+  $("#saveState").textContent="Đã xoá sạch dữ liệu trên máy này.";
+  run(); window.scrollTo({top:0,behavior:"smooth"});
+});
+
+/* ================= BACKEND ================= */
+/* The site key is public. Set it after creating a Turnstile widget for this domain.
+   The matching TURNSTILE_SECRET is a Worker secret and must never appear here. */
+var TURNSTILE_SITE_KEY = "REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY";
+var turnstileToken = "";
+function renderTurnstile(){
+  if(!window.turnstile||TURNSTILE_SITE_KEY.indexOf("REPLACE_")===0) return;
+  window.turnstile.render("#turnstileBox",{sitekey:TURNSTILE_SITE_KEY,callback:function(token){turnstileToken=token;},"expired-callback":function(){turnstileToken="";},"error-callback":function(){turnstileToken="";}});
+}
+function post(path,body,masterKey){
+  var headers={"Content-Type":"application/json"};
+  if(masterKey) headers.Authorization="Bearer "+masterKey;
+  return fetch(path,{method:"POST",headers:headers,credentials:"same-origin",body:JSON.stringify(body)}).then(function(r){
+    return r.json().catch(function(){return {ok:false,error:"Phản hồi máy chủ không hợp lệ."};});
+  });
+}
+
+$("#sendBtn").addEventListener("click",function(){
+  if(location.protocol==="file:"){ alert("Đang mở file trực tiếp từ máy nên không gửi được. Hãy mở qua địa chỉ web đã deploy."); return; }
+  $("#sendWrap").hidden=false;
+  $("#sendWrap").scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+$("#cancelSend").addEventListener("click",function(){ $("#sendWrap").hidden=true; });
+
+$("#doSend").addEventListener("click",function(){
+  var name=val("sName"), team=val("sTeam");
+  if(!name||!team){ $("#sendMsg").textContent="Điền tên và mã nhóm trước."; return; }
+  if(!$("#sConsent").checked){ $("#sendMsg").textContent="Bạn cần đồng ý gửi và lưu hồ sơ."; return; }
+  if(!turnstileToken){ $("#sendMsg").textContent="Hoàn tất xác minh chống bot trước khi gửi."; return; }
+  if(!$("#seedFlag").hidden && !window.confirm("Hồ sơ đang là DỮ LIỆU MẪU. Vẫn gửi?")) return;
+  var btn=this; btn.disabled=true; $("#sendMsg").textContent="Đang gửi...";
+  post("/api/submit",{team:team,name:name,shop:val("b1"),consent:true,turnstileToken:turnstileToken,data:snapshot(),
+    appeal:{o1:$("#o1").textContent,o2:$("#o2").textContent,o3:$("#o3").value,
+            o4:$("#o4").textContent,o5:$("#o5").value,o6:$("#o6").value,o7:$("#o7").value}})
+  .then(function(r){
+    btn.disabled=false;
+    $("#sendMsg").textContent = r&&r.ok
+      ? "Đã gửi. Mã hồ sơ: "+r.id+". Quản lý xem được ngay."
+      : "Gửi không thành công: "+((r&&r.error)||"lỗi không rõ");
+    }).catch(function(e){ btn.disabled=false;
+      $("#sendMsg").textContent="Không kết nối được máy chủ. Kiểm tra URL Worker."; });
+});
+
+$("#masterBtn").addEventListener("click",function(){
+  $("#masterWrap").hidden=!$("#masterWrap").hidden;
+  if(!$("#masterWrap").hidden) $("#masterWrap").scrollIntoView({behavior:"smooth",block:"nearest"});
+});
+$("#mClose").addEventListener("click",function(){ $("#masterWrap").hidden=true; });
+
+$("#mLoad").addEventListener("click",function(){
+  var k=val("mKey"); if(!k){ $("#mMsg").textContent="Nhập master key."; return; }
+  $("#mMsg").textContent="Đang tải...";
+  post("/api/list",{},k).then(function(r){
+    if(!r||!r.ok){ $("#mMsg").textContent="Không xem được: "+((r&&r.error)||"sai key"); return; }
+    var L=$("#mList"); L.innerHTML="";
+    $("#mCount").textContent=r.rows.length+" hồ sơ";
+    $("#mMsg").textContent = r.rows.length?"":"Chưa có hồ sơ nào.";
+    r.rows.forEach(function(row){
+      var el=document.createElement("div"); el.className="mrow";
+      var left=document.createElement("div");
+      left.innerHTML="<b></b><small></small>";
+      left.querySelector("b").textContent=(row.name||"(khong ten)")+" · "+(row.shop||"(chua dat ten shop)");
+      left.querySelector("small").textContent="#"+row.id+" · "+(row.created_at||"").replace("T"," ").slice(0,16)+" · nhóm "+row.team;
+      var b=document.createElement("button"); b.className="btn ghost sm"; b.textContent="Mở";
+      b.addEventListener("click",function(){
+        post("/api/get",{id:row.id},k).then(function(g){
+          if(!g||!g.ok){ $("#mMsg").textContent="Không mở được hồ sơ."; return; }
+          if(apply(g.row.data)){ run(); save();
+            $("#seedFlag").hidden=true;
+            $("#mMsg").textContent="Đã nạp hồ sơ #"+row.id+" của "+(row.name||"?")+" vào form.";
+            window.scrollTo({top:0,behavior:"smooth"}); }
+        });
+      });
+      var del=document.createElement("button"); del.className="btn ghost sm"; del.textContent="Xoá";
+      del.addEventListener("click",function(){
+        if(!window.confirm("Xoá vĩnh viễn hồ sơ #"+row.id+"?")) return;
+        post("/api/delete",{id:row.id},k).then(function(d){
+          if(d&&d.ok){ el.remove(); $("#mMsg").textContent="Đã xoá hồ sơ #"+row.id+"."; }
+          else $("#mMsg").textContent="Không xoá được: "+((d&&d.error)||"lỗi không rõ");
+        });
+      });
+      var actions=document.createElement("div"); actions.style.display="flex"; actions.style.gap="6px"; actions.appendChild(b); actions.appendChild(del);
+      el.appendChild(left); el.appendChild(actions); L.appendChild(el);
+    });
+  }).catch(function(){ $("#mMsg").textContent="Không kết nối được máy chủ."; });
+});
+
+document.addEventListener("input",save);
+document.addEventListener("change",save);
+
+/* ---------- boot: saved data wins over the sample ---------- */
+if(!restore()) seed();
+window.addEventListener("load",renderTurnstile);
+run();
+})();
+</script>
+</body>
+</html>

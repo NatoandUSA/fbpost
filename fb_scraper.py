@@ -40,10 +40,13 @@ def scrape_comments(post_url, max_comments=50, account_id=None, gpm_api_url=None
                 context = browser_obj.new_context(storage_state=state_arg)
                 page = context.new_page()
 
+            page.set_default_timeout(45000)
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
             print("Đang mở link bài viết...")
-            page.goto(post_url)
-            page.wait_for_load_state("networkidle")
+            try:
+                page.goto(post_url, wait_until="domcontentloaded", timeout=45000)
+            except Exception as nav_err:
+                print(f"⚠️ Cảnh báo tải trang: {nav_err}. Tiếp tục quét...")
             time.sleep(random.uniform(3.0, 5.0))
             
             print("Đang tải thêm bình luận...")

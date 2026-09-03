@@ -137,8 +137,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     }
 
+    // ---- Build & Version Info ----
+    async function loadBuildInfo() {
+        try {
+            const res = await fetch('/api/app-info');
+            const data = await res.json();
+            const verText = data.version ? `v${data.version}` : 'v5.5.0';
+            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-03 23:05';
+            
+            const sidebarVer = document.getElementById('sidebar-version-badge');
+            const sidebarBuild = document.getElementById('sidebar-build-time');
+            const headerVer = document.getElementById('header-version-text');
+            const headerBuild = document.getElementById('header-build-time-text');
+            const buildInfoEl = document.getElementById('build-info');
+            
+            if (sidebarVer) sidebarVer.textContent = verText;
+            if (sidebarBuild) sidebarBuild.textContent = buildText;
+            if (headerVer) headerVer.textContent = verText;
+            if (headerBuild) headerBuild.textContent = buildText;
+            if (buildInfoEl) buildInfoEl.textContent = `UI ${verText} · Server ${verText} (${buildText})`;
+        } catch (e) {
+            console.warn('Không thể đọc thông tin build:', e);
+        }
+    }
+
     // ---- Auth Status ----
     async function checkStatus() {
+        loadBuildInfo();
         try {
             const res = await fetch('/api/status');
             const data = await res.json();

@@ -19,7 +19,13 @@
                     <rect width="36" height="36" rx="8" fill="#2563EB"/>
                     <path d="M22.5 12.5H13.5C12.95 12.5 12.5 12.95 12.5 13.5V22.5C12.5 23.05 12.95 23.5 13.5 23.5H22.5C23.05 23.5 23.5 23.05 23.5 22.5V13.5C23.5 12.95 23.05 12.5 22.5 12.5ZM21.5 18H18.5V21H17.5V18H14.5V17H17.5V14H18.5V17H21.5V18Z" fill="white"/>
                 </svg>
-                <span class="brand-text">FB Auto 2026</span>
+                <div style="display:flex; flex-direction:column;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span class="brand-text">FB Auto 2026</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#2563EB; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">v5.5.0</span>
+                    </div>
+                    <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-03 23:05</span>
+                </div>
             </div>
             
             <div class="sidebar-menu">
@@ -108,6 +114,12 @@
                     </div>
                 </div>
                 <div class="header-right">
+                    <div id="header-build-badge" style="display:flex; align-items:center; gap:6px; background:#F1F5F9; border:1px solid #E2E8F0; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600; color:#334155;">
+                        <span style="display:inline-block; width:7px; height:7px; background:#10B981; border-radius:50%;"></span>
+                        <span id="header-version-text">v5.5.0</span>
+                        <span style="color:#94A3B8;">|</span>
+                        <span id="header-build-time-text" style="color:#64748B; font-weight:500;">Build: 2026-09-03 23:05</span>
+                    </div>
                     <div id="auth-status" class="status-badge checking">
                         <span class="status-dot"></span>
                         <span class="status-text">Đang kiểm tra...</span>

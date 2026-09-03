@@ -1,0 +1,38 @@
+name = "etsy-appeal-api"
+main = "worker.js"
+compatibility_date = "2026-09-03"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Exact HTTPS origin serving this app. Change if you use another custom domain.
+APP_ORIGIN = "https://appeal.theglobalserviceteam.site"
+# Submissions are automatically deleted after this many days (7–365).
+RETENTION_DAYS = "90"
+
+# Bat log ngay trong file cau hinh, khong can vao Dashboard.
+# Sua o Dashboard roi deploy lai bang wrangler se bi ghi de - de o day thi khong.
+[observability]
+enabled = true
+head_sampling_rate = 0.1
+
+# Limit API calls after Worker code starts. namespace_id is any integer unique
+# within this Cloudflare account; keep it stable once deployed.
+[[ratelimits]]
+name = "API_RATE_LIMIT"
+namespace_id = "1001"
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+# Worker phuc vu luon file HTML tinh trong ./public
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "etsy-appeals"
+database_id = "85ed47c4-8b60-4423-87ec-7f146fa08beb"
+
+[triggers]
+crons = ["17 3 * * *"]

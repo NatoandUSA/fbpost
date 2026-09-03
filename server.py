@@ -26,7 +26,8 @@ VAULT_FILE = "account_vault.json"
 UPLOAD_DIR = Path("uploads").resolve()
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment"}
-APP_VERSION = "5.4.7"
+APP_VERSION = "5.5.0"
+BUILD_TIME = "2026-09-03 23:05"
 
 
 def app_build_info():
@@ -34,7 +35,8 @@ def app_build_info():
     source_mtime = datetime.fromtimestamp(Path(__file__).stat().st_mtime, timezone.utc)
     return {
         "version": APP_VERSION,
-        "built_at": source_mtime.strftime("%Y-%m-%d %H:%M UTC"),
+        "built_at": BUILD_TIME,
+        "source_updated_at": source_mtime.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "group_manager_available": True,
     }
 
