@@ -1,0 +1,200 @@
+# -*- coding: utf-8 -*-
+"""
+ai_spinner.py - Module Xào Bài Viết Tự Động (AI Content Spinner)
+Hỗ trợ:
+1. Gemini AI Online: Tận dụng Gemini 1.5 Flash / 2.5 Flash API để tạo bài viết độc nhất 100%.
+2. Local Smart Spinner Offline: Tự động phân tích và sinh biến thể thông minh chuyên ngành Homestay Huế / Du lịch
+   ngay cả khi không có mạng hoặc không có API Key.
+"""
+
+import os
+import re
+import random
+import json
+import urllib.request
+import urllib.error
+
+# Kho ngữ liệu thông minh Local Spinner cho Homestay Huế & Du lịch
+HOOKS_HOMESTAY = [
+    "🌿 Tìm một chốn dừng chân bình yên ngay trung tâm Cố Đô Huế? Đừng bỏ lỡ căn homestay cực xinh này nhé!",
+    "✨ Trải nghiệm Huế thật dịu dàng và trọn vẹn cùng căn homestay không gian xanh mát, cực chill!",
+    "🌸 Đi Huế chơi mà chưa biết ở đâu vừa ấm cúng, view đẹp lại gần các điểm check-in? Ghé ngay homestay nhà mình nhé!",
+    "🏡 Góc nhỏ bình yên giữa lòng thành phố Huế mộng mơ — Nơi lý tưởng để nghỉ ngơi và nạp lại năng lượng!",
+    "☀️ Đón nắng sớm Cố Đô tại không gian homestay thoáng đãng, phong cách mộc mạc và siêu ấm cúng!",
+    "🍃 Du lịch Huế tự túc cùng gia đình hoặc nhóm bạn? Căn homestay siêu tiện nghi này sinh ra là dành cho bạn!",
+    "🌟 Review một homestay Huế xinh ngất ngây, giá cực hạt dẻ mà dịch vụ thì 10/10!",
+    "🛶 Sớm thức dậy bên tách trà nóng, nghe tiếng chim hót giữa không gian yên ả của xứ Huế...",
+]
+
+HIGHLIGHTS_HOMESTAY = [
+    "✅ Phòng ốc sạch sẽ tinh tươm, đón gió và ánh sáng tự nhiên.",
+    "✅ Vị trí đắc địa, chỉ mất vài phút di chuyển đến Đại Nội, Sông Hương, Cầu Tràng Tiền và phố đi bộ.",
+    "✅ Đầy đủ tiện nghi: Điều hòa mát lạnh, máy nước nóng, máy giặt, bếp nấu ăn tự do như ở nhà.",
+    "✅ Không gian sân vườn xanh mát, góc chill sống ảo lung linh từng centimet.",
+    "✅ Chủ nhà thân thiện, nhiệt tình hỗ trợ thuê xe máy, tư vấn địa điểm ăn uống ngon chuẩn vị Huế.",
+    "✅ Giá phòng hợp lý, hỗ trợ đặt phòng linh hoạt cho cả khách lẻ và gia đình.",
+]
+
+CALL_TO_ACTIONS = [
+    "📲 Nhắn tin ngay cho homestay hoặc liên hệ hotline để nhận ưu đãi phòng tốt nhất hôm nay nhé!",
+    "👉 Inbox trực tiếp cho page để được tư vấn phòng trống và nhận giá ưu đãi cho chuyến đi sắp tới!",
+    "💌 Số lượng phòng có hạn vào cuối tuần, bạn hãy nhắn trước để giữ phòng đẹp nhất nha!",
+    "📞 Liên hệ ngay hôm nay để nhận voucher giảm giá đặc biệt cho kỳ nghỉ tại Cố Đô Huế!",
+    "🛎️ Chúc bạn có một chuyến đi khám phá Huế thật nhiều kỷ niệm đáng nhớ cùng người thân yêu!",
+]
+
+HASHTAG_POOLS = [
+    "#homestayhue #dulichhue #huecity #checkinhue #khachsanhue #homestaygiarehue #phongchothuehue",
+    "#huehomestay #reviewhue #amthuchue #codohue #dulichtutuc #homestayviewdep",
+    "#homestay #hue #vietnamtravel #stayinhue #travelvietnam #huevietnam #visithue"
+]
+
+
+def extract_core_info(content: str) -> dict:
+    """
+    Trích xuất các thông tin cốt lõi quan trọng: SĐT, Zalo, Địa chỉ, Giá phòng, Link từ bài viết gốc
+    để đảm bảo dù xào bài thế nào cũng không bị mất thông tin liên hệ.
+    """
+    phones = re.findall(r'(?:0|\+84)[1-9][0-9]{8,9}', content)
+    prices = re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:k|vnđ|vnd|đ|triệu|k/đêm|k/ngày)\b', content, re.IGNORECASE)
+    links = re.findall(r'https?://[^\s]+', content)
+    
+    # Tìm dòng chứa địa chỉ
+    addresses = []
+    for line in content.split('\n'):
+        if any(kw in line.lower() for kw in ['địa chỉ:', 'đc:', 'address:', 'tại:']):
+            addresses.append(line.strip())
+            
+    return {
+        "phones": list(set(phones)),
+        "prices": list(set(prices)),
+        "links": list(set(links)),
+        "addresses": addresses
+    }
+
+
+def spin_content_local(content: str) -> str:
+    """
+    Xào bài thông minh bằng quy tắc ngữ nghĩa Local (Hoàn toàn Offline & Miễn phí).
+    Tự động tái cấu trúc bài viết: Mở bài mới lạ + Thân bài giữ nguyên cốt lõi + Điểm nhấn + Lời kêu gọi + Hashtag.
+    """
+    if not content or not content.strip():
+        return content
+
+    core = extract_core_info(content)
+    lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
+    
+    # Lấy các dòng thân bài chính (bỏ các dòng hook hoặc hashtag cũ)
+    body_lines = []
+    for line in lines:
+        if not line.startswith('#') and not any(h in line for h in ['#', 'Homestay Huế', 'Chào']):
+            body_lines.append(line)
+            
+    # Tạo mở đầu ngẫu nhiên
+    hook = random.choice(HOOKS_HOMESTAY)
+    
+    # Chọn ngẫu nhiên 2 - 3 điểm nhấn tiện ích
+    selected_highlights = random.sample(HIGHLIGHTS_HOMESTAY, random.randint(2, 3))
+    
+    # Lời kêu gọi
+    cta = random.choice(CALL_TO_ACTIONS)
+    
+    # Hashtag
+    hashtags = random.choice(HASHTAG_POOLS)
+    
+    parts = [hook, ""]
+    
+    if body_lines:
+        parts.append("\n".join(body_lines[:4]))
+        parts.append("")
+        
+    parts.extend(selected_highlights)
+    parts.append("")
+    
+    # Gắn lại thông tin liên hệ nếu có
+    if core["phones"]:
+        parts.append(f"☎️ Hotline / Zalo đặt phòng: {' - '.join(core['phones'])}")
+    if core["addresses"]:
+        parts.append(f"📍 {core['addresses'][0]}")
+    if core["prices"]:
+        parts.append(f"💵 Giá phòng chỉ từ: {core['prices'][0]}")
+    if core["links"]:
+        parts.append(f"🔗 Xem thêm tại: {core['links'][0]}")
+        
+    parts.append("")
+    parts.append(cta)
+    parts.append("")
+    parts.append(hashtags)
+    
+    return "\n".join(parts).strip()
+
+
+def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") -> str:
+    """
+    Xào bài viết qua Google Gemini API (Online).
+    Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
+    """
+    if not api_key:
+        raise ValueError("Chưa cung cấp Gemini API Key.")
+        
+    prompt = (
+        f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản.\n"
+        f"Hãy viết lại bài đăng Facebook sau đây thành một phiên bản hoàn toàn mới lạ, hấp dẫn, văn phong {style}, "
+        f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
+        f"YÊU CẦU BẮT BUỘC:\n"
+        f"- Giữ nguyên toàn bộ số điện thoại, Zalo, địa chỉ, giá phòng hoặc link nếu có trong bài gốc.\n"
+        f"- Viết bằng Tiếng Việt tự nhiên, phù hợp đăng nhóm cộng đồng hoặc fanpage.\n"
+        f"- KHÔNG thêm bất kỳ lời dẫn giải nào như 'Dưới đây là bài viết...'. Chỉ trả về duy nhất nội dung bài đăng.\n\n"
+        f"NỘI DUNG BÀI GỐC:\n{content}"
+    )
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.85,
+            "topP": 0.95,
+            "maxOutputTokens": 1024
+        }
+    }
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"}
+    )
+
+    with urllib.request.urlopen(req, timeout=20) as response:
+        res_data = json.loads(response.read().decode("utf-8"))
+        
+    candidates = res_data.get("candidates", [])
+    if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
+        spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
+        if spun_text:
+            return spun_text
+            
+    raise Exception("Gemini không trả về nội dung hợp lệ.")
+
+
+def generate_unique_variant(content: str, api_key: str = None) -> str:
+    """
+    Hàm giao tiếp tổng quát: Thử dùng Gemini API nếu có key hợp lệ,
+    nếu lỗi hoặc không có key sẽ tự động chuyển sang Local Smart Spinner.
+    Đảm bảo 100% luôn luôn có bài viết xào mới thành công!
+    """
+    if not content or not content.strip():
+        return content
+        
+    if api_key and len(api_key.strip()) > 10:
+        try:
+            return spin_content_gemini(content, api_key.strip())
+        except Exception as e:
+            print(f"⚠️ [AI Spinner] Gemini API gặp lỗi ({e}), chuyển sang chế độ Local Smart Spinner.")
+            
+    return spin_content_local(content)

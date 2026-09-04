@@ -32,16 +32,28 @@ def main():
     group_parser.add_argument("url", help="The full URL of the Facebook Group")
     group_parser.add_argument("content", help="The text content of your post")
     group_parser.add_argument("--image", help="Absolute path to an image file", default=None)
+    group_parser.add_argument("--images", nargs="*", default=None, help="List of image paths")
+    group_parser.add_argument("--photos-folder", default=None, help="Folder containing images to pick randomly")
+    group_parser.add_argument("--photo-count", default="2-4", help="Number of photos to pick from folder (default: 2-4)")
     group_parser.add_argument("--feeling", action="store_true", help="Add a random feeling to the post")
     group_parser.add_argument("--checkin", action="store_true", help="Add a random check-in location to the post")
+    group_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
+    group_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
+    group_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
     
     # Page command
     page_parser = subparsers.add_parser("page", help="Post to a Facebook Page you manage")
     page_parser.add_argument("url", help="The full URL of the Facebook Page")
     page_parser.add_argument("content", help="The text content of your post")
     page_parser.add_argument("--image", help="Absolute path to an image file", default=None)
+    page_parser.add_argument("--images", nargs="*", default=None, help="List of image paths")
+    page_parser.add_argument("--photos-folder", default=None, help="Folder containing images to pick randomly")
+    page_parser.add_argument("--photo-count", default="2-4", help="Number of photos to pick from folder (default: 2-4)")
     page_parser.add_argument("--feeling", action="store_true", help="Add a random feeling to the post")
     page_parser.add_argument("--checkin", action="store_true", help="Add a random check-in location to the post")
+    page_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
+    page_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
+    page_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
     
     # Thread command
     thread_parser = subparsers.add_parser("thread", help="Send a message to a Messenger Thread")
@@ -75,10 +87,24 @@ def main():
         login_account(args.account_id, args.gpm_api)
     elif args.command == "group":
         from fb_group import post_to_group
-        post_to_group(args.url, args.content, args.image, args.account_id, args.gpm_api, args.feeling, args.checkin)
+        img_arg = args.images if args.images else args.image
+        post_to_group(
+            args.url, args.content, img_arg, args.account_id, args.gpm_api,
+            args.feeling, args.checkin,
+            photos_folder=args.photos_folder, photo_count=args.photo_count,
+            auto_spin=args.auto_spin, gemini_key=args.gemini_key,
+            skip_duplicate=args.skip_duplicate
+        )
     elif args.command == "page":
         from fb_page import post_to_page
-        post_to_page(args.url, args.content, args.image, args.account_id, args.gpm_api, args.feeling, args.checkin)
+        img_arg = args.images if args.images else args.image
+        post_to_page(
+            args.url, args.content, img_arg, args.account_id, args.gpm_api,
+            args.feeling, args.checkin,
+            photos_folder=args.photos_folder, photo_count=args.photo_count,
+            auto_spin=args.auto_spin, gemini_key=args.gemini_key,
+            skip_duplicate=args.skip_duplicate
+        )
     elif args.command == "thread":
         from fb_thread import send_message
         send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)

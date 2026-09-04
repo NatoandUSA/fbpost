@@ -26,8 +26,8 @@ VAULT_FILE = "account_vault.json"
 UPLOAD_DIR = Path("uploads").resolve()
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment"}
-APP_VERSION = "5.5.2"
-BUILD_TIME = "2026-09-04 06:45"
+APP_VERSION = "5.6.0"
+BUILD_TIME = "2026-09-04 07:30"
 
 
 def app_build_info():
@@ -846,6 +846,38 @@ def api_posted_links():
     except Exception:
         return jsonify([])
 
+@app.route('/api/ai/spin', methods=['POST'])
+def api_ai_spin():
+    from ai_spinner import generate_unique_variant
+    data = json_body()
+    content = data.get("content", "").strip()
+    api_key = data.get("apiKey", "").strip()
+    if not content:
+        return jsonify({"error": "Vui lòng nhập nội dung bài viết cần xào."}), 400
+    try:
+        spun = generate_unique_variant(content, api_key)
+        return jsonify({"success": True, "spun_content": spun})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/photos/list', methods=['GET'])
+def api_photos_list():
+    folder = request.args.get("folder", "uploads").strip()
+    target_dir = Path(folder).resolve()
+    if not target_dir.exists() or not target_dir.is_dir():
+        return jsonify({"exists": False, "count": 0, "photos": []})
+    valid_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    photos = []
+    for p in target_dir.iterdir():
+        if p.is_file() and p.suffix.lower() in valid_exts:
+            photos.append(p.name)
+    return jsonify({
+        "exists": True,
+        "folder": str(target_dir),
+        "count": len(photos),
+        "photos": photos[:50]
+    })
+
 @app.route('/api/run', methods=['POST'])
 def run_script():
     import random
@@ -871,6 +903,13 @@ def run_script():
     # Feeling and checkin settings
     feeling = data.get('feeling', False)
     checkin = data.get('checkin', False)
+
+    # NCL FB Pro Inspirations: AI Content Spinner, Random Photo Picker, Anti-Duplicate 24h
+    auto_spin = data.get('autoSpin', False)
+    gemini_api_key = data.get('geminiApiKey', '')
+    photo_folder = data.get('photoFolder', '').strip()
+    photo_count_mode = data.get('photoCountMode', '2-4')
+    skip_duplicate = data.get('skipDuplicate24h', True)
     
     def generate():
         process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
@@ -1044,6 +1083,34 @@ def run_script():
                 yield f"Error: Target {i+1} has an invalid image path.\n"
                 continue
 
+            # 1. Kiểm tra lọc trùng lặp 24h
+            if skip_duplicate and cmd in ("group", "page"):
+                from utils import is_recently_posted
+                is_dup, hours_ago, posted_at = is_recently_posted(target, hours=24.0)
+                if is_dup:
+                    yield f"\n========== [Mục tiêu {i+1}/{total}] ==========\n"
+                    yield f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm/Trang {target} đã được đăng lúc {posted_at} ({hours_ago}h trước). Tự động bỏ qua để bảo vệ tài khoản.\n"
+                    continue
+
+            # 2. Xào bài viết độc nhất qua AI Content Spinner nếu bật
+            task_content = content
+            if auto_spin and cmd in ("group", "page"):
+                from ai_spinner import generate_unique_variant
+                try:
+                    task_content = generate_unique_variant(content, gemini_api_key)
+                    yield f"🤖 [AI Content Spinner] Đã tạo biến thể bài viết mới cho mục tiêu {i+1}/{total}!\n"
+                except Exception as spin_err:
+                    yield f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n"
+                    task_content = content
+
+            # 3. Bốc ảnh ngẫu nhiên từ thư mục nếu có chỉ định và task chưa có ảnh
+            task_images = []
+            if photo_folder and not image:
+                from utils import pick_random_photos
+                task_images = pick_random_photos(photo_folder, photo_count_mode)
+                if task_images:
+                    yield f"📁 [Thư mục ảnh] Đã bốc ngẫu nhiên {len(task_images)} ảnh cho mục tiêu {i+1}/{total}.\n"
+
             # Xoay tua Profile GPM nếu bật rotate_accounts
             if rotate_accounts and accounts_pool:
                 curr_acc = accounts_pool[i % len(accounts_pool)]
@@ -1055,9 +1122,11 @@ def run_script():
             yield f"\n========== [Target {i+1}/{total}] ==========\n"
             yield f"Posting to: {target}\n"
             
-            full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, content]
+            full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]
             if image:
                 full_cmd.extend(["--image", image])
+            elif task_images:
+                full_cmd.extend(["--images"] + task_images)
             if task_feeling:
                 full_cmd.append("--feeling")
             if task_checkin:

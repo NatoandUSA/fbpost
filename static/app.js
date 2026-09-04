@@ -1103,11 +1103,27 @@ document.addEventListener('DOMContentLoaded', () => {
         payload.delayMin = delayMin;
         payload.delayMax = delayMax;
 
-        // Add Feeling and Check-in parameters if checking Group or Page commands
+        // Add Feeling, Check-in, AI Spin, Photo Folder, and Anti-Duplicate parameters
         if (command === 'group' || command === 'page') {
-            payload.feeling = postFeelingOpt.checked;
-            payload.checkin = postCheckinOpt.checked;
+            payload.feeling = postFeelingOpt ? postFeelingOpt.checked : false;
+            payload.checkin = postCheckinOpt ? postCheckinOpt.checked : false;
+
+            const autoSpinOpt = document.getElementById('auto-spin-opt');
+            payload.autoSpin = autoSpinOpt ? autoSpinOpt.checked : false;
+
+            const geminiKeyInput = document.getElementById('gemini-api-key-input');
+            payload.geminiApiKey = geminiKeyInput ? geminiKeyInput.value.trim() : '';
+
+            const photoFolderInput = document.getElementById('photo-folder-input');
+            payload.photoFolder = photoFolderInput ? photoFolderInput.value.trim() : '';
+
+            const photoCountMode = document.getElementById('photo-count-mode');
+            payload.photoCountMode = photoCountMode ? photoCountMode.value : '2-4';
+
+            const skipDuplicateOpt = document.getElementById('skip-duplicate-24h-opt');
+            payload.skipDuplicate24h = skipDuplicateOpt ? skipDuplicateOpt.checked : true;
         }
+
 
         try {
             const response = await fetch('/api/run', {
@@ -1378,14 +1394,57 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ---- Auto-resize textarea ----
-    const composerTextarea = document.querySelector('.composer-textarea');
-    if (composerTextarea) {
-        composerTextarea.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = this.scrollHeight + 'px';
+    // ---- AI Content Spinner Buttons ----
+    const aiSpinBtn = document.getElementById('ai-spin-btn');
+    const toggleGeminiKeyBtn = document.getElementById('toggle-gemini-key-btn');
+    const geminiKeyContainer = document.getElementById('gemini-key-container');
+    const geminiApiKeyInput = document.getElementById('gemini-api-key-input');
+
+    if (toggleGeminiKeyBtn && geminiKeyContainer) {
+        toggleGeminiKeyBtn.addEventListener('click', () => {
+            geminiKeyContainer.classList.toggle('hidden');
+            if (!geminiKeyContainer.classList.contains('hidden') && geminiApiKeyInput) {
+                geminiApiKeyInput.focus();
+            }
         });
     }
+
+    if (aiSpinBtn) {
+        aiSpinBtn.addEventListener('click', async () => {
+            const content = postContent.value.trim();
+            if (!content) {
+                showToast('Vui lòng nhập nội dung bài viết trước khi xào bài!', 'error');
+                return;
+            }
+            const origText = aiSpinBtn.innerHTML;
+            aiSpinBtn.disabled = true;
+            aiSpinBtn.innerHTML = '⏳ Đang xào bài...';
+            try {
+                const res = await fetch('/api/ai/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: content,
+                        apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
+                    })
+                });
+                const data = await res.json();
+                if (data.success && data.spun_content) {
+                    postContent.value = data.spun_content;
+                    showToast('Đã xào mới nội dung bài viết thành công!', 'success');
+                    appendLog('🤖 [AI Content Spinner] Đã viết lại bài viết với biến thể mới lạ, chống trùng lặp!');
+                } else {
+                    showToast(data.error || 'Không thể xào bài!', 'error');
+                }
+            } catch (err) {
+                showToast(`Lỗi: ${err.message}`, 'error');
+            } finally {
+                aiSpinBtn.disabled = false;
+                aiSpinBtn.innerHTML = origText;
+            }
+        });
+    }
+
 
     // =========================================================================
     // CONTENT HUB LOGIC INTEGRATION

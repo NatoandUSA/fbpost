@@ -4,11 +4,33 @@ import time
 import random
 import re
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser, add_feeling, add_checkin, scrape_post_link, attach_image_to_composer
+from utils import (
+    process_spintax, human_type, load_accounts, launch_browser,
+    close_browser, add_feeling, add_checkin, scrape_post_link,
+    attach_image_to_composer, pick_random_photos, is_recently_posted
+)
+from ai_spinner import generate_unique_variant
 
 STATE_FILE = "state.json"
 
-def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False):
+def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
+                  photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False):
+    # 1. Kiểm tra lọc trùng lặp 24h nếu bật
+    if skip_duplicate:
+        is_dup, hours_ago, posted_at = is_recently_posted(group_url)
+        if is_dup:
+            print(f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm {group_url} đã được đăng lúc {posted_at} ({hours_ago}h trước). Bỏ qua theo cài đặt bảo vệ tài khoản.")
+            return
+
+    # 2. Xào bài viết qua AI Content Spinner nếu bật
+    if auto_spin:
+        print("🤖 [AI Spinner] Đang tạo biến thể bài viết mới lạ, chống trùng lặp spam...")
+        content = generate_unique_variant(content, gemini_key)
+
+    # 3. Bốc ảnh ngẫu nhiên từ thư mục nếu có chỉ định
+    if photos_folder and not image_path:
+        image_path = pick_random_photos(photos_folder, photo_count)
+
     print(f"👉 Bắt đầu mở Group và đăng bài: {group_url}")
     content = process_spintax(content)
     

@@ -290,15 +290,76 @@ def close_browser(browser_or_context, account, api_url=None):
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 
+def pick_random_photos(folder_path, count_mode="2-4"):
+    """
+    Quét thư mục ảnh và bốc ngẫu nhiên số lượng ảnh theo cấu hình:
+    count_mode: '2-4' (ngẫu nhiên 2 đến 4 ảnh), '1', '2', '3', '4', hoặc 'all'.
+    Trả về danh sách đường dẫn tuyệt đối của các ảnh được chọn.
+    """
+    if not folder_path or not os.path.exists(folder_path):
+        return []
+        
+    valid_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    photos = []
+    try:
+        for entry in os.listdir(folder_path):
+            full_path = os.path.join(folder_path, entry)
+            if os.path.isfile(full_path):
+                ext = os.path.splitext(entry)[1].lower()
+                if ext in valid_exts:
+                    photos.append(os.path.abspath(full_path))
+    except Exception as e:
+        print(f"⚠️ Lỗi khi quét thư mục ảnh {folder_path}: {e}")
+        return []
+
+    if not photos:
+        return []
+
+    # Xáo trộn ngẫu nhiên
+    random.shuffle(photos)
+
+    # Xác định số lượng ảnh cần lấy
+    total = len(photos)
+    if count_mode == "2-4":
+        count = random.randint(min(2, total), min(4, total))
+    elif count_mode == "all":
+        count = total
+    else:
+        try:
+            count = min(int(count_mode), total)
+        except Exception:
+            count = min(2, total)
+
+    selected = photos[:count]
+    try:
+        print(f"[Bốc ảnh ngẫu nhiên] Đã chọn {len(selected)}/{total} ảnh từ thư mục '{folder_path}'")
+    except UnicodeEncodeError:
+        print(f"[Boc anh ngau nhien] Da chon {len(selected)}/{total} anh tu '{folder_path}'")
+    return selected
+
+
+
 def attach_image_to_composer(page, dialog, image_path):
     """
     Đính kèm hình ảnh chuẩn xác vào khung soạn thảo Facebook (Group & Page).
+    Hỗ trợ cả 1 file ảnh (str) hoặc danh sách nhiều ảnh (list[str]).
     Tự động bấm nút Ảnh/video để mở vùng chọn file, sau đó gán file ảnh vào đúng input file.
     """
-    if not image_path or not os.path.exists(image_path):
+    if not image_path:
         return False
 
-    print(f"📸 Đang đính kèm hình ảnh: {image_path}")
+    # Chuẩn hóa về danh sách file tồn tại
+    if isinstance(image_path, str):
+        files_to_attach = [image_path] if os.path.exists(image_path) else []
+    elif isinstance(image_path, (list, tuple)):
+        files_to_attach = [f for f in image_path if f and os.path.exists(f)]
+    else:
+        files_to_attach = []
+
+    if not files_to_attach:
+        return False
+
+    print(f"📸 Đang đính kèm {len(files_to_attach)} hình ảnh vào bài viết...")
     attached = False
 
     # 1. Tìm nút "Ảnh/video" trong Dialog
@@ -322,9 +383,9 @@ def attach_image_to_composer(page, dialog, image_path):
             with page.expect_file_chooser(timeout=3500) as fc_info:
                 photo_btn.click(force=True)
             fc = fc_info.value
-            fc.set_files(image_path)
+            fc.set_files(files_to_attach)
             attached = True
-            print("✅ Đã chọn ảnh thành công qua File Chooser.")
+            print(f"✅ Đã chọn {len(files_to_attach)} ảnh thành công qua File Chooser.")
         except Exception:
             pass
 
@@ -337,9 +398,9 @@ def attach_image_to_composer(page, dialog, image_path):
                     with page.expect_file_chooser(timeout=3500) as fc_info:
                         dropzone.click(force=True)
                     fc = fc_info.value
-                    fc.set_files(image_path)
+                    fc.set_files(files_to_attach)
                     attached = True
-                    print("✅ Đã chọn ảnh thành công qua Dropzone File Chooser.")
+                    print(f"✅ Đã chọn {len(files_to_attach)} ảnh thành công qua Dropzone File Chooser.")
                 except Exception:
                     pass
         except Exception:
@@ -352,9 +413,9 @@ def attach_image_to_composer(page, dialog, image_path):
             for idx in range(inputs.count()):
                 inp = inputs.nth(idx)
                 try:
-                    inp.set_input_files(image_path)
+                    inp.set_input_files(files_to_attach)
                     attached = True
-                    print("✅ Đã gán ảnh thành công vào thẻ input file của Facebook.")
+                    print(f"✅ Đã gán {len(files_to_attach)} ảnh thành công vào thẻ input file của Facebook.")
                     break
                 except Exception:
                     continue
@@ -370,6 +431,7 @@ def attach_image_to_composer(page, dialog, image_path):
         except Exception:
             time.sleep(4.0)
     return attached
+
 
 def add_feeling(page):
     """
@@ -467,8 +529,10 @@ def record_posted_link(target, post_url, content=""):
         
         # Tránh trùng lặp
         if not any(item.get("url") == post_url for item in items):
+            now_ts = time.time()
             item = {
-                "id": str(int(time.time() * 1000)),
+                "id": str(int(now_ts * 1000)),
+                "timestamp": now_ts,
                 "target": target,
                 "url": post_url,
                 "content_preview": (content[:120] + "...") if len(content) > 120 else content,
@@ -482,6 +546,60 @@ def record_posted_link(target, post_url, content=""):
             print(f"💾 Đã lưu bài viết vào Lịch sử đăng: {post_url}")
     except Exception as e:
         print(f"⚠️ Lỗi khi lưu link bài đăng: {e}")
+
+def normalize_target_url(url: str) -> str:
+    """
+    Chuẩn hóa URL nhóm/trang để so sánh trùng lặp chính xác (bỏ query parameters, trailing slashes, lowercase).
+    """
+    if not url:
+        return ""
+    clean = url.strip().lower().split("?")[0].rstrip("/")
+    return clean
+
+def is_recently_posted(target_url: str, hours: float = 24.0):
+    """
+    Kiểm tra xem target_url (Group hoặc Page) đã từng đăng bài thành công trong vòng `hours` giờ qua chưa.
+    Trả về (True, hours_ago, posted_at_str) nếu trùng lặp gần đây, ngược lại trả về (False, 0, None).
+    """
+    if not target_url or not os.path.exists(POSTED_LINKS_FILE):
+        return False, 0, None
+
+    norm_target = normalize_target_url(target_url)
+    try:
+        with open(POSTED_LINKS_FILE, "r", encoding="utf-8") as f:
+            items = json.load(f)
+            if not isinstance(items, list):
+                return False, 0, None
+                
+        now = time.time()
+        max_age_seconds = hours * 3600.0
+
+        for item in items:
+            recorded_target = normalize_target_url(item.get("target", ""))
+            # So sánh target hoặc kiểm tra target có nằm trong url bài đăng
+            if recorded_target and (recorded_target == norm_target or norm_target in recorded_target or recorded_target in norm_target):
+                ts = item.get("timestamp")
+                if ts:
+                    diff = now - float(ts)
+                    if diff < max_age_seconds:
+                        hours_ago = round(diff / 3600.0, 1)
+                        return True, hours_ago, item.get("posted_at", "gần đây")
+                else:
+                    # Fallback parse posted_at nếu bản ghi cũ chưa có trường timestamp
+                    posted_at = item.get("posted_at")
+                    if posted_at:
+                        try:
+                            t_struct = time.strptime(posted_at, "%Y-%m-%d %H:%M:%S")
+                            diff = now - time.mktime(t_struct)
+                            if diff < max_age_seconds:
+                                hours_ago = round(diff / 3600.0, 1)
+                                return True, hours_ago, posted_at
+                        except Exception:
+                            pass
+    except Exception as e:
+        print(f"⚠️ Lỗi kiểm tra trùng lặp target: {e}")
+
+    return False, 0, None
 
 def scrape_post_link(page, target="", content=""):
     """

@@ -288,5 +288,88 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn("'.log'", build_script)
 
 
+class NclProInspiredFeatureTests(unittest.TestCase):
+    def setUp(self):
+        self.client = server.app.test_client()
+
+    def test_ai_spinner_local_preserves_contact_and_spins_content(self):
+        from ai_spinner import spin_content_local
+        original = "Homestay Huế siêu xinh view Sông Hương! Giá chỉ từ 350k/đêm. Hotline: 0905555317. Địa chỉ: Số 3 kiệt 17 Trần Phú, Huế."
+        spun = spin_content_local(original)
+        self.assertIn("0905555317", spun)
+        self.assertIn("Trần Phú", spun)
+        self.assertIn("350k", spun)
+        self.assertIn("#", spun)
+        self.assertNotEqual(original.strip(), spun.strip())
+
+    def test_pick_random_photos_from_folder(self):
+        from utils import pick_random_photos
+        with tempfile.TemporaryDirectory() as directory:
+            for i in range(5):
+                (Path(directory) / f"photo_{i}.jpg").write_bytes(b"fake-image")
+            (Path(directory) / "notes.txt").write_text("not an image")
+
+            picked_2_4 = pick_random_photos(directory, "2-4")
+            self.assertTrue(2 <= len(picked_2_4) <= 4)
+            for p in picked_2_4:
+                self.assertTrue(p.endswith(".jpg"))
+
+            picked_1 = pick_random_photos(directory, "1")
+            self.assertEqual(len(picked_1), 1)
+
+    def test_is_recently_posted_detection(self):
+        import time
+        from utils import is_recently_posted
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "posted_links.json"
+            items = [
+                {
+                    "id": "1",
+                    "timestamp": time.time() - 3600, # 1 hour ago
+                    "target": "https://www.facebook.com/groups/homestayhue/",
+                    "url": "https://www.facebook.com/groups/homestayhue/posts/111",
+                    "posted_at": "2026-09-04 06:00:00"
+                },
+                {
+                    "id": "2",
+                    "timestamp": time.time() - 100000, # ~28 hours ago
+                    "target": "https://www.facebook.com/groups/oldgroup/",
+                    "url": "https://www.facebook.com/groups/oldgroup/posts/222",
+                    "posted_at": "2026-09-02 00:00:00"
+                }
+            ]
+            db_file.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+
+            with patch("utils.POSTED_LINKS_FILE", str(db_file)):
+                is_dup, hours_ago, posted_at = is_recently_posted("https://www.facebook.com/groups/homestayhue", hours=24.0)
+                self.assertTrue(is_dup)
+                self.assertAlmostEqual(hours_ago, 1.0, delta=0.5)
+
+                is_dup_old, _, _ = is_recently_posted("https://www.facebook.com/groups/oldgroup", hours=24.0)
+                self.assertFalse(is_dup_old)
+
+                is_dup_never, _, _ = is_recently_posted("https://www.facebook.com/groups/neverposted", hours=24.0)
+                self.assertFalse(is_dup_never)
+
+    def test_ai_spin_endpoint_returns_variant(self):
+        response = self.client.post("/api/ai/spin", json={
+            "content": "Phòng đẹp giá rẻ tại trung tâm Huế, liên hệ 0905123456"
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data.get("success"))
+        self.assertIn("0905123456", data.get("spun_content", ""))
+
+    def test_photos_list_endpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "test1.png").write_bytes(b"image")
+            (Path(directory) / "test2.jpg").write_bytes(b"image")
+            response = self.client.get(f"/api/photos/list?folder={directory}")
+            self.assertEqual(response.status_code, 200)
+            data = response.get_json()
+            self.assertTrue(data.get("exists"))
+            self.assertEqual(data.get("count"), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

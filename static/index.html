@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Workspace v5.5.1 [Build: 2026-09-04 00:07]</title>
-    <link rel="stylesheet" href="styles.css?v=5.5.1">
+    <title>FB Automation Workspace v5.6.0 [Build: 2026-09-04 07:30]</title>
+    <link rel="stylesheet" href="styles.css?v=5.6.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,9 +22,9 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v5.5.1</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v5.6.0</span>
                     </div>
-                    <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-04 00:07</span>
+                    <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-04 07:30</span>
                 </div>
             </div>
             
@@ -270,13 +270,28 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
 
                             <div class="field-group">
-                                <label class="field-label">📝 Nội dung bài viết</label>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="field-label" style="margin-bottom:0;">📝 Nội dung bài viết</label>
+                                    <div style="display:flex; gap:6px; align-items:center;">
+                                        <button id="toggle-gemini-key-btn" type="button" class="btn-ghost btn-xs" style="font-size:11px; color:#6B7280; padding:2px 6px;">⚙️ Gemini Key</button>
+                                        <button id="ai-spin-btn" type="button" class="btn btn-secondary btn-xs" style="background:#8B5CF6; color:#fff; font-weight:700; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" title="Xào mới bài viết bằng AI">🤖 AI Xào bài</button>
+                                    </div>
+                                </div>
+                                <div id="gemini-key-container" class="hidden" style="margin-bottom:8px;">
+                                    <input type="password" id="gemini-api-key-input" class="field-input" placeholder="Dán Gemini API Key (để trống sẽ dùng Local Smart Spinner miễn phí)" style="font-size:12px; padding:6px 10px;">
+                                </div>
                                 <textarea id="post-content" class="field-textarea" rows="5" placeholder="Bạn đang nghĩ gì?">{Xin chào cả nhà|Chào mọi người}! Bên mình còn phòng homestay xinh xắn tại trung tâm TP Huế, đầy đủ tiện nghi, không gian thoáng mát, giá cực ưu đãi cho khách du lịch. Anh/chị nào cần tìm phòng cứ inbox mình để nhận hình ảnh và vị trí chi tiết nhé! {Chúc mọi người ngày mới vui vẻ|Cảm ơn admin đã duyệt bài ạ}!</textarea>
-                                <div class="spintax-hint" style="margin-top: 8px;">
-                                    💡 Spintax: <code>{Xin chào|Hello}</code> sẽ chọn ngẫu nhiên
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                                    <div class="spintax-hint" style="margin-top:0;">
+                                        💡 Spintax: <code>{Xin chào|Hello}</code> sẽ chọn ngẫu nhiên
+                                    </div>
+                                    <label class="checkbox-label" style="font-weight:600; color:#7C3AED; font-size:12px; margin-bottom:0;">
+                                        <input type="checkbox" id="auto-spin-opt"> 🤖 Tự động xào bài (AI Spin) độc nhất cho mỗi Nhóm / Trang
+                                    </label>
                                 </div>
                             </div>
                         </div>
+
 
                         <!-- 2. CSV Input Section -->
                         <div id="csv-section" class="hidden">
@@ -684,7 +699,30 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <button id="remove-image-btn" class="btn-ghost">❌ Hủy</button>
                         </div>
 
+                        <!-- Random Photo Picker from Folder (Inspiration NCL FB Pro) -->
+                        <div class="field-group" id="folder-photo-bar" style="margin-top: 10px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #166534;">📁 Bốc ảnh ngẫu nhiên từ Thư mục (Inspiration NCL FB Pro)</label>
+                                <span style="font-size: 11px; background: #DCFCE7; color: #15803D; font-weight: 700; padding: 2px 8px; border-radius: 10px;">Đa dạng ảnh chống trùng</span>
+                            </div>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <input type="text" id="photo-folder-input" class="field-input" placeholder="Ví dụ: uploads hoặc D:\Claude\Homestay\photos" style="flex: 1; font-size: 13px; padding: 6px 10px;">
+                                <select id="photo-count-mode" class="field-input" style="width: 175px; font-size: 13px; padding: 6px 8px;">
+                                    <option value="2-4" selected>🎲 Ngẫu nhiên 2 - 4 ảnh</option>
+                                    <option value="1">1 ảnh</option>
+                                    <option value="2">2 ảnh</option>
+                                    <option value="3">3 ảnh</option>
+                                    <option value="4">4 ảnh</option>
+                                    <option value="all">Toàn bộ ảnh</option>
+                                </select>
+                            </div>
+                            <p class="field-hint" style="color: #15803D; margin-top: 4px; font-size: 11px;">Mỗi bài đăng sẽ tự động bốc ngẫu nhiên số ảnh trên từ thư mục để đính kèm lên Facebook.</p>
+                        </div>
+
                         <div class="diverse-post-settings" id="diverse-post-settings-bar">
+                            <label class="checkbox-label" style="font-weight: 600; color: #047857;">
+                                <input type="checkbox" id="skip-duplicate-24h-opt" checked> 🛡️ Bỏ qua Nhóm/Trang đã đăng trong 24h (Tránh trùng lặp spam)
+                            </label>
                             <label class="checkbox-label">
                                 <input type="checkbox" id="post-feeling-opt"> 😊 Gắn cảm xúc ngẫu nhiên (Feeling)
                             </label>
@@ -692,6 +730,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <input type="checkbox" id="post-checkin-opt"> 📍 Check-in tại Huế ngẫu nhiên
                             </label>
                         </div>
+
 
                         <!-- Anti-Spam Safe Delay Bar -->
                         <div class="field-group" id="delay-settings-bar" style="margin-top: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px;">
