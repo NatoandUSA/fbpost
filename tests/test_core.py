@@ -530,6 +530,59 @@ class NclProInspiredFeatureTests(unittest.TestCase):
             self.assertEqual(data_dup["added_count"], 0)
             self.assertEqual(len(saved_accounts), 2)
 
+    def test_can_create_page_rate_limit(self):
+        import fb_create_page
+        from datetime import datetime, timedelta
+
+        # Giả lập chưa tạo trang nào
+        with patch("fb_create_page.load_created_pages", return_value=[]):
+            allowed, count, msg = fb_create_page.can_create_page(max_per_day=2)
+            self.assertTrue(allowed)
+            self.assertEqual(count, 0)
+
+        # Giả lập đã tạo 1 trang trong 24h
+        one_page = [{"name": "Page 1", "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}]
+        with patch("fb_create_page.load_created_pages", return_value=one_page):
+            allowed, count, msg = fb_create_page.can_create_page(max_per_day=2)
+            self.assertTrue(allowed)
+            self.assertEqual(count, 1)
+
+        # Giả lập đã tạo 2 trang trong 24h -> Phải bị chặn
+        two_pages = [
+            {"name": "Page 1", "created_at": (datetime.now() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")},
+            {"name": "Page 2", "created_at": (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")}
+        ]
+        with patch("fb_create_page.load_created_pages", return_value=two_pages):
+            allowed, count, msg = fb_create_page.can_create_page(max_per_day=2)
+            self.assertFalse(allowed)
+            self.assertEqual(count, 2)
+            self.assertIn("Tạm dừng để bảo vệ tài khoản an toàn", msg)
+
+        # Trang cũ tạo hơn 24h trước không tính vào quota
+        old_pages = [
+            {"name": "Old Page", "created_at": (datetime.now() - timedelta(hours=25)).strftime("%Y-%m-%d %H:%M:%S")}
+        ]
+        with patch("fb_create_page.load_created_pages", return_value=old_pages):
+            allowed, count, msg = fb_create_page.can_create_page(max_per_day=2)
+            self.assertTrue(allowed)
+            self.assertEqual(count, 0)
+
+    def test_joined_groups_persistence(self):
+        import fb_join_group
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file = Path(temp_dir) / "joined_groups.json"
+            with patch("fb_join_group.JOINED_GROUPS_FILE", str(temp_file)):
+                self.assertEqual(fb_join_group.load_joined_groups(), [])
+                test_records = [{"name": "Group A", "url": "https://facebook.com/groups/123", "joined_at": "2026-09-04 16:00:00"}]
+                fb_join_group.save_joined_groups(test_records)
+                loaded = fb_join_group.load_joined_groups()
+                self.assertEqual(len(loaded), 1)
+                self.assertEqual(loaded[0]["name"], "Group A")
+
+    def test_allowed_commands_include_new_features(self):
+        self.assertIn("join-group", server.ALLOWED_COMMANDS)
+        self.assertIn("create-page", server.ALLOWED_COMMANDS)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,6 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const addToPostBar = document.getElementById('add-to-post-bar');
     const composerDividerBar = document.getElementById('composer-divider-bar');
 
+    // Auto Join Group & Create Page elements
+    const autoJoinGroupsOpt = document.getElementById('auto-join-groups-opt');
+    const autoJoinKwContainer = document.getElementById('auto-join-kw-container');
+    const autoJoinKeywords = document.getElementById('auto-join-keywords');
+    const createPageSection = document.getElementById('create-page-section');
+    const createPageName = document.getElementById('create-page-name');
+    const createPageCategory = document.getElementById('create-page-category');
+    const createPageBio = document.getElementById('create-page-bio');
+    const createPageAvatar = document.getElementById('create-page-avatar');
+    const createPageCover = document.getElementById('create-page-cover');
+    const submitCreatePageBtn = document.getElementById('submit-create-page-btn');
+
     // 2FA elements
     const tfaToggleBtn = document.getElementById('tfa-toggle-btn');
     const tfaPopover = document.getElementById('tfa-popover');
@@ -1350,6 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'content-hub': 'Content Hub — Tạo Nội Dung AI',
         'page-scheduler': '📅 Page Scheduler — Lên Lịch Tự Động Bằng Google Sheets',
         profiles: '📁 Quản Lý Profiles & Tài Khoản GPM',
+        'create-page': '🚩 Tự Tạo Fanpage Cá Nhân (Chuẩn Người Thật, Max 2/Ngày)',
         settings: '🛡️ Bảo Mật & Cấu Hình Hệ Thống'
     };
 
@@ -1375,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (schedSection) schedSection.classList.add('hidden');
             if (commentSection) commentSection.classList.add('hidden');
             if (threadSection) threadSection.classList.add('hidden');
+            if (createPageSection) createPageSection.classList.add('hidden');
             if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
             if (addToPostBar) addToPostBar.classList.add('hidden');
             if (composerDividerBar) composerDividerBar.classList.add('hidden');
@@ -1442,6 +1456,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (profileActivitySection) profileActivitySection.classList.remove('hidden');
                 loadAccounts();
                 loadProfileActivity();
+            } else if (currentMode === 'create-page') {
+                if (createPageSection) createPageSection.classList.remove('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.remove('hidden');
+                if (composerBodyCard) composerBodyCard.classList.remove('hidden');
+                if (postBtn) postBtn.classList.add('hidden');
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -1652,12 +1671,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const gpmApi = gpmApiInput ? gpmApiInput.value.trim() : '';
         
         if (accId === '__rotate__') {
-            payload.rotateAccounts = true;
-            payload.accountId = '';
+            payload.rotateAccounts = (command !== 'auth');
+            payload.accountId = (command === 'auth' && accountsList.length > 0) ? accountsList[0].id : '';
+            payload.accountIds = accountsList.map(a => a.id);
+            payload.accounts = accountsList;
             payload.gpmApiUrl = gpmApi;
         } else if (accId) {
             payload.rotateAccounts = false;
             payload.accountId = accId;
+            payload.accountIds = [accId];
             payload.gpmApiUrl = gpmApi;
         }
 
@@ -1679,6 +1701,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         payload.delayMin = delayMin;
         payload.delayMax = delayMax;
+
+        // Add Auto Join Group parameters
+        const autoJoinOpt = document.getElementById('auto-join-groups-opt');
+        payload.autoJoinGroups = autoJoinOpt ? autoJoinOpt.checked : false;
+        const autoJoinKwInput = document.getElementById('auto-join-keywords');
+        payload.groupKeywords = autoJoinKwInput ? autoJoinKwInput.value.trim() : 'Homestay Huế, Du lịch Huế';
 
         // Add Feeling, Check-in, AI Spin, Photo Folder, and Anti-Duplicate parameters
         if (command === 'group' || command === 'page') {
@@ -2000,6 +2028,41 @@ document.addEventListener('DOMContentLoaded', () => {
             runCommand(currentMode, { tasks });
         }
     });
+
+    // ---- Auto Join Group Checkbox Toggle ----
+    if (autoJoinGroupsOpt && autoJoinKwContainer) {
+        autoJoinGroupsOpt.addEventListener('change', () => {
+            if (autoJoinGroupsOpt.checked) {
+                autoJoinKwContainer.classList.remove('hidden');
+            } else {
+                autoJoinKwContainer.classList.add('hidden');
+            }
+        });
+    }
+
+    // ---- Create Fanpage Submit Button ----
+    if (submitCreatePageBtn) {
+        submitCreatePageBtn.addEventListener('click', () => {
+            const pageName = createPageName ? createPageName.value.trim() : '';
+            const category = createPageCategory ? createPageCategory.value.trim() : 'Blogger';
+            const bio = createPageBio ? createPageBio.value.trim() : '';
+            const avatar = createPageAvatar ? createPageAvatar.value.trim() : '';
+            const cover = createPageCover ? createPageCover.value.trim() : '';
+
+            if (!pageName) {
+                showToast('Vui lòng nhập Tên Fanpage cần tạo!', 'error');
+                return;
+            }
+
+            runCommand('create-page', {
+                name: pageName,
+                category: category,
+                bio: bio || null,
+                avatar: avatar || null,
+                cover: cover || null
+            });
+        });
+    }
 
     // ---- AI Content Spinner Buttons ----
     const aiSpinBtn = document.getElementById('ai-spin-btn');

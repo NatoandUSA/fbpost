@@ -16,18 +16,22 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__, static_folder='static')
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
-CONFIG_FILE = "config.json"
-QUEUE_FILE = "publication_queue.json"
-CAMPAIGNS_FILE = "campaigns.json"
-ACTIVITY_LOG_FILE = "profile_activity.json"
-GROUPS_FILE = "group_registry.json"
-MANUAL_GROUP_QUEUE_FILE = "manual_group_queue.json"
-VAULT_FILE = "account_vault.json"
-UPLOAD_DIR = Path("uploads").resolve()
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_FILE = str(BASE_DIR / "config.json")
+QUEUE_FILE = str(BASE_DIR / "publication_queue.json")
+CAMPAIGNS_FILE = str(BASE_DIR / "campaigns.json")
+ACTIVITY_LOG_FILE = str(BASE_DIR / "profile_activity.json")
+GROUPS_FILE = str(BASE_DIR / "group_registry.json")
+MANUAL_GROUP_QUEUE_FILE = str(BASE_DIR / "manual_group_queue.json")
+VAULT_FILE = str(BASE_DIR / "account_vault.json")
+ACCOUNTS_FILE = str(BASE_DIR / "accounts.json")
+STATE_FILE = str(BASE_DIR / "state.json")
+AUTH_STATUS_FILE = str(BASE_DIR / "auth_status.json")
+UPLOAD_DIR = (BASE_DIR / "uploads").resolve()
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment"}
-APP_VERSION = "5.6.0"
-BUILD_TIME = "2026-09-04 07:30"
+ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page"}
+APP_VERSION = "5.6.3"
+BUILD_TIME = "2026-09-04 16:00"
 
 
 def app_build_info():
@@ -992,6 +996,10 @@ def run_script():
     skip_duplicate = data.get('skipDuplicate24h', True)
     clean_exif = data.get('cleanExif', True)
     anti_hash_text = data.get('antiHashText', True)
+
+    # Tự tìm & gia nhập Group theo keyword trong lúc chờ giãn cách
+    auto_join_groups = data.get('autoJoinGroups', False)
+    group_keywords = str(data.get('groupKeywords', 'Homestay Huế, Du lịch Huế')).strip()
     
     def generate():
         process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
@@ -1018,12 +1026,19 @@ def run_script():
 
         # Load accounts for round-robin rotation (CHỈ xoay tua trên các tài khoản đã lưu trong accounts.json)
         accounts_pool = []
-        if rotate_accounts:
+        if rotate_accounts and cmd != 'auth':
             try:
                 all_accs = load_accounts()
                 accounts_pool = [a for a in all_accs if a.get("id")]
             except Exception:
                 accounts_pool = []
+
+            # Fallback nếu frontend gửi kèm accountIds hoặc accounts
+            if not accounts_pool and (data.get('accountIds') or data.get('accounts')):
+                if data.get('accounts'):
+                    accounts_pool = data.get('accounts')
+                elif data.get('accountIds'):
+                    accounts_pool = [{'id': aid, 'name': aid} for aid in data.get('accountIds')]
 
             if not accounts_pool:
                 yield "⚠️ [Cảnh báo Anti-Spam] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n"
@@ -1032,7 +1047,11 @@ def run_script():
                 return
 
         if cmd == 'auth':
-            full_cmd = build_cmd_for_account(account_id) + ["auth"]
+            target_auth_id = account_id
+            if target_auth_id == '__rotate__' or not target_auth_id:
+                all_accs = load_accounts()
+                target_auth_id = all_accs[0].get("id") if all_accs else None
+            full_cmd = build_cmd_for_account(target_auth_id) + ["auth"]
             process = start_cli_process(full_cmd)
             for line in iter(process.stdout.readline, ''):
                 yield line
@@ -1043,7 +1062,7 @@ def run_script():
                 except FileNotFoundError:
                     pass
             yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(account_id, "auth", outcome=outcome)
+            record_profile_activity(target_auth_id, "auth", outcome=outcome)
             return
 
         if cmd == 'interact':
@@ -1102,6 +1121,58 @@ def run_script():
             outcome = "finished" if process.wait() == 0 else "failed"
             yield f"RUN_RESULT:{outcome}\n"
             record_profile_activity(account_id, "scrape", target=target_url, outcome=outcome)
+            return
+
+        if cmd == 'join-group':
+            keywords = data.get('keywords') or data.get('groupKeywords') or group_keywords
+            limit = max(1, min(int(data.get('limit', 1)), 5))
+            target_id = account_id
+            if target_id == '__rotate__' or not target_id:
+                all_accs = load_accounts()
+                target_id = all_accs[0].get("id") if all_accs else None
+
+            yield f"🔍 Bắt đầu tìm kiếm & tự động xin gia nhập nhóm Facebook theo từ khóa: '{keywords}'...\n"
+            full_cmd = build_cmd_for_account(target_id) + ["join-group", "--keywords", str(keywords), "--limit", str(limit)]
+            process = start_cli_process(full_cmd)
+            for line in iter(process.stdout.readline, ''):
+                yield line
+            outcome = "finished" if process.wait() == 0 else "failed"
+            yield f"RUN_RESULT:{outcome}\n"
+            record_profile_activity(target_id, "join-group", target=keywords, outcome=outcome)
+            return
+
+        if cmd == 'create-page':
+            page_name = data.get('name') or data.get('pageName') or data.get('page_name')
+            category = data.get('category') or 'Blogger'
+            bio = data.get('bio') or ''
+            avatar = data.get('avatar') or None
+            cover = data.get('cover') or None
+
+            if not page_name:
+                yield "Error: Chưa cung cấp tên Fanpage cần tạo.\n"
+                yield "RUN_RESULT:failed\n"
+                return
+
+            target_id = account_id
+            if target_id == '__rotate__' or not target_id:
+                all_accs = load_accounts()
+                target_id = all_accs[0].get("id") if all_accs else None
+
+            yield f"🚩 Bắt đầu tự động tạo Fanpage cá nhân: '{page_name}' (Hạng mục: {category})...\n"
+            full_cmd = build_cmd_for_account(target_id) + ["create-page", "--name", str(page_name), "--category", str(category)]
+            if bio:
+                full_cmd.extend(["--bio", str(bio)])
+            if avatar:
+                full_cmd.extend(["--avatar", str(avatar)])
+            if cover:
+                full_cmd.extend(["--cover", str(cover)])
+
+            process = start_cli_process(full_cmd)
+            for line in iter(process.stdout.readline, ''):
+                yield line
+            outcome = "finished" if process.wait() == 0 else "failed"
+            yield f"RUN_RESULT:{outcome}\n"
+            record_profile_activity(target_id, "create-page", target=page_name, outcome=outcome)
             return
 
         if cmd == 'comment':
@@ -1165,6 +1236,14 @@ def run_script():
                     mins = delay // 60
                     secs = delay % 60
                     yield f"\n⏳ [Anti-Spam] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
+                    if auto_join_groups and group_keywords:
+                        yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
+                        jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
+                        jg_process = start_cli_process(jg_cmd)
+                        for line in iter(jg_process.stdout.readline, ''):
+                            yield line
+                        jg_process.wait()
+                        yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                     for sec in range(delay, 0, -1):
                         if sec % 30 == 0 or sec <= 10:
                             s_m = sec // 60
@@ -1278,6 +1357,14 @@ def run_script():
                 mins = delay // 60
                 secs = delay % 60
                 yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n"
+                if auto_join_groups and group_keywords:
+                    yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
+                    jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
+                    jg_process = start_cli_process(jg_cmd)
+                    for line in iter(jg_process.stdout.readline, ''):
+                        yield line
+                    jg_process.wait()
+                    yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                 for sec in range(delay, 0, -1):
                     if sec % 30 == 0 or sec <= 10:
                         s_m = sec // 60

@@ -5,7 +5,9 @@ import os
 import json
 import tempfile
 
-ACCOUNTS_FILE = "accounts.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ACCOUNTS_FILE = os.path.join(BASE_DIR, "accounts.json")
+STATE_FILE = os.path.join(BASE_DIR, "state.json")
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",

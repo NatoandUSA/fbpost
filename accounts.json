@@ -1,10 +1,32 @@
 [
   {
-    "id": "90f6878b",
-    "name": "M14 (GPM Huế)",
+    "id": "f14ab5e2-e10b-4053-9437-c237c6ccabb9",
+    "name": "M4",
     "type": "gpm",
-    "profile_path_or_id": "8e7342b5-4385-4ff4-8038-b669c60bd3fd-3522",
-    "proxy": "",
-    "status": "Đã cấu hình"
+    "profile_path_or_id": "f14ab5e2-e10b-4053-9437-c237c6ccabb9",
+    "proxy": "160.22.174.121:21012:kevDER:ucKiey",
+    "browser_type": "Chrome",
+    "status": "Sẵn sàng (Facebook GPM)",
+    "created_at": "2026-09-04 15:32"
+  },
+  {
+    "id": "8e7342b5-4385-4ff4-8038-b669c60bd3fd",
+    "name": "M14",
+    "type": "gpm",
+    "profile_path_or_id": "8e7342b5-4385-4ff4-8038-b669c60bd3fd",
+    "proxy": "14.241.72.253:28165:uNfLYy:VhZJPT",
+    "browser_type": "Chrome",
+    "status": "Sẵn sàng (Facebook GPM)",
+    "created_at": "2026-09-04 15:32"
+  },
+  {
+    "id": "ff443285-3cd3-452c-9a8b-313d1affdb30",
+    "name": "M6",
+    "type": "gpm",
+    "profile_path_or_id": "ff443285-3cd3-452c-9a8b-313d1affdb30",
+    "proxy": "203.175.97.207:28755:kevDER:ucKiey",
+    "browser_type": "Chrome",
+    "status": "Sẵn sàng (Facebook GPM)",
+    "created_at": "2026-09-04 15:33"
   }
 ]

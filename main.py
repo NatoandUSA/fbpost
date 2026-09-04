@@ -88,8 +88,19 @@ def main():
     comment_parser.add_argument("--min-delay", type=int, default=25, help="Min delay between comments in seconds")
     comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
     comment_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
-    comment_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
-    
+    # Join-group command
+    join_group_parser = subparsers.add_parser("join-group", help="Search and automatically join Facebook groups by keywords")
+    join_group_parser.add_argument("--keywords", default="Homestay Huế, Du lịch Huế", help="Comma-separated keywords")
+    join_group_parser.add_argument("--limit", type=int, default=1, help="Max groups to join per run")
+
+    # Create-page command
+    create_page_parser = subparsers.add_parser("create-page", help="Create a personal Facebook Fanpage with avatar and cover")
+    create_page_parser.add_argument("--name", required=True, help="Page name")
+    create_page_parser.add_argument("--category", default="Blogger", help="Page category (e.g. Blogger, Khách sạn)")
+    create_page_parser.add_argument("--bio", default=None, help="Page bio description")
+    create_page_parser.add_argument("--avatar", default=None, help="Path to avatar image file")
+    create_page_parser.add_argument("--cover", default=None, help="Path to cover photo image file")
+
     args = parser.parse_args()
     
     if args.command == "auth":
@@ -138,6 +149,12 @@ def main():
             comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
         else:
             comment_parser.print_help()
+    elif args.command == "join-group":
+        from fb_join_group import search_and_join_groups
+        search_and_join_groups(args.keywords, args.limit, args.account_id, args.gpm_api)
+    elif args.command == "create-page":
+        from fb_create_page import create_facebook_page
+        create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api)
     else:
         parser.print_help()
 
