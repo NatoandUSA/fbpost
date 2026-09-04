@@ -163,6 +163,7 @@
                                 <h3>Quản lý Profiles & Tài khoản</h3>
                             </div>
                             <div class="card-header-actions">
+                                <button id="sync-gpm-table-btn" class="btn btn-secondary btn-xs" type="button" title="Tải trực tiếp danh sách Profile từ GPMLogin">🔄 Tải danh sách GPM</button>
                                 <button id="manage-accounts-btn" class="btn btn-ghost btn-xs" type="button">Thu gọn</button>
                                 <button id="add-account-toggle-btn" class="btn btn-primary btn-xs" type="button">➕ Thêm Profile</button>
                             </div>
@@ -245,14 +246,22 @@
                             </div>
                         </div>
                     </div>
-                    <section class="card composer-body-card">
                         <!-- Account Selector -->
                         <div class="field-group" id="account-selector-container">
-                            <label class="field-label">👤 Chọn Profile chạy tác vụ</label>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="field-label" style="margin-bottom: 0;">👤 Chọn Profile chạy tác vụ</label>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span id="gpm-status-badge" class="badge badge-neutral" style="font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #F1F5F9; color: #475569; font-weight: 600;">GPM: Đang kiểm tra...</span>
+                                    <button id="refresh-gpm-btn" class="btn btn-ghost btn-xs" type="button" title="Tải lại toàn bộ Profile trực tiếp từ GPMLogin">🔄 Tải danh sách GPM</button>
+                                </div>
+                            </div>
                             <select id="account-selector" class="field-input">
                                 <option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>
                                 <option value="__rotate__">🔄 Luân phiên tất cả Profile GPM (Xoay vòng chống spam)</option>
                             </select>
+                            <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+                                <button id="open-selected-profile-btn" class="btn btn-secondary btn-xs" type="button" title="Mở trình duyệt cho Profile đang được chọn">🚀 Mở nhanh trình duyệt Profile này</button>
+                            </div>
                         </div>
 
                         <!-- Input Mode Toggle -->

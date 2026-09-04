@@ -5,7 +5,7 @@ import random
 import re
 from playwright.sync_api import sync_playwright
 from utils import (
-    process_spintax, human_type, load_accounts, launch_browser,
+    process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted
 )
@@ -38,11 +38,11 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
     # Load account if provided
     account = None
     if account_id:
-        accounts = load_accounts()
-        account = next((a for a in accounts if a["id"] == account_id), None)
+        account = resolve_account(account_id, gpm_api_url)
         if not account:
-            print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
+            print(f"❌ Error: Không thể khởi tạo cấu hình cho Account ID '{account_id}'.")
             return
+        print(f"👤 Khởi chạy profile: {account.get('name', account_id)} ({account.get('type', 'local')})")
 
     browser_obj = None
     context = None

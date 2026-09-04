@@ -425,6 +425,80 @@ class NclProInspiredFeatureTests(unittest.TestCase):
             # Ảnh nguồn ban đầu vẫn giữ nguyên vẹn
             self.assertTrue(src_img_path.exists())
 
+    def test_fetch_gpm_profiles_connected(self):
+        from utils import fetch_gpm_profiles
+        from unittest.mock import MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "success": True,
+            "data": [
+                {"id": "uuid-1", "name": "M14", "browser_type": "Chrome", "raw_proxy": "14.241.72.253:28165"},
+                {"id": "uuid-2", "name": "M4", "browser_type": "Chrome", "raw_proxy": ""}
+            ],
+            "pagination": {"total": 2}
+        }
+        with patch("requests.get", return_value=mock_resp):
+            res = fetch_gpm_profiles("http://127.0.0.1:19995")
+            self.assertTrue(res["connected"])
+            self.assertEqual(len(res["profiles"]), 2)
+            self.assertEqual(res["total"], 2)
+            self.assertEqual(res["profiles"][0]["name"], "M14")
+
+    def test_fetch_gpm_profiles_offline(self):
+        from utils import fetch_gpm_profiles
+        with patch("requests.get", side_effect=Exception("Connection refused")):
+            res = fetch_gpm_profiles("http://127.0.0.1:19995")
+            self.assertFalse(res["connected"])
+            self.assertEqual(res["profiles"], [])
+            self.assertEqual(res["total"], 0)
+
+    def test_resolve_account(self):
+        from utils import resolve_account
+        from unittest.mock import MagicMock
+
+        # 1. Resolve from accounts.json
+        with patch("utils.load_accounts", return_value=[{"id": "acc-1", "name": "Nick 1", "type": "gpm"}]):
+            acc = resolve_account("acc-1")
+            self.assertIsNotNone(acc)
+            self.assertEqual(acc["name"], "Nick 1")
+
+        # 2. Resolve on-the-fly from GPM API
+        mock_gpm = {
+            "connected": True,
+            "profiles": [{"id": "8e7342b5-4385-4ff4-8038-b669c60bd3fd", "name": "M14", "browser_type": "Chrome", "raw_proxy": "1.2.3.4:80"}]
+        }
+        with patch("utils.load_accounts", return_value=[]), patch("utils.fetch_gpm_profiles", return_value=mock_gpm):
+            acc = resolve_account("8e7342b5-4385-4ff4-8038-b669c60bd3fd")
+            self.assertIsNotNone(acc)
+            self.assertEqual(acc["name"], "M14")
+            self.assertEqual(acc["type"], "gpm")
+            self.assertEqual(acc["proxy"], "1.2.3.4:80")
+
+    def test_api_gpm_endpoints(self):
+        mock_gpm = {
+            "connected": True,
+            "profiles": [{"id": "uuid-1", "name": "M14", "raw_proxy": ""}],
+            "total": 1,
+            "base_url": "http://127.0.0.1:19995"
+        }
+        with patch("utils.fetch_gpm_profiles", return_value=mock_gpm):
+            # Test /api/gpm/profiles
+            resp = self.client.get("/api/gpm/profiles")
+            self.assertEqual(resp.status_code, 200)
+            data = resp.get_json()
+            self.assertTrue(data["connected"])
+            self.assertEqual(len(data["profiles"]), 1)
+
+            # Test /api/gpm/status
+            resp_status = self.client.get("/api/gpm/status")
+            self.assertEqual(resp_status.status_code, 200)
+            status_data = resp_status.get_json()
+            self.assertTrue(status_data["connected"])
+            self.assertEqual(status_data["total_profiles"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

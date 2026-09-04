@@ -69,6 +69,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const gpmApiInput = document.getElementById('gpm-api-input');
     const accountSelector = document.getElementById('account-selector');
     const accountSelectorContainer = document.getElementById('account-selector-container');
+    const gpmStatusBadge = document.getElementById('gpm-status-badge');
+    const refreshGpmBtn = document.getElementById('refresh-gpm-btn');
+    const syncGpmTableBtn = document.getElementById('sync-gpm-table-btn');
+    const openSelectedProfileBtn = document.getElementById('open-selected-profile-btn');
     const manageAccountsBtn = document.getElementById('manage-accounts-btn');
     const accountsContent = document.getElementById('accounts-content');
     const addAccountToggleBtn = document.getElementById('add-account-toggle-btn');
@@ -541,45 +545,121 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Load and Render Accounts ----
     async function loadAccounts() {
         try {
+            const gpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
+
+            // 1. Fetch configured accounts from accounts.json
             const res = await fetch('/api/accounts');
             accountsList = await res.json();
-            
+
+            // 2. Fetch live profiles directly from GPMLogin v3 API
+            let gpmData = { connected: false, profiles: [], total: 0 };
+            try {
+                const gpmRes = await fetch(`/api/gpm/profiles?gpm_api_url=${encodeURIComponent(gpmUrl)}&page=1&page_size=200`);
+                if (gpmRes.ok) {
+                    gpmData = await gpmRes.json();
+                }
+            } catch (gpmErr) {
+                console.warn("GPM API fetch error:", gpmErr);
+            }
+
+            // Update GPM Status Badge
+            if (gpmStatusBadge) {
+                if (gpmData.connected) {
+                    gpmStatusBadge.textContent = `🟢 GPM: Online (${gpmData.total} Profiles)`;
+                    gpmStatusBadge.style.background = '#DCFCE7';
+                    gpmStatusBadge.style.color = '#15803D';
+                } else {
+                    gpmStatusBadge.textContent = '⚪ GPM: Offline';
+                    gpmStatusBadge.style.background = '#FEE2E2';
+                    gpmStatusBadge.style.color = '#991B1B';
+                }
+            }
+
             // Populate account selector
             const selectedVal = accountSelector.value;
             accountSelector.innerHTML = '';
 
-            if (accountsList.length > 1) {
+            const gpmProfilesList = (gpmData.connected && Array.isArray(gpmData.profiles)) ? gpmData.profiles : [];
+            const totalAvailable = accountsList.length + gpmProfilesList.length;
+
+            if (totalAvailable > 1) {
                 const rotateOpt = document.createElement('option');
                 rotateOpt.value = '__rotate__';
-                rotateOpt.textContent = `🔄 Luân phiên ${accountsList.length} Profile GPM (Xoay vòng chống spam)`;
+                rotateOpt.textContent = `🔄 Luân phiên tất cả Profile GPM (${totalAvailable} tài khoản - Xoay vòng chống spam)`;
                 accountSelector.appendChild(rotateOpt);
             }
 
-            accountsList.forEach(acc => {
-                const opt = document.createElement('option');
-                opt.value = acc.id;
-                opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
-                accountSelector.appendChild(opt);
-            });
+            // Group 1: Configured accounts (if any)
+            if (accountsList.length > 0) {
+                const grpConfigured = document.createElement('optgroup');
+                grpConfigured.label = `📂 Tài khoản đã lưu (${accountsList.length})`;
+                accountsList.forEach(acc => {
+                    const opt = document.createElement('option');
+                    opt.value = acc.id;
+                    opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                    grpConfigured.appendChild(opt);
+                });
+                accountSelector.appendChild(grpConfigured);
+            }
+
+            // Group 2: Direct GPM Profiles (Zero-Config)
+            if (gpmProfilesList.length > 0) {
+                const grpGpm = document.createElement('optgroup');
+                grpGpm.label = `🌐 Profile GPM trực tiếp (${gpmProfilesList.length})`;
+                gpmProfilesList.forEach(p => {
+                    const alreadyInList = accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id);
+                    if (!alreadyInList) {
+                        const opt = document.createElement('option');
+                        opt.value = p.id;
+                        const proxyText = p.raw_proxy ? `Proxy: ${p.raw_proxy.split(':')[0]}:${p.raw_proxy.split(':')[1] || ''}` : 'Direct';
+                        opt.textContent = `📱 ${p.name} (${p.browser_type || 'Chrome'} - ${proxyText})`;
+                        grpGpm.appendChild(opt);
+                    }
+                });
+                if (grpGpm.children.length > 0) {
+                    accountSelector.appendChild(grpGpm);
+                }
+            }
+
             const fallbackOpt = document.createElement('option');
             fallbackOpt.value = '';
             fallbackOpt.textContent = '-- Mặc định (state.json) --';
             accountSelector.appendChild(fallbackOpt);
 
-            if (selectedVal && [...accountSelector.options].some(o => o.value === selectedVal)) {
+            // Restore selection or select first available
+            if (selectedVal && [...accountSelector.querySelectorAll('option')].some(o => o.value === selectedVal)) {
                 accountSelector.value = selectedVal;
             } else if (accountsList.length > 0) {
                 accountSelector.value = accountsList[0].id;
+            } else if (gpmProfilesList.length > 0) {
+                accountSelector.value = gpmProfilesList[0].id;
             }
-            
-            // Render accounts table
+
+            // Render accounts table (combine configured accounts & direct GPM profiles)
             accountsTableBody.innerHTML = '';
-            if (accountsList.length === 0) {
-                accountsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--fb-text-secondary);">Chưa cấu hình tài khoản nào. Hãy nhấp nút "Thêm Profile" bên trên.</td></tr>';
+            const allDisplayAccounts = [...accountsList];
+            gpmProfilesList.forEach(p => {
+                const exists = allDisplayAccounts.some(a => a.id === p.id || a.profile_path_or_id === p.id);
+                if (!exists) {
+                    allDisplayAccounts.push({
+                        id: p.id,
+                        name: p.name,
+                        type: 'gpm',
+                        profile_path_or_id: p.id,
+                        proxy: p.raw_proxy || '',
+                        browser_type: p.browser_type || 'Chrome',
+                        status: 'GPM Sẵn sàng (Zero-Auth)',
+                        is_direct_gpm: true
+                    });
+                }
+            });
+
+            if (allDisplayAccounts.length === 0) {
+                accountsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--fb-text-secondary);">Chưa phát hiện tài khoản nào. Hãy bật GPMLogin hoặc nhấp nút "Thêm Profile" bên trên.</td></tr>';
                 return;
             }
-            
-            accountsList.forEach(acc => {
+
+            allDisplayAccounts.forEach(acc => {
                 const tr = document.createElement('tr');
                 const makeCell = (text, tag = 'span') => {
                     const cell = document.createElement('td');
@@ -589,13 +669,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return cell;
                 };
                 const nameCell = makeCell(acc.name, 'strong');
-                const typeCell = makeCell(acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)');
+                const typeText = acc.is_direct_gpm ? 'GPM Trực tiếp' : (acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)');
+                const typeCell = makeCell(typeText);
                 typeCell.firstChild.className = `badge badge-${acc.type}`;
                 const profileCell = makeCell(acc.profile_path_or_id, 'code');
                 const proxyCell = makeCell(acc.proxy || 'Trực tiếp (Không dùng)');
 
                 const statusCell = document.createElement('td');
-                const isAuth = acc.status === 'Đã xác thực' || acc.status === 'Đã cấu hình';
+                const isAuth = acc.status === 'Đã xác thực' || acc.status === 'Đã cấu hình' || acc.is_direct_gpm;
                 statusCell.innerHTML = `
                     <span class="badge ${isAuth ? 'badge-success' : 'badge-neutral'}" style="font-size:11px; padding:2px 8px; border-radius:10px; background:${isAuth ? '#DCFCE7' : '#F1F5F9'}; color:${isAuth ? '#15803D' : '#475569'}; font-weight:600;">${acc.status || 'Sẵn sàng'}</span>
                     ${acc.created_at ? `<div style="font-size:11px; color:#94A3B8; margin-top:2px;">🕒 ${acc.created_at}</div>` : ''}
@@ -603,7 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const actions = document.createElement('td');
                 actions.className = 'acc-action-btns';
-                
+
                 if (acc.type === 'gpm') {
                     const openGpmBtn = document.createElement('button');
                     openGpmBtn.className = 'btn btn-primary btn-sm';
@@ -611,13 +692,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     openGpmBtn.style.marginRight = '4px';
                     openGpmBtn.title = 'Khởi chạy trình duyệt GPM với Profile này';
                     openGpmBtn.addEventListener('click', async () => {
-                        const gpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
-                        showToast(`Đang kết nối GPM Login v4 mở profile: ${acc.name}...`);
+                        const currentGpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
+                        showToast(`Đang kết nối GPMLogin mở profile: ${acc.name}...`);
                         try {
                             const res = await fetch('/api/profiles/open-browser', {
                                 method: 'POST',
                                 headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ accountId: acc.id, gpmApiUrl: gpmUrl })
+                                body: JSON.stringify({ accountId: acc.id, gpmApiUrl: currentGpmUrl })
                             });
                             const data = await res.json();
                             if (data.success) {
@@ -632,19 +713,52 @@ document.addEventListener('DOMContentLoaded', () => {
                     actions.appendChild(openGpmBtn);
                 }
 
-                for (const [label, className] of [['🔑 Xác thực', 'btn-auth-acc'], ['❌ Xóa', 'btn-delete-acc']]) {
-                    const button = document.createElement('button');
-                    button.className = `btn btn-${className === 'btn-delete-acc' ? 'danger' : 'secondary'} btn-sm ${className}`;
-                    button.dataset.id = acc.id;
-                    button.textContent = label;
-                    button.style.marginRight = '4px';
-                    actions.appendChild(button);
+                if (!acc.is_direct_gpm) {
+                    for (const [label, className] of [['🔑 Xác thực', 'btn-auth-acc'], ['❌ Xóa', 'btn-delete-acc']]) {
+                        const button = document.createElement('button');
+                        button.className = `btn btn-${className === 'btn-delete-acc' ? 'danger' : 'secondary'} btn-sm ${className}`;
+                        button.dataset.id = acc.id;
+                        button.textContent = label;
+                        button.style.marginRight = '4px';
+                        actions.appendChild(button);
+                    }
+                } else {
+                    const saveToLocalBtn = document.createElement('button');
+                    saveToLocalBtn.className = 'btn btn-secondary btn-sm';
+                    saveToLocalBtn.textContent = '💾 Lưu cấu hình';
+                    saveToLocalBtn.style.marginRight = '4px';
+                    saveToLocalBtn.title = 'Lưu profile này vào accounts.json';
+                    saveToLocalBtn.addEventListener('click', async () => {
+                        try {
+                            const res = await fetch('/api/accounts', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    name: acc.name,
+                                    type: 'gpm',
+                                    profile_path_or_id: acc.id,
+                                    proxy: acc.proxy || ''
+                                })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                showToast(`Đã lưu ${acc.name} vào cấu hình!`);
+                                loadAccounts();
+                            } else {
+                                showToast(data.error || 'Lỗi lưu', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Lỗi kết nối', 'error');
+                        }
+                    });
+                    actions.appendChild(saveToLocalBtn);
                 }
+
                 tr.append(nameCell, typeCell, profileCell, proxyCell, statusCell, actions);
                 accountsTableBody.appendChild(tr);
             });
 
-            // Bind actions
+            // Bind actions for saved accounts
             document.querySelectorAll('.btn-auth-acc').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const id = btn.dataset.id;
@@ -675,6 +789,49 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error("Lỗi khi tải tài khoản:", e);
         }
+    }
+
+    if (refreshGpmBtn) {
+        refreshGpmBtn.addEventListener('click', async () => {
+            showToast('Đang quét và đồng bộ profile từ GPM Login...');
+            await loadAccounts();
+            showToast('Đã cập nhật danh sách Profile GPM!');
+        });
+    }
+
+    if (syncGpmTableBtn) {
+        syncGpmTableBtn.addEventListener('click', async () => {
+            showToast('Đang tải danh sách profile từ GPM Login...');
+            await loadAccounts();
+            showToast('Đã đồng bộ danh sách GPM vào bảng!');
+        });
+    }
+
+    if (openSelectedProfileBtn) {
+        openSelectedProfileBtn.addEventListener('click', async () => {
+            const accId = accountSelector ? accountSelector.value : '';
+            if (!accId || accId === '__rotate__') {
+                showToast('Vui lòng chọn một Profile cụ thể để mở!', 'error');
+                return;
+            }
+            const currentGpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
+            showToast('Đang khởi chạy trình duyệt Profile...');
+            try {
+                const res = await fetch('/api/profiles/open-browser', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ accountId: accId, gpmApiUrl: currentGpmUrl })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ ${data.message}`);
+                } else {
+                    showToast(`❌ ${data.error}`, 'error');
+                }
+            } catch (e) {
+                showToast(`Lỗi: ${e.message}`, 'error');
+            }
+        });
     }
 
     // Toggle accounts panel

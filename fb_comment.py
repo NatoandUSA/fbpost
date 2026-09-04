@@ -4,7 +4,7 @@ import time
 import random
 import re
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser
+from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser
 
 STATE_FILE = "state.json"
 
@@ -18,11 +18,11 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
     
     account = None
     if account_id:
-        accounts = load_accounts()
-        account = next((a for a in accounts if a["id"] == account_id), None)
+        account = resolve_account(account_id, gpm_api_url)
         if not account:
-            print(f"❌ Lỗi: Không tìm thấy Account ID '{account_id}' trong accounts.json.")
+            print(f"❌ Lỗi: Không thể khởi tạo cấu hình cho Account ID '{account_id}'.")
             return False
+        print(f"👤 Khởi chạy profile: {account.get('name', account_id)} ({account.get('type', 'local')})")
 
     browser_obj = None
     context = None

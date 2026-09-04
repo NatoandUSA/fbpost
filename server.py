@@ -751,25 +751,46 @@ def delete_account(id):
         return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
 
 
+@app.route('/api/gpm/profiles', methods=['GET'])
+def api_gpm_profiles():
+    """Kéo danh sách Profile trực tiếp từ GPMLogin REST API v3 (mặc định port 19995)."""
+    from utils import fetch_gpm_profiles
+    gpm_url = request.args.get('gpm_api_url', '').strip() or None
+    page = max(1, request.args.get('page', 1, type=int))
+    page_size = max(1, min(request.args.get('page_size', 100, type=int), 500))
+    result = fetch_gpm_profiles(gpm_api_url=gpm_url, page=page, page_size=page_size)
+    return jsonify(result)
+
+
+@app.route('/api/gpm/status', methods=['GET'])
+def api_gpm_status():
+    """Kiểm tra kết nối và số lượng Profile trực tiếp trong GPMLogin."""
+    from utils import fetch_gpm_profiles
+    gpm_url = request.args.get('gpm_api_url', '').strip() or None
+    result = fetch_gpm_profiles(gpm_api_url=gpm_url, page=1, page_size=1)
+    return jsonify({
+        "connected": result.get("connected", False),
+        "total_profiles": result.get("total", 0),
+        "base_url": result.get("base_url", "http://127.0.0.1:19995")
+    })
+
+
 @app.route('/api/profiles/open-browser', methods=['POST'])
 def open_profile_browser():
     """Khởi chạy Profile GPM hoặc Local Profile được chỉ định và mở trực tiếp link (Group/Page)."""
-    from utils import load_accounts
+    from utils import resolve_account, load_accounts
     data = json_body()
     account_id = data.get('accountId', '').strip()
     target_url = data.get('url', 'https://www.facebook.com/').strip()
     gpm_api_url = data.get('gpmApiUrl', 'http://127.0.0.1:19995').strip()
 
-    accounts = load_accounts()
-    account = None
-    if account_id:
-        account = next((a for a in accounts if a.get("id") == account_id or a.get("name") == account_id or a.get("profile_path_or_id") == account_id), None)
-
-    if not account and accounts:
-        account = accounts[0]
+    account = resolve_account(account_id, gpm_api_url)
+    if not account:
+        accounts = load_accounts()
+        account = accounts[0] if accounts else None
 
     if not account:
-        return jsonify({"error": "Chưa có tài khoản nào được cấu hình trong kho tài khoản."}), 400
+        return jsonify({"error": "Chưa có tài khoản nào được cấu hình hoặc không thể kết nối GPM."}), 400
 
     def start_browser_background(acc, url, gpm_url):
         try:
@@ -895,15 +916,11 @@ def run_script():
     account_id = data.get('accountId')
     gpm_api = data.get('gpmApiUrl')
     
-    if cmd not in ALLOWED_COMMANDS:
-        return jsonify({"error": "Tác vụ không hợp lệ."}), 400
-    if account_id and not isinstance(account_id, str):
-        return jsonify({"error": "Account ID không hợp lệ."}), 400
-    if gpm_api and (not isinstance(gpm_api, str) or urlparse(gpm_api).hostname not in {"127.0.0.1", "localhost"}):
-        return jsonify({"error": "GPM API chỉ được phép chạy trên máy cục bộ."}), 400
-
     # Rotate accounts and delay settings
     rotate_accounts = data.get('rotateAccounts', False)
+    if account_id == '__rotate__':
+        rotate_accounts = True
+        account_id = None
     delay_min = max(5, int(data.get('delayMin', 300))) # mặc định 300s (5 phút)
     delay_max = max(delay_min, int(data.get('delayMax', 600))) # mặc định 600s (10 phút)
 
@@ -951,6 +968,30 @@ def run_script():
                 accounts_pool = [a for a in all_accs if a.get("id")]
             except Exception:
                 accounts_pool = []
+
+            # Nếu accounts.json chưa có nhiều tài khoản, tự động kéo trực tiếp từ GPM API v3
+            if len(accounts_pool) < 2:
+                try:
+                    from utils import fetch_gpm_profiles
+                    gpm_res = fetch_gpm_profiles(gpm_api_url=gpm_api, page_size=200)
+                    if gpm_res.get("connected") and gpm_res.get("profiles"):
+                        gpm_accs = [
+                            {
+                                "id": p.get("id"),
+                                "name": p.get("name", p.get("id")),
+                                "type": "gpm",
+                                "profile_path_or_id": p.get("id"),
+                                "proxy": p.get("raw_proxy", ""),
+                                "browser_type": p.get("browser_type", "Chrome"),
+                                "status": "GPM Trực tiếp"
+                            }
+                            for p in gpm_res.get("profiles", [])
+                            if p.get("id")
+                        ]
+                        if gpm_accs:
+                            accounts_pool = gpm_accs
+                except Exception:
+                    pass
 
         if cmd == 'auth':
             full_cmd = build_cmd_for_account(account_id) + ["auth"]

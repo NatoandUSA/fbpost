@@ -117,6 +117,74 @@ def save_accounts(accounts):
             os.unlink(temporary_path)
 
 
+def fetch_gpm_profiles(gpm_api_url=None, page=1, page_size=100):
+    """
+    Kéo danh sách Profile trực tiếp từ GPMLogin REST API v3 (mặc định port 19995).
+    Tham khảo từ kiến trúc Autoupload Zalopro (automation_tools).
+    """
+    api_base = (gpm_api_url or os.getenv("GPM_API_URL", "http://127.0.0.1:19995")).rstrip("/")
+    if "/api" in api_base:
+        url = f"{api_base}/profiles"
+    else:
+        url = f"{api_base}/api/v3/profiles"
+
+    try:
+        import requests
+        res = requests.get(url, params={"page": page, "page_size": page_size}, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            profiles_data = data.get("data", [])
+            pagination = data.get("pagination", {})
+            total = pagination.get("total", len(profiles_data)) if isinstance(pagination, dict) else len(profiles_data)
+            return {"connected": True, "profiles": profiles_data, "total": total, "base_url": api_base}
+    except Exception:
+        pass
+    return {"connected": False, "profiles": [], "total": 0, "base_url": api_base}
+
+
+def resolve_account(account_id, gpm_api_url=None):
+    """
+    Tìm hoặc tự động phân giải cấu hình tài khoản:
+    1. Kiểm tra trong accounts.json (nếu đã nạp).
+    2. Nếu không có (người dùng chọn trực tiếp từ GPM mà không nạp), tự động tra cứu từ GPM API v3.
+    3. Trả về cấu hình dict hoàn chỉnh cho launch_browser() khởi chạy trực tiếp qua CDP.
+    """
+    if not account_id:
+        return None
+
+    # 1. Tìm trong accounts.json
+    accounts = load_accounts()
+    acc = next((a for a in accounts if a.get("id") == account_id or a.get("name") == account_id or a.get("profile_path_or_id") == account_id), None)
+    if acc:
+        return acc
+
+    # 2. Tra cứu trực tiếp từ GPM API v3 (Zero-Config)
+    gpm_res = fetch_gpm_profiles(gpm_api_url=gpm_api_url, page_size=200)
+    if gpm_res.get("connected"):
+        for p in gpm_res.get("profiles", []):
+            if p.get("id") == account_id or p.get("name") == account_id:
+                return {
+                    "id": p.get("id"),
+                    "name": p.get("name", account_id),
+                    "type": "gpm",
+                    "profile_path_or_id": p.get("id"),
+                    "proxy": p.get("raw_proxy", ""),
+                    "browser_type": p.get("browser_type", "Chrome"),
+                    "status": "GPM Trực tiếp"
+                }
+
+    # 3. Fallback: Nếu không kết nối được GPM API nhưng có ID, tạo cấu hình GPM tạm thời để chạy
+    is_uuid = bool(re.search(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", account_id))
+    return {
+        "id": account_id,
+        "name": account_id if not is_uuid else f"GPM ({account_id[:8]})",
+        "type": "gpm",
+        "profile_path_or_id": account_id,
+        "proxy": "",
+        "status": "GPM Trực tiếp"
+    }
+
+
 def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=20):
     """Wait for a GPM-launched browser to expose its local CDP endpoint."""
     deadline = time.monotonic() + timeout_seconds
@@ -178,11 +246,11 @@ def launch_browser(account, p, api_url=None):
         if not browser and not api_is_v1:
             try:
                 url = f"{api_base}/api/v3/profiles/start/{profile_id}"
-                print(f"Calling GPM Login v4 API: {url}")
-                payload = requests.get(url, timeout=10).json()
+                print(f"Calling GPM Login v4/v3 API: {url}")
+                payload = requests.get(url, params={"win_scale": 0.8}, timeout=15).json()
                 data = payload.get("data") if isinstance(payload, dict) else None
                 cdp_address = data.get("remote_debugging_address") if isinstance(data, dict) else None
-                if payload.get("success") and cdp_address:
+                if cdp_address and (payload.get("success") or payload.get("status") or True):
                     cdp_url = cdp_address if cdp_address.startswith("http") else f"http://{cdp_address}"
                     browser = connect_over_cdp_when_ready(p, cdp_url)
                 elif isinstance(payload, dict):
