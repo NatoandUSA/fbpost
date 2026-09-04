@@ -181,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isCsvMode = false;
     let isRunning = false;
     let logHasContent = false;
+    let rawLogLines = [];
     let currentScrapedData = [];
     let accountsList = [];
     let savedPostLinks = [];
@@ -2179,6 +2180,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function appendLog(text) {
         clearLogEmpty();
+        rawLogLines.push(text);
         const line = document.createElement('div');
         line.className = 'log-line';
 
@@ -2202,8 +2204,67 @@ document.addEventListener('DOMContentLoaded', () => {
     clearLogBtn.addEventListener('click', () => {
         logOutput.innerHTML = `<div class="log-empty"><svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"/></svg><span>Chưa có hoạt động nào</span></div>`;
         logHasContent = false;
+        rawLogLines = [];
         progressContainer.classList.add('hidden');
     });
+
+    // ---- Copy Full Log Button ----
+    const copyLogBtn = document.getElementById('copy-log-btn');
+    if (copyLogBtn) {
+        copyLogBtn.addEventListener('click', () => {
+            let fullText = '';
+            if (rawLogLines && rawLogLines.length > 0) {
+                fullText = rawLogLines.join('\n');
+            } else if (logOutput) {
+                const lines = Array.from(logOutput.querySelectorAll('.log-line')).map(el => el.textContent);
+                if (lines.length > 0) {
+                    fullText = lines.join('\n');
+                } else if (!logOutput.querySelector('.log-empty')) {
+                    fullText = logOutput.innerText || '';
+                }
+            }
+
+            if (!fullText.trim()) {
+                showToast('Nhật ký hiện đang trống, chưa có nội dung để copy!', 'info');
+                return;
+            }
+
+            const copySuccess = () => {
+                const originalHtml = copyLogBtn.innerHTML;
+                copyLogBtn.innerHTML = '✅ Đã Copy Full Log!';
+                copyLogBtn.style.background = '#10B981';
+                showToast(`Đã sao chép toàn bộ ${fullText.split('\n').length} dòng log vào Clipboard!`);
+                setTimeout(() => {
+                    copyLogBtn.innerHTML = originalHtml;
+                    copyLogBtn.style.background = '#2563EB';
+                }, 2500);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(fullText).then(copySuccess).catch(() => {
+                    fallbackCopy(fullText);
+                });
+            } else {
+                fallbackCopy(fullText);
+            }
+
+            function fallbackCopy(text) {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    copySuccess();
+                } catch (e) {
+                    showToast('Không thể sao chép log tự động!', 'error');
+                }
+                document.body.removeChild(ta);
+            }
+        });
+    }
 
     // ---- Set Running State ----
     function setRunning(running) {

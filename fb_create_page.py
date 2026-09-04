@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import time
 import random
@@ -194,6 +194,6 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
     except Exception as e:
         print(f"❌ Lỗi trong quá trình tạo Fanpage: {e}")
     finally:
-        close_browser(browser_obj, context, account)
+        close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
 
     return success

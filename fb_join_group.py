@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import os
 import time
 import random
@@ -165,6 +165,6 @@ def search_and_join_groups(keywords, max_groups=1, account_id=None, gpm_api_url=
     except Exception as err:
         print(f"❌ Lỗi trong quá trình tìm và gia nhập nhóm: {err}")
     finally:
-        close_browser(browser_obj, context, account)
+        close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
 
     return joined_count

@@ -328,11 +328,20 @@ def launch_browser(account, p, api_url=None):
         page = context.pages[0] if context.pages else context.new_page()
         return None, context, page
 
-def close_browser(browser_or_context, account, api_url=None):
+def close_browser(browser_or_context, account=None, api_url=None):
+    # Support both close_browser(browser_obj, context, account) and close_browser(browser_or_context, account, api_url)
+    if not isinstance(account, dict) and hasattr(account, "close") and isinstance(api_url, dict):
+        browser_or_context = browser_or_context or account
+        account = api_url
+        api_url = None
+
+    if not isinstance(account, dict):
+        account = {}
+
     acc_type = account.get("type", "local")
     profile_id = account.get("profile_path_or_id", "")
     
-    if acc_type == "gpm":
+    if acc_type == "gpm" and profile_id:
         if not api_url:
             api_url = "http://127.0.0.1:19995"
         import requests
@@ -354,18 +363,12 @@ def close_browser(browser_or_context, account, api_url=None):
             requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=5)
         except Exception:
             pass
-            
-        if browser_or_context:
-            try:
-                browser_or_context.close()
-            except Exception:
-                pass
-    else:
-        if browser_or_context:
-            try:
-                browser_or_context.close()
-            except Exception:
-                pass
+
+    if browser_or_context:
+        try:
+            browser_or_context.close()
+        except Exception:
+            pass
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 
