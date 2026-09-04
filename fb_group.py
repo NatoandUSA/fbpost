@@ -158,6 +158,11 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             if checkin:
                 add_checkin(page)
             
+            # Tạm dừng 5 - 10s mô phỏng người dùng đọc lại bài viết trước khi bấm đăng (Anti-bot)
+            review_delay = random.uniform(5.0, 10.0)
+            print(f"👀 Tạm dừng {review_delay:.1f}s kiểm tra lại bài viết trước khi đăng...")
+            time.sleep(review_delay)
+
             print("🚀 Đang bấm nút 'Đăng' bài viết...")
             post_button = None
             post_selectors = [
@@ -184,7 +189,10 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 # Fallback role button
                 page.get_by_role("button", name=re.compile(r"^(Đăng|Post)$", re.IGNORECASE)).first.click(force=True)
 
-            time.sleep(random.uniform(3.0, 5.0))
+            # Chờ 6 - 10s để Facebook upload hoàn tất bài đăng lên máy chủ
+            wait_uploaded = random.uniform(6.0, 10.0)
+            print(f"⏳ Đang chờ {wait_uploaded:.1f}s để Facebook lưu và hoàn tất bài đăng...")
+            time.sleep(wait_uploaded)
 
             # Xử lý nếu xuất hiện popup Quy tắc nhóm / Nội quy
             try:
@@ -202,8 +210,8 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             except Exception:
                 pass
             
-            # Quét tìm liên kết bài đăng vừa tạo
-            scrape_post_link(page)
+            # Quét tìm và tự động lưu liên kết bài đăng vừa tạo
+            scrape_post_link(page, target=group_url, content=content)
             print("✅ Đã đăng bài vào Group thành công!")
             
     except Exception as e:

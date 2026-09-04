@@ -24,3 +24,5 @@ release/
 runtime/
 profiles/
 uploads/
+posted_links.json
+accounts.json

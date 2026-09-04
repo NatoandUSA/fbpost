@@ -825,6 +825,27 @@ def generate_2fa():
     except Exception as e:
         return jsonify({"error": f"Lỗi tính toán mã 2FA: {str(e)}"}), 400
 
+POSTED_LINKS_FILE = "posted_links.json"
+
+@app.route('/api/posted-links', methods=['GET', 'DELETE'])
+def api_posted_links():
+    if request.method == 'DELETE':
+        try:
+            with open(POSTED_LINKS_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
+            return jsonify({"status": "cleared", "count": 0})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+            
+    if not os.path.exists(POSTED_LINKS_FILE):
+        return jsonify([])
+    try:
+        with open(POSTED_LINKS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return jsonify(data if isinstance(data, list) else [])
+    except Exception:
+        return jsonify([])
+
 @app.route('/api/run', methods=['POST'])
 def run_script():
     import random
@@ -842,12 +863,16 @@ def run_script():
     if gpm_api and (not isinstance(gpm_api, str) or urlparse(gpm_api).hostname not in {"127.0.0.1", "localhost"}):
         return jsonify({"error": "GPM API chỉ được phép chạy trên máy cục bộ."}), 400
 
+    # Rotate accounts and delay settings
+    rotate_accounts = data.get('rotateAccounts', False)
+    delay_min = max(5, int(data.get('delayMin', 300))) # mặc định 300s (5 phút)
+    delay_max = max(delay_min, int(data.get('delayMax', 600))) # mặc định 600s (10 phút)
+
     # Feeling and checkin settings
     feeling = data.get('feeling', False)
     checkin = data.get('checkin', False)
     
     def generate():
-        base_cmd = [sys.executable, "main.py"]
         process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
         def start_cli_process(command):
@@ -862,19 +887,30 @@ def run_script():
                 env=process_environment,
             )
 
-        if account_id:
-            base_cmd.extend(["--account-id", account_id])
-        if gpm_api:
-            base_cmd.extend(["--gpm-api", gpm_api])
+        def build_cmd_for_account(acc_id):
+            cmd_list = [sys.executable, "main.py"]
+            if acc_id:
+                cmd_list.extend(["--account-id", acc_id])
+            if gpm_api:
+                cmd_list.extend(["--gpm-api", gpm_api])
+            return cmd_list
+
+        # Load accounts for round-robin rotation if requested
+        accounts_pool = []
+        if rotate_accounts:
+            try:
+                all_accs = load_accounts()
+                accounts_pool = [a for a in all_accs if a.get("id")]
+            except Exception:
+                accounts_pool = []
 
         if cmd == 'auth':
-            full_cmd = base_cmd + ["auth"]
+            full_cmd = build_cmd_for_account(account_id) + ["auth"]
             process = start_cli_process(full_cmd)
             for line in iter(process.stdout.readline, ''):
                 yield line
             outcome = "finished" if process.wait() == 0 else "failed"
             if outcome == "failed":
-                # Avoid presenting an old successful login as a live GPM connection.
                 try:
                     os.unlink(AUTH_STATUS_FILE)
                 except FileNotFoundError:
@@ -886,7 +922,7 @@ def run_script():
         if cmd == 'interact':
             limit = max(1, min(int(data.get('limit', 5)), 50))
             comments = data.get('comments', '')
-            full_cmd = base_cmd + ["interact", "--limit", str(limit)]
+            full_cmd = build_cmd_for_account(account_id) + ["interact", "--limit", str(limit)]
             if comments:
                 full_cmd.extend(["--comments", comments])
                 
@@ -904,7 +940,7 @@ def run_script():
             if not target_url:
                 yield "Error: No target URL provided for scraping.\n"
                 return
-            full_cmd = base_cmd + ["scrape", target_url, "--limit", str(limit)]
+            full_cmd = build_cmd_for_account(account_id) + ["scrape", target_url, "--limit", str(limit)]
             process = start_cli_process(full_cmd)
             for line in iter(process.stdout.readline, ''):
                 yield line
@@ -933,10 +969,18 @@ def run_script():
                 if not target_url or not comment_text:
                     continue
 
+                # Xoay tua Profile GPM nếu bật rotate_accounts
+                if rotate_accounts and accounts_pool:
+                    curr_acc = accounts_pool[i % len(accounts_pool)]
+                    curr_acc_id = curr_acc.get("id")
+                    yield f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bình luận {i+1}/{total}\n"
+                else:
+                    curr_acc_id = account_id
+
                 yield f"\n========== [Bài viết {i+1}/{total}] ==========\n"
                 yield f"Đang mở bài viết: {target_url}\n"
 
-                full_cmd = base_cmd + ["comment", target_url, comment_text]
+                full_cmd = build_cmd_for_account(curr_acc_id) + ["comment", target_url, comment_text]
                 if like_post:
                     full_cmd.append("--like")
 
@@ -946,14 +990,18 @@ def run_script():
                 outcome = "finished" if process.wait() == 0 else "failed"
                 if outcome == "failed":
                     batch_failed = True
-                record_profile_activity(account_id, "comment", target=target_url, content=comment_text, outcome=outcome)
+                record_profile_activity(curr_acc_id, "comment", target=target_url, content=comment_text, outcome=outcome)
 
                 if i < total - 1:
-                    delay = random.randint(25, 45)
-                    yield f"\n[Anti-Spam] Nghỉ {delay} giây trước khi chuyển bài viết tiếp theo...\n"
+                    delay = random.randint(delay_min, delay_max)
+                    mins = delay // 60
+                    secs = delay % 60
+                    yield f"\n⏳ [Anti-Spam] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
                     for sec in range(delay, 0, -1):
-                        if sec % 10 == 0 or sec <= 5:
-                            yield f"... còn {sec}s\n"
+                        if sec % 30 == 0 or sec <= 10:
+                            s_m = sec // 60
+                            s_s = sec % 60
+                            yield f"... còn {s_m}p {s_s}s ({sec}s)\n"
                         time.sleep(1)
 
             yield f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n"
@@ -995,11 +1043,19 @@ def run_script():
             if image and not is_uploaded_image(image):
                 yield f"Error: Target {i+1} has an invalid image path.\n"
                 continue
+
+            # Xoay tua Profile GPM nếu bật rotate_accounts
+            if rotate_accounts and accounts_pool:
+                curr_acc = accounts_pool[i % len(accounts_pool)]
+                curr_acc_id = curr_acc.get("id")
+                yield f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bài đăng {i+1}/{total}\n"
+            else:
+                curr_acc_id = account_id
                 
             yield f"\n========== [Target {i+1}/{total}] ==========\n"
             yield f"Posting to: {target}\n"
             
-            full_cmd = base_cmd + [cmd, target, content]
+            full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, content]
             if image:
                 full_cmd.extend(["--image", image])
             if task_feeling:
@@ -1013,14 +1069,18 @@ def run_script():
             outcome = "finished" if process.wait() == 0 else "failed"
             if outcome == "failed":
                 batch_failed = True
-            record_profile_activity(account_id, cmd, target=target, content=content, outcome=outcome)
+            record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
             
             if i < total - 1:
-                delay = random.randint(30, 60)
-                yield f"\n[Anti-Spam] Waiting {delay} seconds before next post...\n"
+                delay = random.randint(delay_min, delay_max)
+                mins = delay // 60
+                secs = delay % 60
+                yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n"
                 for sec in range(delay, 0, -1):
-                    if sec % 10 == 0 or sec <= 5:
-                        yield f"... {sec}s remaining\n"
+                    if sec % 30 == 0 or sec <= 10:
+                        s_m = sec // 60
+                        s_s = sec % 60
+                        yield f"... còn {s_m}p {s_s}s ({sec}s)\n"
                     time.sleep(1)
                     
         yield f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n"

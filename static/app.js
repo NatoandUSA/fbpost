@@ -532,6 +532,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Populate account selector
             const selectedVal = accountSelector.value;
             accountSelector.innerHTML = '';
+
+            if (accountsList.length > 1) {
+                const rotateOpt = document.createElement('option');
+                rotateOpt.value = '__rotate__';
+                rotateOpt.textContent = `🔄 Luân phiên ${accountsList.length} Profile GPM (Xoay vòng chống spam)`;
+                accountSelector.appendChild(rotateOpt);
+            }
+
             accountsList.forEach(acc => {
                 const opt = document.createElement('option');
                 opt.value = acc.id;
@@ -1063,13 +1071,37 @@ document.addEventListener('DOMContentLoaded', () => {
         appendLog(`▶ Bắt đầu lệnh: ${command}...`);
 
         // Add account attributes to payload if selected
-        const accId = accountSelector.value;
-        const gpmApi = gpmApiInput.value.trim();
+        const accId = accountSelector ? accountSelector.value : '';
+        const gpmApi = gpmApiInput ? gpmApiInput.value.trim() : '';
         
-        if (accId) {
+        if (accId === '__rotate__') {
+            payload.rotateAccounts = true;
+            payload.accountId = '';
+            payload.gpmApiUrl = gpmApi;
+        } else if (accId) {
+            payload.rotateAccounts = false;
             payload.accountId = accId;
             payload.gpmApiUrl = gpmApi;
         }
+
+        // Add safe delay parameters
+        const delayPreset = document.getElementById('delay-preset-select')?.value || 'safe';
+        let delayMin = 300;
+        let delayMax = 600;
+        if (delayPreset === 'safe') {
+            delayMin = 300; delayMax = 600; // 5 - 10 phút
+        } else if (delayPreset === 'moderate') {
+            delayMin = 120; delayMax = 300; // 2 - 5 phút
+        } else if (delayPreset === 'fast') {
+            delayMin = 30; delayMax = 60;   // 30 - 60 giây
+        } else if (delayPreset === 'custom') {
+            const cMin = parseInt(document.getElementById('custom-delay-min')?.value) || 5;
+            const cMax = parseInt(document.getElementById('custom-delay-max')?.value) || 10;
+            delayMin = Math.max(5, cMin * 60);
+            delayMax = Math.max(delayMin, cMax * 60);
+        }
+        payload.delayMin = delayMin;
+        payload.delayMax = delayMax;
 
         // Add Feeling and Check-in parameters if checking Group or Page commands
         if (command === 'group' || command === 'page') {
@@ -1107,8 +1139,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (cleanLine.startsWith('POSTED_LINK:')) {
                         const postUrl = cleanLine.substring('POSTED_LINK:'.length).trim();
                         if (postUrl && postUrl.startsWith('http')) {
-                            saveLink(postUrl);
-                            appendLog(`🔗 Đã lấy được link bài đăng: ${postUrl}`);
+                            loadPostedLinks();
+                            appendLog(`🔗 Đã ghi nhận bài đăng vào Lịch sử: ${postUrl}`);
                         }
                     } else {
                         if (cleanLine) {
@@ -2781,12 +2813,134 @@ document.addEventListener('DOMContentLoaded', () => {
             logDiv.scrollTop = logDiv.scrollHeight;
         } catch (e) {}
     }
-    // ====== END PAGE SCHEDULER JS ======
+    // ====== POSTED LINKS HISTORY & SAFE DELAY LOGIC ======
+    const postedLinksHistoryCard = document.getElementById('posted-links-card');
+    const postedLinksHistoryList = document.getElementById('posted-links-list');
+    const refreshLinksBtn = document.getElementById('refresh-links-btn');
+    const sendToCommentBtn = document.getElementById('send-to-comment-btn');
+    const loadPostedLinksBtn = document.getElementById('load-posted-links-btn');
+
+    async function loadPostedLinks() {
+        if (!postedLinksHistoryList) return;
+        try {
+            const res = await fetch('/api/posted-links');
+            const links = await res.json();
+            renderPostedLinks(links);
+        } catch (e) {
+            console.error('Lỗi nạp lịch sử link bài:', e);
+        }
+    }
+
+    function renderPostedLinks(links) {
+        if (!postedLinksHistoryList) return;
+        postedLinksHistoryList.innerHTML = '';
+        if (!links || links.length === 0) {
+            postedLinksHistoryList.innerHTML = '<span class="empty">Chưa có link bài đăng nào. Các bài đăng thành công sẽ tự động xuất hiện ở đây.</span>';
+            return;
+        }
+        links.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'posted-link-item';
+            row.style.cssText = 'padding: 6px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; background: #fff; margin-bottom: 4px; border-radius: 6px;';
+            
+            const linkLine = document.createElement('div');
+            linkLine.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 6px;';
+            
+            const a = document.createElement('a');
+            a.href = item.url;
+            a.target = '_blank';
+            a.style.cssText = 'font-size: 12px; color: var(--blue); word-break: break-all; font-weight: 600; text-decoration: none;';
+            a.textContent = item.url;
+            
+            const timeSpan = document.createElement('span');
+            timeSpan.style.cssText = 'font-size: 10px; color: #94a3b8; white-space: nowrap;';
+            timeSpan.textContent = item.posted_at ? item.posted_at.split(' ')[1] : '';
+
+            linkLine.append(a, timeSpan);
+            
+            const sub = document.createElement('div');
+            sub.style.cssText = 'font-size: 11px; color: #64748b; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;';
+            sub.textContent = `${item.target} · ${item.content_preview || ''}`;
+
+            row.append(linkLine, sub);
+            postedLinksHistoryList.appendChild(row);
+        });
+    }
+
+    if (refreshLinksBtn) {
+        refreshLinksBtn.addEventListener('click', loadPostedLinks);
+    }
+
+    // Nút nạp link vừa đăng vào ô Comment
+    function sendPostedLinksToComment() {
+        fetch('/api/posted-links')
+            .then(res => res.json())
+            .then(links => {
+                if (!links || links.length === 0) {
+                    showToast('Chưa có bài nào trong Lịch sử bài đã đăng!', 'error');
+                    return;
+                }
+                const urls = links.map(l => l.url).filter(u => u && u.startsWith('http'));
+                if (urls.length === 0) {
+                    showToast('Không tìm thấy link bài viết hợp lệ!', 'error');
+                    return;
+                }
+                // Chuyển sang tab comment
+                const tabComment = document.getElementById('tab-comment');
+                if (tabComment) tabComment.click();
+                
+                const commentTargets = document.getElementById('comment-targets');
+                if (commentTargets) {
+                    commentTargets.value = urls.join('\n');
+                    showToast(`✅ Đã nạp ${urls.length} link bài viết vào danh sách bình luận!`);
+                }
+            })
+            .catch(err => showToast(`Lỗi: ${err.message}`, 'error'));
+    }
+
+    if (sendToCommentBtn) sendToCommentBtn.addEventListener('click', sendPostedLinksToComment);
+    if (loadPostedLinksBtn) loadPostedLinksBtn.addEventListener('click', sendPostedLinksToComment);
+
+    // Tùy chọn Preset Giãn Cách An Toàn
+    const delayPresetSelect = document.getElementById('delay-preset-select');
+    const customDelayInputs = document.getElementById('custom-delay-inputs');
+    const delayPreviewBadge = document.getElementById('delay-preview-badge');
+    
+    if (delayPresetSelect) {
+        delayPresetSelect.addEventListener('change', () => {
+            const val = delayPresetSelect.value;
+            if (val === 'custom') {
+                customDelayInputs.classList.remove('hidden');
+                customDelayInputs.style.display = 'flex';
+                delayPreviewBadge.textContent = 'Tùy chỉnh phút';
+            } else {
+                customDelayInputs.classList.add('hidden');
+                customDelayInputs.style.display = 'none';
+                if (val === 'safe') {
+                    delayPreviewBadge.textContent = '5 - 10 phút (An toàn)';
+                    delayPreviewBadge.style.background = '#DBEAFE';
+                    delayPreviewBadge.style.color = '#1E40AF';
+                } else if (val === 'moderate') {
+                    delayPreviewBadge.textContent = '2 - 5 phút (Vừa phải)';
+                    delayPreviewBadge.style.background = '#FEF3C7';
+                    delayPreviewBadge.style.color = '#92400E';
+                } else if (val === 'fast') {
+                    delayPreviewBadge.textContent = '30 - 60s (Thử nghiệm)';
+                    delayPreviewBadge.style.background = '#FEE2E2';
+                    delayPreviewBadge.style.color = '#B91C1C';
+                }
+            }
+        });
+    }
+
+    // Tải danh sách link đã đăng ban đầu
+    loadPostedLinks();
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(() => {
-        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.5.1 [Build: 2026-09-04 00:07]');
+        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.5.2 [Build: 2026-09-04 06:45]');
         appendLog('💡 Hệ thống đã sẵn sàng với tài khoản GPM M14 và 3 nhóm Homestay tại Huế.');
+        appendLog('🛡️ Chế độ chống spam: Giãn cách an toàn 5 - 10 phút & Hỗ trợ xoay tua Profile GPM.');
     }, 500);
 });
 

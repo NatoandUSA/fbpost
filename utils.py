@@ -446,45 +446,92 @@ def add_checkin(page):
     except Exception as e:
         print(f"⚠️ Cảnh báo: Bỏ qua check-in ({e}).")
 
-def scrape_post_link(page):
+POSTED_LINKS_FILE = "posted_links.json"
+
+def record_posted_link(target, post_url, content=""):
     """
-    Scrapes the URL of the newly created post from the feed or the popup notification.
+    Lưu link bài viết đã đăng thành công vào posted_links.json để phục vụ comment seeding.
+    """
+    if not post_url or not post_url.startswith("http"):
+        return
+    try:
+        items = []
+        if os.path.exists(POSTED_LINKS_FILE):
+            try:
+                with open(POSTED_LINKS_FILE, "r", encoding="utf-8") as f:
+                    items = json.load(f)
+                    if not isinstance(items, list):
+                        items = []
+            except Exception:
+                items = []
+        
+        # Tránh trùng lặp
+        if not any(item.get("url") == post_url for item in items):
+            item = {
+                "id": str(int(time.time() * 1000)),
+                "target": target,
+                "url": post_url,
+                "content_preview": (content[:120] + "...") if len(content) > 120 else content,
+                "posted_at": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            items.insert(0, item)
+            # Giữ tối đa 200 link gần nhất
+            items = items[:200]
+            with open(POSTED_LINKS_FILE, "w", encoding="utf-8") as f:
+                json.dump(items, f, indent=2, ensure_ascii=False)
+            print(f"💾 Đã lưu bài viết vào Lịch sử đăng: {post_url}")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu link bài đăng: {e}")
+
+def scrape_post_link(page, target="", content=""):
+    """
+    Trích xuất permalink của bài viết vừa đăng từ thông báo toast hoặc đầu Newsfeed.
     """
     print("Đang quét tìm liên kết của bài đăng vừa tạo...")
+    clean_href = None
     try:
-        # Wait for the composer modal/dialog to close
-        page.wait_for_selector("div[role='dialog']", state="hidden", timeout=20000)
-        time.sleep(4.0) # Wait for page to render the new post
+        # Chờ modal soạn thảo đóng hoàn toàn
+        page.wait_for_selector("div[role='dialog']", state="hidden", timeout=15000)
+        time.sleep(3.0)
         
-        # Method 1: Search for Toast notification popup link ("View post" / "Xem bài viết")
-        links = page.locator("a").all()
-        for link in links:
+        # Cách 1: Tìm thông báo Toast nổi lên của Facebook ("Xem bài viết", "View post", "Xem bài đăng")
+        try:
+            toast_links = page.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php']").all()
+            for link in toast_links:
+                href = link.get_attribute("href")
+                if href and ("view" in (link.inner_text() or "").lower() or "xem" in (link.inner_text() or "").lower()):
+                    clean = href.split("?")[0]
+                    if not clean.startswith("http"):
+                        clean = f"https://www.facebook.com{clean}"
+                    clean_href = clean
+                    break
+        except Exception:
+            pass
+
+        # Cách 2: Quét thẻ bài viết đầu tiên trên tường (Top feed article)
+        if not clean_href:
             try:
-                href = link.get_attribute("href")
-                text = link.inner_text()
-                if href and re.search(r"View|Xem", text, re.IGNORECASE) and ("/posts/" in href or "/permalink/" in href or "permalink.php" in href):
-                    clean_href = href.split("?")[0]
-                    if not clean_href.startswith("http"):
-                        clean_href = f"https://www.facebook.com{clean_href}"
-                    print(f"POSTED_LINK:{clean_href}")
-                    return clean_href
+                first_article = page.locator("div[role='article'], div[role='feed'] > div").first
+                if first_article.is_visible(timeout=3000):
+                    # Tìm link thời gian đăng (timestamp link) hoặc link permalink
+                    article_links = first_article.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']").all()
+                    for link in article_links:
+                        href = link.get_attribute("href")
+                        if href and not any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
+                            clean = href.split("?")[0]
+                            if not clean.startswith("http"):
+                                clean = f"https://www.facebook.com{clean}"
+                            clean_href = clean
+                            break
             except Exception:
-                continue
-                
-        # Method 2: Look at the top article on the feed
-        first_article = page.locator("div[role='article']").first
-        if first_article.is_visible():
-            article_links = first_article.locator("a[role='link'], a").all()
-            for link in article_links:
-                href = link.get_attribute("href")
-                if href and ("/posts/" in href or "/permalink/" in href or "permalink.php" in href):
-                    clean_href = href.split("?")[0]
-                    if not clean_href.startswith("http"):
-                        clean_href = f"https://www.facebook.com{clean_href}"
-                    print(f"POSTED_LINK:{clean_href}")
-                    return clean_href
-                    
-        print("⚠️ Không thể trích xuất liên kết bài viết tự động.")
+                pass
+
+        if clean_href:
+            print(f"POSTED_LINK:{clean_href}")
+            record_posted_link(target, clean_href, content)
+            return clean_href
+            
+        print("⚠️ Không thể trích xuất liên kết bài viết tự động (sẽ lưu link mục tiêu).")
         return None
     except Exception as e:
         print(f"⚠️ Cảnh báo: Lỗi khi quét liên kết bài đăng: {e}")

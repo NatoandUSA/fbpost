@@ -250,6 +250,7 @@
                             <label class="field-label">👤 Chọn Profile chạy tác vụ</label>
                             <select id="account-selector" class="field-input">
                                 <option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>
+                                <option value="__rotate__">🔄 Luân phiên tất cả Profile GPM (Xoay vòng chống spam)</option>
                             </select>
                         </div>
 
@@ -333,7 +334,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <!-- 5. Comment on Specific Post Links Section -->
                         <div id="comment-section" class="hidden">
                             <div class="field-group">
-                                <label class="field-label">🔗 Danh sách link bài viết cần bình luận (Mỗi link 1 dòng - Hỗ trợ Group public & Fanpage public)</label>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="field-label" style="margin-bottom:0;">🔗 Link bài viết cần bình luận (Group / Page)</label>
+                                    <button id="load-posted-links-btn" type="button" class="btn btn-secondary btn-xs" style="padding:4px 10px; font-size:12px; font-weight:700;">📋 Lấy link vừa đăng</button>
+                                </div>
                                 <textarea id="comment-targets" class="field-textarea" rows="4" placeholder="https://www.facebook.com/groups/123/posts/456&#10;https://www.facebook.com/FanpageName/posts/789"></textarea>
                             </div>
                             <div class="field-group">
@@ -346,7 +350,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <div class="field-group" style="margin-top: 10px;">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="comment-like-post" checked>
-                                    <span>👍 Tự động thả Thích (Like) bài viết trước khi bình luận</span>
+                                    <span>❤️ Tự động Thả Tim (Love) / Thích (Like) bài viết trước khi bình luận</span>
                                 </label>
                             </div>
                         </div>
@@ -689,7 +693,28 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </label>
                         </div>
 
-                        <button id="post-btn" class="btn btn-primary btn-full">Đăng bài ngay</button>
+                        <!-- Anti-Spam Safe Delay Bar -->
+                        <div class="field-group" id="delay-settings-bar" style="margin-top: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #1E293B;">⏱️ Giãn cách ngẫu nhiên (Tránh spam FB)</label>
+                                <span id="delay-preview-badge" style="font-size: 11px; background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 2px 8px; border-radius: 10px;">5 - 10 phút (Khuyến nghị)</span>
+                            </div>
+                            <select id="delay-preset-select" class="field-input" style="padding: 6px 10px; font-size: 13px;">
+                                <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
+                                <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
+                                <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chỉ dùng khi test thử nghiệm)</option>
+                                <option value="custom">⚙️ Tùy chỉnh số phút theo ý muốn...</option>
+                            </select>
+                            <div id="custom-delay-inputs" class="hidden" style="gap: 8px; margin-top: 8px; align-items: center;">
+                                <span style="font-size: 12px; color: #64748B;">Nghỉ từ:</span>
+                                <input type="number" id="custom-delay-min" class="field-input" value="5" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
+                                <span style="font-size: 12px; color: #64748B;">đến:</span>
+                                <input type="number" id="custom-delay-max" class="field-input" value="10" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
+                                <span style="font-size: 12px; color: #64748B;">phút / mỗi bài</span>
+                            </div>
+                        </div>
+
+                        <button id="post-btn" class="btn btn-primary btn-full" style="padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
                     </section>
                 </div>
 
@@ -751,9 +776,18 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <div id="approval-queue-list" class="posted-links-list"><span class="empty">Chưa có bài nào trong hàng đợi.</span></div>
                     </div>
 
-                    <div class="card" id="campaign-report-card">
-                        <div class="card-header"><div class="card-title-group"><span>📊</span><h3>Báo cáo chiến dịch</h3></div></div>
-                        <div id="campaign-report-list" class="posted-links-list"><span class="empty">Chưa có chiến dịch.</span></div>
+                    <!-- Card Lịch sử link bài đã đăng (Dùng cho comment seeding) -->
+                    <div class="card" id="posted-links-card">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>🔗</span><h3>Lịch sử link bài đã đăng</h3></div>
+                            <div style="display:flex; gap:6px;">
+                                <button id="send-to-comment-btn" class="btn btn-primary btn-xs" type="button" title="Đưa danh sách link này sang tab Comment">💬 Comment các bài này</button>
+                                <button id="refresh-links-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                            </div>
+                        </div>
+                        <div id="posted-links-list" class="posted-links-list" style="max-height: 180px; overflow-y: auto;">
+                            <span class="empty">Chưa có link bài đăng nào được ghi nhận.</span>
+                        </div>
                     </div>
 
                     <!-- Logs Panel Terminal -->
@@ -786,6 +820,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <!-- Toast message overlay -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app.js?v=5.4.7"></script>
+    <script src="app.js?v=5.5.2"></script>
 </body>
 </html>

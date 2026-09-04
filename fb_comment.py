@@ -50,20 +50,39 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             page.mouse.wheel(0, -random.randint(100, 250))
             time.sleep(random.uniform(1.0, 2.0))
 
-            # 1. Thả Like nếu được yêu cầu
+            # 1. Tương tác Thích / Thả Tim nếu được yêu cầu
             if like_post:
                 try:
                     like_btn = page.locator("div[role='button']").filter(
                         has_text=re.compile(r"^(Thích|Like)$", re.IGNORECASE)
                     ).first
-                    if like_btn.is_visible(timeout=3000):
+                    if like_btn.is_visible(timeout=3500):
                         aria_pressed = like_btn.get_attribute("aria-pressed")
                         if aria_pressed != "true":
-                            print("👍 Đang thả Like bài viết trước khi bình luận...")
-                            like_btn.click()
-                            time.sleep(random.uniform(1.0, 2.0))
+                            reacted = False
+                            # Tỷ lệ 70% thả Tim (Love), 30% Thích (Like)
+                            if random.random() < 0.70:
+                                try:
+                                    print("❤️ Đang hover để thả Tim (Love) bài viết...")
+                                    like_btn.hover()
+                                    time.sleep(random.uniform(0.8, 1.4))
+                                    # Tìm icon Yêu thích trong popover reactions
+                                    love_btn = page.locator("div[aria-label*='Yêu thích' i], div[aria-label*='Love' i], div[role='toolbar'] div[role='button']").nth(1)
+                                    if love_btn.is_visible(timeout=2000):
+                                        love_btn.click(force=True)
+                                        reacted = True
+                                        print("❤️ Đã thả Tim (Love) bài viết thành công!")
+                                        time.sleep(random.uniform(2.0, 3.5))
+                                except Exception:
+                                    pass
+                            
+                            if not reacted:
+                                print("👍 Đang bấm Thích (Like) bài viết...")
+                                like_btn.click(force=True)
+                                print("👍 Đã thả Like bài viết thành công!")
+                                time.sleep(random.uniform(1.5, 3.0))
                 except Exception as e:
-                    print(f"⚠️ Bỏ qua bước like: {e}")
+                    print(f"⚠️ Bỏ qua bước tương tác cảm xúc: {e}")
 
             # 2. Tìm ô nhập bình luận
             print("🔍 Đang tìm ô bình luận...")
