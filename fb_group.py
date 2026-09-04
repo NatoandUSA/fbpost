@@ -136,12 +136,16 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             dialog = None
             try:
                 page.wait_for_selector("div[role='dialog']", state="visible", timeout=10000)
-                dialog = page.locator("div[role='dialog']").first
+                dialog = page.locator("div[role='dialog']").last
             except Exception:
-                dialog = page.locator("div[role='dialog']").first
+                dialog = page.locator("div[role='dialog']").last
 
             textbox = None
             if dialog and dialog.is_visible():
+                try:
+                    dialog.wait_for_selector("div[role='textbox']", timeout=4000)
+                except Exception:
+                    pass
                 # Tìm textbox bên trong dialog
                 candidates = dialog.locator("div[role='textbox']")
                 for idx in range(candidates.count()):

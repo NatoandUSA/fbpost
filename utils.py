@@ -84,24 +84,30 @@ def human_type(page, locator, text):
     for char in text:
         if char == '\n':
             keyboard.press('Enter')
-            time.sleep(random.uniform(0.2, 0.5))
+            time.sleep(random.uniform(0.15, 0.35))
             continue
-            
-        # 3% chance to make a typo (if it's a common char)
-        if char.isalpha() and random.random() < 0.03:
-            wrong_char = random.choice('abcdefghijklmnopqrstuvwxyz')
-            keyboard.type(wrong_char, delay=random.randint(30, 80))
-            time.sleep(random.uniform(0.1, 0.4))
-            keyboard.press("Backspace")
-            time.sleep(random.uniform(0.1, 0.3))
-            
-        try:
-            keyboard.type(char, delay=random.randint(30, 80))
-        except:
+
+        # Non-BMP (emojis như 🌸, 🏡) hoặc zero-width spaces (\u200b) dùng insert_text trực tiếp để tránh lỗi gõ phím
+        if ord(char) > 0xFFFF or char in ["\u200b", "\u200c", "\u200d"]:
             keyboard.insert_text(char)
-            
-        if char in ['.', ',', '!', '?', ' '] and random.random() < 0.1:
-            time.sleep(random.uniform(0.4, 1.2))
+            time.sleep(0.01)
+            continue
+
+        # 2% mô phỏng gõ nhầm với ký tự ASCII đơn giản
+        if char.isalpha() and ord(char) < 128 and random.random() < 0.02:
+            wrong_char = random.choice('abcdefghijklmnopqrstuvwxyz')
+            keyboard.type(wrong_char, delay=random.randint(20, 50))
+            time.sleep(random.uniform(0.08, 0.2))
+            keyboard.press("Backspace")
+            time.sleep(random.uniform(0.08, 0.15))
+
+        try:
+            keyboard.type(char, delay=random.randint(20, 50))
+        except Exception:
+            keyboard.insert_text(char)
+
+        if char in ['.', ',', '!', '?', ' '] and random.random() < 0.08:
+            time.sleep(random.uniform(0.2, 0.6))
 
 # ---- Multi-Account Handling ----
 
@@ -710,6 +716,12 @@ def click_post_publish_button(page, dialog=None):
                     btn_text = (btn.inner_text() or "").lower()
                     aria = (btn.get_attribute("aria-label") or "").lower()
                     if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
+                        # Chờ nếu nút đang bị aria-disabled (ảnh/video đang render)
+                        for _ in range(8):
+                            if btn.get_attribute("aria-disabled") == "true":
+                                time.sleep(1.0)
+                            else:
+                                break
                         btn.click(force=True, timeout=5000)
                         clicked = True
                         print(f"✅ Đã bấm nút xuất bản qua aria-label='{label}'")
@@ -740,9 +752,13 @@ def click_post_publish_button(page, dialog=None):
                     is_match = True
 
                 if is_match:
-                    if btn.get_attribute("aria-disabled") == "true":
-                        print("⏳ Nút Đăng đang xử lý phương tiện (aria-disabled=true), chờ 3s...")
-                        time.sleep(3.0)
+                    # Chờ nếu nút đang bị aria-disabled (ảnh/video đang tải lên)
+                    for _ in range(8):
+                        if btn.get_attribute("aria-disabled") == "true":
+                            print("⏳ Nút Đăng đang xử lý phương tiện (aria-disabled=true), chờ 1s...")
+                            time.sleep(1.0)
+                        else:
+                            break
                     btn.click(force=True, timeout=5000)
                     clicked = True
                     print(f"✅ Đã bấm nút xuất bản thành công: '{text or aria}'")
@@ -782,7 +798,7 @@ def click_post_publish_button(page, dialog=None):
     # 6. Chờ và xác nhận dialog đóng lại sau khi bấm đăng (Xác nhận bài viết đã thực sự gửi lên FB)
     print("⏳ Đang chờ Facebook xử lý và đóng khung bài viết...")
     dialog_closed = False
-    for _ in range(12):
+    for _ in range(15):
         time.sleep(1.0)
         try:
             if dialog and not dialog.is_visible():
@@ -794,7 +810,16 @@ def click_post_publish_button(page, dialog=None):
             break
 
     if not dialog_closed:
-        print("⚠️ Khung soạn thảo chưa đóng hoàn toàn sau 12s. Có thể bài viết đang gửi phê duyệt hoặc chờ kiểm duyệt.")
+        # Kiểm tra xem có thông báo lỗi / cảnh báo nào từ Facebook bên trong dialog không
+        try:
+            alert = dialog.locator("[role='alert'], div[aria-live='assertive']").first
+            if alert.is_visible():
+                alert_text = alert.inner_text().strip()
+                if alert_text:
+                    print(f"⚠️ Cảnh báo từ Facebook: {alert_text}")
+        except Exception:
+            pass
+        print("⚠️ Khung soạn thảo chưa đóng hoàn toàn sau 15s. Có thể bài viết đang gửi phê duyệt hoặc cần quản trị viên duyệt.")
 
     return True
 

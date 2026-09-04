@@ -3,7 +3,7 @@ import os
 import time
 import random
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, load_accounts, launch_browser, close_browser
+from utils import process_spintax, human_type, resolve_account, launch_browser, close_browser
 
 STATE_FILE = "state.json"
 
@@ -15,10 +15,9 @@ def send_message(thread_id, content, image_path=None, account_id=None, gpm_api_u
     # Load account if provided
     account = None
     if account_id:
-        accounts = load_accounts()
-        account = next((a for a in accounts if a["id"] == account_id), None)
+        account = resolve_account(account_id, gpm_api_url)
         if not account:
-            print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
+            print(f"❌ Error: Account ID '{account_id}' not found in accounts.json or GPM.")
             return
 
     with sync_playwright() as p:
