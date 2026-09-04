@@ -671,16 +671,27 @@ def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
 
 def click_post_publish_button(page, dialog=None):
     """
-    Tìm và bấm chính xác nút Đăng / Post / Chia sẻ ở dưới cùng của dialog Facebook.
-    Loại trừ triệt để nút 'Đăng ẩn danh' (Anonymous posting switch) và các nút điều hướng khác.
-    Tự động thoát các màn hình phụ (Cảm xúc/Check-in) nếu bị kẹt.
-    Xác nhận dialog đóng lại sau khi xuất bản.
+    Tìm và bấm chính xác nút Đăng / Post / Chia sẻ ở dưới cùng của dialog Facebook:
+    - Loại trừ triệt để nút 'Đăng ẩn danh' (Anonymous posting switch) và các nút điều hướng khác.
+    - Tự động thoát các màn hình phụ (Cảm xúc/Check-in) nếu bị kẹt.
+    - Tự động chờ ảnh xử lý xong nếu nút đang bị aria-disabled='true'.
+    - Tự động re-evaluate dialog và quét toàn trang (full-page fallback) nếu locator cũ bị stale.
+    - Bấm Đăng bằng cả Playwright click lẫn Native DOM dispatch event để chắc chắn gửi thành công.
+    - Xác nhận dialog đóng lại sau khi xuất bản.
     """
-    if not dialog or not dialog.is_visible():
+    # Hàm phụ trợ tìm dialog đang hiển thị trên trang
+    def find_active_dialog():
         try:
-            dialog = page.locator("div[role='dialog']").last
+            dlgs = page.locator("div[role='dialog']")
+            for idx in range(dlgs.count() - 1, -1, -1):
+                d = dlgs.nth(idx)
+                if d.is_visible():
+                    return d
         except Exception:
-            dialog = None
+            pass
+        return None
+
+    active_dialog = dialog if (dialog and dialog.is_visible()) else find_active_dialog()
 
     # 0. Nếu đang bị kẹt ở màn hình phụ (Cảm xúc, Vị trí...), bấm Quay lại để về màn hình soạn thảo chính
     try:
@@ -688,32 +699,38 @@ def click_post_publish_button(page, dialog=None):
             "div[role='dialog'] div[aria-label*='Quay lại' i]",
             "div[role='dialog'] div[aria-label*='Back' i]",
             "div[role='dialog'] div[role='button']:has-text('Quay lại')",
-            "div[role='dialog'] div[role='button']:has-text('Back')"
+            "div[role='dialog'] div[role='button']:has-text('Back')",
+            "div[aria-label*='Quay lại' i]",
+            "div[aria-label*='Back' i]"
         ]
         for b_sel in back_selectors:
             b_btn = page.locator(b_sel).first
-            if b_btn.is_visible(timeout=1000):
-                print("👈 Phát hiện màn hình phụ, đang bấm Quay lại để về màn hình đăng bài...")
+            if b_btn.is_visible(timeout=800):
+                print("👈 Phát hiện màn hình phụ, đang bấm Quay lại để về màn hình đăng bài chính...")
                 b_btn.click(force=True)
                 time.sleep(1.5)
+                active_dialog = find_active_dialog()
                 break
     except Exception:
         pass
 
-    # 1. Kiểm tra bước xác nhận 'Tiếp' / 'Next' trước khi đăng (khi có ảnh)
+    # 1. Kiểm tra bước xác nhận 'Tiếp' / 'Next' trước khi đăng (khi có nhiều ảnh hoặc giao diện phân bước)
     next_selectors = [
         "div[role='dialog'] div[aria-label*='Tiếp' i]",
         "div[role='dialog'] div[aria-label*='Next' i]",
         "div[role='dialog'] div[role='button']:has-text('Tiếp')",
         "div[role='dialog'] div[role='button']:has-text('Next')",
+        "div[role='button']:has-text('Tiếp')",
+        "div[role='button']:has-text('Next')"
     ]
     for n_sel in next_selectors:
         try:
             n_btn = page.locator(n_sel).first
-            if n_btn.is_visible(timeout=1000) and n_btn.is_enabled():
+            if n_btn.is_visible(timeout=800) and n_btn.is_enabled():
                 print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), đang bấm để chuyển sang màn hình xuất bản...")
                 n_btn.click(force=True, timeout=4000)
                 time.sleep(2.0)
+                active_dialog = find_active_dialog()
                 break
         except Exception:
             continue
@@ -724,123 +741,158 @@ def click_post_publish_button(page, dialog=None):
     ]
     PUBLISH_LABELS = ["đăng", "post", "chia sẻ ngay", "chia sẻ", "share now", "share"]
 
-    clicked = False
+    # Danh sách các scope cần quét: ưu tiên bên trong dialog, nếu không thấy thì quét toàn trang
+    search_scopes = []
+    if active_dialog and active_dialog.is_visible():
+        search_scopes.append(("dialog", active_dialog))
+    search_scopes.append(("page", page))
 
-    # 2. Thử các selector aria-label case-insensitive (cả chữ hoa chữ thường)
-    if dialog and dialog.is_visible():
+    target_btn = None
+
+    for scope_name, container in search_scopes:
+        # Cách A: Selector aria-label case-insensitive (chuẩn xác và nhanh nhất)
         for label in PUBLISH_LABELS:
-            btn = dialog.locator(f"div[role='button'][aria-label='{label}' i], div[aria-label='{label}' i]").first
             try:
-                if btn.is_visible(timeout=1000):
+                btn = container.locator(f"div[role='button'][aria-label='{label}' i], div[aria-label='{label}' i]").first
+                if btn.is_visible(timeout=800):
                     btn_text = (btn.inner_text() or "").lower()
                     aria = (btn.get_attribute("aria-label") or "").lower()
                     if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
-                        # Chờ nếu nút đang bị aria-disabled (ảnh/video đang render)
-                        for _ in range(8):
-                            if btn.get_attribute("aria-disabled") == "true":
-                                time.sleep(1.0)
-                            else:
-                                break
-                        btn.click(force=True, timeout=5000)
-                        clicked = True
-                        print(f"✅ Đã bấm nút xuất bản qua aria-label='{label}'")
+                        target_btn = btn
+                        print(f"🎯 Đã tìm thấy nút Đăng qua aria-label='{label}' ({scope_name})")
                         break
             except Exception:
                 continue
+        if target_btn:
+            break
 
-    # 3. Quét tất cả div[role='button'] và button trong dialog TỪ DƯỚI LÊN TRÊN (nút Đăng luôn ở đáy)
-    if not clicked and dialog and dialog.is_visible():
-        buttons = dialog.locator("div[role='button'], button")
-        count = buttons.count()
-        for idx in range(count - 1, -1, -1):
-            btn = buttons.nth(idx)
+        # Cách B: Dùng Playwright get_by_role (chuẩn accessible name của W3C)
+        if not target_btn:
             try:
-                if not btn.is_visible():
-                    continue
-                text = (btn.inner_text() or "").strip()
-                aria = (btn.get_attribute("aria-label") or "").strip()
-                full_str = (text + " " + aria).lower()
-
-                # Loại bỏ nút chứa từ cấm (ví dụ: 'Đăng ẩn danh')
-                if any(fw in full_str for fw in FORBIDDEN_WORDS):
-                    continue
-
-                first_line = text.split("\n")[0].strip().lower() if text else ""
-                is_match = False
-                if first_line in PUBLISH_LABELS or aria.lower() in PUBLISH_LABELS or text.lower() in PUBLISH_LABELS:
-                    is_match = True
-
-                if is_match:
-                    for _ in range(8):
-                        if btn.get_attribute("aria-disabled") == "true":
-                            print("⏳ Nút Đăng đang xử lý phương tiện (aria-disabled=true), chờ 1s...")
-                            time.sleep(1.0)
-                        else:
-                            break
-                    btn.click(force=True, timeout=5000)
-                    clicked = True
-                    print(f"✅ Đã bấm nút xuất bản thành công: '{text or aria}'")
-                    break
+                role_btn = container.get_by_role("button", name=re.compile(r"^(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)$", re.IGNORECASE)).first
+                if role_btn.is_visible(timeout=1000):
+                    text_content = (role_btn.inner_text() or "").lower()
+                    if not any(fw in text_content for fw in FORBIDDEN_WORDS):
+                        target_btn = role_btn
+                        print(f"🎯 Đã tìm thấy nút Đăng qua Accessible Name ({scope_name})")
+                        break
             except Exception:
-                continue
+                pass
 
-    # 4. Fallback tìm nút có chữ chính xác bằng regex filter
-    if not clicked and dialog and dialog.is_visible():
-        try:
-            regex_post = re.compile(r"^\s*(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)\s*$", re.IGNORECASE)
-            post_candidates = dialog.locator("div[role='button'], button").filter(has_text=regex_post)
-            if post_candidates.count() > 0:
-                target_btn = post_candidates.last
-                if not any(fw in (target_btn.inner_text() or "").lower() for fw in FORBIDDEN_WORDS):
-                    for _ in range(8):
-                        if target_btn.get_attribute("aria-disabled") == "true":
-                            time.sleep(1.0)
-                        else:
+        # Cách C: Quét tất cả button trong container TỪ DƯỚI LÊN TRÊN (nút Đăng luôn nằm ở đáy)
+        if not target_btn:
+            try:
+                buttons = container.locator("div[role='button'], button")
+                count = buttons.count()
+                for idx in range(count - 1, -1, -1):
+                    b = buttons.nth(idx)
+                    try:
+                        if not b.is_visible():
+                            continue
+                        text = (b.inner_text() or "").strip()
+                        aria = (b.get_attribute("aria-label") or "").strip()
+                        full_str = (text + " " + aria).lower()
+
+                        if any(fw in full_str for fw in FORBIDDEN_WORDS):
+                            continue
+
+                        first_line = text.split("\n")[0].strip().lower() if text else ""
+                        if first_line in PUBLISH_LABELS or aria.lower() in PUBLISH_LABELS:
+                            target_btn = b
+                            print(f"🎯 Đã tìm thấy nút Đăng qua quét DOM từ dưới lên: '{text or aria}' ({scope_name})")
                             break
-                    target_btn.click(force=True, timeout=5000)
-                    clicked = True
-                    print(f"✅ Đã bấm nút xuất bản qua regex filter: '{target_btn.inner_text().strip()}'")
-        except Exception:
-            pass
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            if target_btn:
+                break
 
-    # 5. Fallback Control+Enter sau khi đã focus vào textbox
-    if not clicked:
+        # Cách D: Regex text trên div[role='button']
+        if not target_btn:
+            try:
+                regex_post = re.compile(r"^\s*(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)\s*$", re.IGNORECASE)
+                candidates = container.locator("div[role='button'], button").filter(has_text=regex_post)
+                if candidates.count() > 0:
+                    cand = candidates.last
+                    cand_text = (cand.inner_text() or "").lower()
+                    if not any(fw in cand_text for fw in FORBIDDEN_WORDS):
+                        target_btn = cand
+                        print(f"🎯 Đã tìm thấy nút Đăng qua regex text filter ({scope_name})")
+                        break
+            except Exception:
+                pass
+            if target_btn:
+                break
+
+    if not target_btn:
+        # Nếu vẫn không thấy nút bằng mọi cách, báo lỗi chi tiết thay vì phím tắt không hiệu lực
+        raise Exception("Không tìm thấy nút 'Đăng' hợp lệ trên giao diện Facebook. Hãy đảm bảo tài khoản đã tham gia nhóm.")
+
+    # Đảm bảo nút được cuộn vào màn hình
+    try:
+        target_btn.scroll_into_view_if_needed(timeout=2000)
+    except Exception:
+        pass
+
+    # Chờ nếu nút đang bị aria-disabled (ảnh/video đang render hoặc tải lên)
+    for _ in range(25):
         try:
-            tb = page.locator("div[role='dialog'] div[role='textbox'], div[role='textbox']").first
-            if tb.is_visible():
-                tb.focus()
-                time.sleep(0.5)
-            page.keyboard.press("Control+Enter")
-            clicked = True
-            print("⌨️ Đã gửi phím tắt Ctrl+Enter sau khi focus ô soạn thảo!")
+            if target_btn.get_attribute("aria-disabled") == "true":
+                print("⏳ Nút Đăng đang xử lý phương tiện/ảnh (aria-disabled=true), chờ 1s...")
+                time.sleep(1.0)
+            else:
+                break
         except Exception:
-            pass
+            break
 
-    if not clicked:
-        raise Exception("Không tìm thấy nút 'Đăng' hợp lệ trên giao diện Facebook.")
+    # Tiến hành bấm Đăng (kết hợp cả Playwright Click và Native Click để đảm bảo 100%)
+    clicked = False
+    try:
+        target_btn.click(force=True, timeout=5000)
+        clicked = True
+        print("✅ Đã click nút Đăng bài viết!")
+    except Exception as e:
+        print(f"⚠️ Playwright click lỗi nhẹ ({e}), chuyển sang Native DOM click...")
+        try:
+            target_btn.evaluate("(el) => el.click()")
+            clicked = True
+            print("✅ Đã kích hoạt Native DOM click cho nút Đăng!")
+        except Exception as e2:
+            print(f"❌ Không thể click nút Đăng: {e2}")
 
-    # 6. Chờ và xác nhận dialog đóng lại sau khi bấm đăng (Xác nhận bài viết đã thực sự gửi lên FB)
+    # Chờ và xác nhận dialog đóng lại sau khi bấm đăng (Xác nhận bài viết đã thực sự gửi lên FB)
     print("⏳ Đang chờ Facebook xử lý và đóng khung bài viết...")
     dialog_closed = False
     for _ in range(15):
         time.sleep(1.0)
         try:
-            if dialog and not dialog.is_visible():
+            # Kiểm tra xem dialog còn hiển thị không
+            cur_dlg = find_active_dialog()
+            if not cur_dlg or not cur_dlg.is_visible():
                 dialog_closed = True
                 print("🎉 Khung soạn thảo đã đóng — Bài đăng đã được Facebook tiếp nhận thành công!")
                 break
+            else:
+                # Nếu sau 4s dialog vẫn chưa đóng, kích hoạt thêm 1 lần native click hỗ trợ
+                if _ == 4 and target_btn:
+                    try:
+                        target_btn.evaluate("(el) => el.click()")
+                    except Exception:
+                        pass
         except Exception:
             dialog_closed = True
             break
 
     if not dialog_closed:
-        # Kiểm tra xem có thông báo lỗi / cảnh báo nào từ Facebook bên trong dialog không
+        # Kiểm tra xem có thông báo từ chối / cảnh báo nào từ Facebook bên trong dialog không
         try:
-            alert = dialog.locator("[role='alert'], div[aria-live='assertive']").first
-            if alert.is_visible():
-                alert_text = alert.inner_text().strip()
-                if alert_text:
-                    print(f"⚠️ Cảnh báo từ Facebook: {alert_text}")
+            if active_dialog:
+                alert = active_dialog.locator("[role='alert'], div[aria-live='assertive']").first
+                if alert.is_visible():
+                    alert_text = alert.inner_text().strip()
+                    if alert_text:
+                        print(f"⚠️ Cảnh báo từ Facebook: {alert_text}")
         except Exception:
             pass
         print("⚠️ Khung soạn thảo chưa đóng hoàn toàn sau 15s. Có thể bài viết đang gửi phê duyệt hoặc cần quản trị viên duyệt.")
@@ -850,39 +902,79 @@ def click_post_publish_button(page, dialog=None):
 
 def add_feeling(page):
     """
-    Selects a random feeling inside the Facebook post composer.
-    Luôn đảm bảo quay lại màn hình soạn thảo chính nếu không chọn được.
+    Chọn cảm xúc ngẫu nhiên trong khung soạn thảo Facebook:
+    - Tìm icon Cảm xúc qua aria-label (hỗ trợ cả khi bị ẩn trong nút 'Xem thêm').
+    - Chọn cảm xúc từ danh sách hoặc gõ tìm kiếm.
+    - Luôn đảm bảo thoát màn hình phụ và trở về khung soạn bài chính.
     """
-    print("Đang thêm cảm xúc ngẫu nhiên cho bài viết...")
+    print("😊 Đang thêm cảm xúc ngẫu nhiên cho bài viết...")
     try:
-        feeling_btn = page.locator("div[role='dialog'] div[role='button'], div[role='dialog'] div[aria-label]").filter(
-            has_text=re.compile("Feeling/activity|Cảm xúc/hoạt động|Cảm xúc", re.IGNORECASE)
-        ).first
-        
-        if feeling_btn.is_visible(timeout=3000):
+        # 1. Tìm nút Cảm xúc/hoạt động trong dialog
+        feeling_selectors = [
+            "div[role='dialog'] div[aria-label*='Cảm xúc/hoạt động' i]",
+            "div[role='dialog'] div[aria-label*='Feeling/activity' i]",
+            "div[role='dialog'] div[aria-label*='Cảm xúc' i]",
+            "div[role='dialog'] div[aria-label*='Feeling' i]",
+            "div[role='dialog'] [role='button'][aria-label*='Cảm xúc' i]",
+            "div[role='dialog'] div[role='button']:has-text('Cảm xúc')",
+            "div[role='dialog'] div[role='button']:has-text('Feeling')"
+        ]
+        feeling_btn = None
+        for sel in feeling_selectors:
+            cand = page.locator(sel).first
+            if cand.is_visible(timeout=1000):
+                feeling_btn = cand
+                break
+
+        # Nếu không thấy trực tiếp, thử mở menu "Xem thêm" (...) ở thanh công cụ dưới cùng
+        if not feeling_btn:
+            more_selectors = [
+                "div[role='dialog'] div[aria-label*='Xem thêm' i]",
+                "div[role='dialog'] div[aria-label*='More' i]",
+                "div[role='dialog'] div[role='button'][aria-label*='Thêm vào' i]"
+            ]
+            for m_sel in more_selectors:
+                m_btn = page.locator(m_sel).first
+                if m_btn.is_visible(timeout=1000):
+                    m_btn.click(force=True)
+                    time.sleep(1.0)
+                    for sel in feeling_selectors:
+                        cand = page.locator(sel).first
+                        if cand.is_visible(timeout=1000):
+                            feeling_btn = cand
+                            break
+                    break
+
+        if feeling_btn and feeling_btn.is_visible():
             feeling_btn.click(force=True, timeout=5000)
             time.sleep(random.uniform(1.5, 2.5))
             
             feelings_list = ["Vui vẻ", "Hạnh phúc", "Tuyệt vời", "Hào hứng", "Biết ơn", "Năng động", "Hài lòng"]
             selected_feeling = random.choice(feelings_list)
             
-            search_input = page.locator("input[placeholder*='Search'], input[placeholder*='Tìm kiếm']").first
-            if search_input.is_visible(timeout=3000):
+            search_input = page.locator("div[role='dialog'] input[placeholder*='Search' i], div[role='dialog'] input[placeholder*='Tìm kiếm' i], div[role='dialog'] input[type='search'], div[role='dialog'] input[type='text']").first
+            if search_input.is_visible(timeout=2500):
                 search_input.fill(selected_feeling)
                 time.sleep(random.uniform(1.5, 2.5))
                 
-                first_option = page.locator("div[role='button']").filter(
+                # Tìm option tương ứng với cảm xúc đã chọn
+                first_option = page.locator("div[role='dialog'] div[role='button']").filter(
                     has_text=re.compile(selected_feeling, re.IGNORECASE)
                 ).first
-                if first_option.is_visible(timeout=3000):
+                if not first_option.is_visible(timeout=1500):
+                    # Fallback tìm bất kỳ cảm xúc thông dụng nào xuất hiện
+                    first_option = page.locator("div[role='dialog'] div[role='button']").filter(
+                        has_text=re.compile(r"Vui vẻ|Hạnh phúc|Tuyệt vời|Hào hứng|Biết ơn|Happy|Loved|Excited", re.IGNORECASE)
+                    ).first
+
+                if first_option.is_visible(timeout=2000):
                     first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã gắn cảm xúc: {selected_feeling}")
-                    time.sleep(random.uniform(1.0, 2.0))
-                    return
+                    time.sleep(1.5)
 
-        # Nếu không chọn được cảm xúc, bắt buộc bấm Quay lại để về màn hình đăng bài chính
+        # Đảm bảo nếu màn hình phụ vẫn còn (chưa tự thoát), bấm nút Quay lại về khung soạn thảo chính
         back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
-        if back_btn.is_visible(timeout=1500):
+        if back_btn.is_visible(timeout=1000):
             back_btn.click(force=True)
             time.sleep(1.0)
     except Exception as e:
@@ -896,16 +988,51 @@ def add_feeling(page):
 
 def add_checkin(page):
     """
-    Selects a random checkin location inside the Facebook post composer.
-    Luôn đảm bảo quay lại màn hình soạn thảo chính nếu không chọn được.
+    Chọn vị trí check-in ngẫu nhiên tại Huế trong khung soạn thảo Facebook:
+    - Tìm icon Check-in qua aria-label (hỗ trợ cả khi bị ẩn trong nút 'Xem thêm').
+    - Nhập tìm kiếm địa danh Huế và chọn kết quả gợi ý.
+    - Luôn đảm bảo thoát màn hình phụ và trở về khung soạn bài chính.
     """
-    print("Đang check-in địa điểm ngẫu nhiên cho bài viết...")
+    print("📍 Đang check-in địa điểm ngẫu nhiên cho bài viết...")
     try:
-        checkin_btn = page.locator("div[role='dialog'] div[role='button'], div[role='dialog'] div[aria-label]").filter(
-            has_text=re.compile("Check in|Check-in|Địa điểm", re.IGNORECASE)
-        ).first
-        
-        if checkin_btn.is_visible(timeout=3000):
+        # 1. Tìm nút Check-in trong dialog
+        checkin_selectors = [
+            "div[role='dialog'] div[aria-label*='Check in' i]",
+            "div[role='dialog'] div[aria-label*='Check-in' i]",
+            "div[role='dialog'] div[aria-label*='Vị trí' i]",
+            "div[role='dialog'] div[aria-label*='Location' i]",
+            "div[role='dialog'] [role='button'][aria-label*='Check in' i]",
+            "div[role='dialog'] div[role='button']:has-text('Check in')",
+            "div[role='dialog'] div[role='button']:has-text('Check-in')",
+            "div[role='dialog'] div[role='button']:has-text('Vị trí')"
+        ]
+        checkin_btn = None
+        for sel in checkin_selectors:
+            cand = page.locator(sel).first
+            if cand.is_visible(timeout=1000):
+                checkin_btn = cand
+                break
+
+        # Nếu không thấy trực tiếp, thử mở menu "Xem thêm" (...)
+        if not checkin_btn:
+            more_selectors = [
+                "div[role='dialog'] div[aria-label*='Xem thêm' i]",
+                "div[role='dialog'] div[aria-label*='More' i]",
+                "div[role='dialog'] div[role='button'][aria-label*='Thêm vào' i]"
+            ]
+            for m_sel in more_selectors:
+                m_btn = page.locator(m_sel).first
+                if m_btn.is_visible(timeout=1000):
+                    m_btn.click(force=True)
+                    time.sleep(1.0)
+                    for sel in checkin_selectors:
+                        cand = page.locator(sel).first
+                        if cand.is_visible(timeout=1000):
+                            checkin_btn = cand
+                            break
+                    break
+
+        if checkin_btn and checkin_btn.is_visible():
             checkin_btn.click(force=True, timeout=5000)
             time.sleep(random.uniform(1.5, 2.5))
             
@@ -923,23 +1050,34 @@ def add_checkin(page):
             ]
             selected_location = random.choice(locations_list)
             
-            search_input = page.locator("input[placeholder*='Where are you'], input[placeholder*='Bạn đang ở đâu'], input[placeholder*='Tìm kiếm']").first
-            if search_input.is_visible(timeout=3000):
+            search_input = page.locator("div[role='dialog'] input[placeholder*='Where' i], div[role='dialog'] input[placeholder*='ở đâu' i], div[role='dialog'] input[placeholder*='Tìm kiếm' i], div[role='dialog'] input[type='text'], div[role='dialog'] input[type='search']").first
+            if search_input.is_visible(timeout=2500):
                 search_input.fill(selected_location)
                 time.sleep(random.uniform(2.5, 4.0))
                 
-                first_option = page.locator("div[role='button']").filter(
-                    has_text=re.compile(selected_location, re.IGNORECASE)
+                # Tìm kết quả địa điểm xuất hiện trong danh sách
+                first_option = page.locator("div[role='dialog'] div[role='button']").filter(
+                    has_text=re.compile(re.escape(selected_location) + r"|Huế|Hue", re.IGNORECASE)
                 ).first
-                if first_option.is_visible(timeout=3000):
+                
+                # Fallback: lấy kết quả đầu tiên bên dưới ô tìm kiếm (bỏ qua nút quay lại)
+                if not first_option.is_visible(timeout=1500):
+                    candidates = page.locator("div[role='dialog'] div[role='button']")
+                    for i in range(candidates.count()):
+                        c = candidates.nth(i)
+                        c_text = (c.inner_text() or "").strip()
+                        if "Quay lại" not in c_text and "Back" not in c_text and len(c_text) > 3:
+                            first_option = c
+                            break
+
+                if first_option and first_option.is_visible(timeout=2000):
                     first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã check-in địa điểm: {selected_location}")
-                    time.sleep(random.uniform(1.0, 2.0))
-                    return
+                    time.sleep(1.5)
 
-        # Nếu không chọn được checkin, bắt buộc bấm Quay lại để về màn hình đăng bài chính
+        # Đảm bảo nếu màn hình phụ vẫn còn, bấm nút Quay lại về khung soạn thảo chính
         back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
-        if back_btn.is_visible(timeout=1500):
+        if back_btn.is_visible(timeout=1000):
             back_btn.click(force=True)
             time.sleep(1.0)
     except Exception as e:
