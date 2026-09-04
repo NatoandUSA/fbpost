@@ -61,12 +61,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const autoJoinKwContainer = document.getElementById('auto-join-kw-container');
     const autoJoinKeywords = document.getElementById('auto-join-keywords');
     const createPageSection = document.getElementById('create-page-section');
+    const createPageProfileSelect = document.getElementById('create-page-profile-select');
     const createPageName = document.getElementById('create-page-name');
     const createPageCategory = document.getElementById('create-page-category');
     const createPageBio = document.getElementById('create-page-bio');
     const createPageAvatar = document.getElementById('create-page-avatar');
     const createPageCover = document.getElementById('create-page-cover');
     const submitCreatePageBtn = document.getElementById('submit-create-page-btn');
+    const createPagePanelRight = document.getElementById('create-page-panel-right');
+    const createdPagesQuotaBadge = document.getElementById('created-pages-quota-badge');
+    const createdPagesTableBody = document.getElementById('created-pages-table-body');
+    const refreshCreatedPagesBtn = document.getElementById('refresh-created-pages-btn');
 
     // 2FA elements
     const tfaToggleBtn = document.getElementById('tfa-toggle-btn');
@@ -1333,6 +1338,94 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ---- Created Pages Management ----
+    async function loadCreatedPages() {
+        try {
+            const res = await fetch('/api/created-pages');
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            // Update Quota Badge
+            if (createdPagesQuotaBadge) {
+                const count = data.count_24h || 0;
+                const maxQuota = data.max_per_day || 2;
+                createdPagesQuotaBadge.textContent = `${count} / ${maxQuota} Page`;
+                if (count >= maxQuota) {
+                    createdPagesQuotaBadge.style.background = '#DC2626';
+                    createdPagesQuotaBadge.textContent += ' (Hết lượt 24h)';
+                } else {
+                    createdPagesQuotaBadge.style.background = '#16A34A';
+                }
+            }
+
+            // Update Created Pages History Table
+            if (createdPagesTableBody) {
+                if (!data.pages || data.pages.length === 0) {
+                    createdPagesTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94A3B8; padding: 16px;">Chưa tạo Fanpage nào. Điền thông tin bên trái và bấm Bắt đầu tạo!</td></tr>';
+                    return;
+                }
+                let html = '';
+                data.pages.forEach(p => {
+                    const timeStr = p.created_at ? new Date(p.created_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Vừa xong';
+                    html += `
+                        <tr>
+                            <td style="padding: 6px 8px; font-weight: 600; color: #1E293B;">${p.name || 'Fanpage'}</td>
+                            <td style="padding: 6px 8px; color: #475569;">${p.category || 'Blogger'}</td>
+                            <td style="padding: 6px 8px; color: #64748B; font-size: 11px;">${timeStr}</td>
+                            <td style="padding: 6px 8px; text-align: center;"><span class="badge" style="background:#DCFCE7; color:#15803D; font-size:10px; padding: 2px 6px; border-radius: 8px;">✅ Thành công</span></td>
+                        </tr>
+                    `;
+                });
+                createdPagesTableBody.innerHTML = html;
+            }
+        } catch (err) {
+            console.warn('Lỗi tải danh sách fanpage đã tạo:', err);
+        }
+    }
+
+    function populateCreatePageProfiles() {
+        if (!createPageProfileSelect) return;
+        createPageProfileSelect.innerHTML = '';
+        
+        let added = 0;
+        if (accountsList && accountsList.length > 0) {
+            const grpSaved = document.createElement('optgroup');
+            grpSaved.label = `📂 Tài khoản Facebook đã lưu (${accountsList.length})`;
+            accountsList.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = `👤 ${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                grpSaved.appendChild(opt);
+                added++;
+            });
+            createPageProfileSelect.appendChild(grpSaved);
+        }
+
+        if (cachedGpmProfiles && cachedGpmProfiles.length > 0) {
+            const grpGpm = document.createElement('optgroup');
+            grpGpm.label = `🌐 Profile GPMLogin (${cachedGpmProfiles.length})`;
+            cachedGpmProfiles.forEach(p => {
+                if (!accountsList.some(a => a.id === p.id)) {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `📱 ${p.name}`;
+                    grpGpm.appendChild(opt);
+                    added++;
+                }
+            });
+            if (grpGpm.children.length > 0) {
+                createPageProfileSelect.appendChild(grpGpm);
+            }
+        }
+
+        if (added === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Chưa có Profile nào (Mở GPMLogin hoặc Nhập Nick)';
+            createPageProfileSelect.appendChild(opt);
+        }
+    }
+
     async function loadSecurityHealth() {
         const grid = document.getElementById('security-health-grid');
         if (!grid) return;
@@ -1680,6 +1773,65 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Auto Join Group toggle listener
+    if (autoJoinGroupsOpt && autoJoinKwContainer) {
+        autoJoinGroupsOpt.addEventListener('change', () => {
+            if (autoJoinGroupsOpt.checked) {
+                autoJoinKwContainer.classList.remove('hidden');
+            } else {
+                autoJoinKwContainer.classList.add('hidden');
+            }
+        });
+    }
+
+    // Submit Create Personal Fanpage
+    if (submitCreatePageBtn) {
+        submitCreatePageBtn.addEventListener('click', async () => {
+            const accId = createPageProfileSelect ? createPageProfileSelect.value : '';
+            const pageNameVal = createPageName ? createPageName.value.trim() : '';
+            const categoryVal = createPageCategory ? createPageCategory.value : 'Blogger';
+            const bioVal = createPageBio ? createPageBio.value.trim() : '';
+            const avatarVal = createPageAvatar ? createPageAvatar.value.trim() : '';
+            const coverVal = createPageCover ? createPageCover.value.trim() : '';
+
+            if (!pageNameVal) {
+                showToast('Vui lòng nhập Tên Fanpage cá nhân cần tạo!', 'error');
+                if (createPageName) createPageName.focus();
+                return;
+            }
+
+            // Check 24h quota
+            try {
+                const checkRes = await fetch('/api/created-pages');
+                if (checkRes.ok) {
+                    const checkData = await checkRes.json();
+                    if (!checkData.allowed) {
+                        showToast(`⚠️ ${checkData.reason || 'Đã đạt giới hạn 2 Page/24h!'}`, 'error');
+                        return;
+                    }
+                }
+            } catch (_) {}
+
+            appendLog(`🚩 Bắt đầu lệnh tự động tạo Fanpage cá nhân: "${pageNameVal}"...`);
+            await runCommand('create-page', {
+                accountId: accId,
+                name: pageNameVal,
+                category: categoryVal,
+                bio: bioVal,
+                avatar: avatarVal,
+                cover: coverVal
+            });
+            loadCreatedPages();
+        });
+    }
+
+    if (refreshCreatedPagesBtn) {
+        refreshCreatedPagesBtn.addEventListener('click', () => {
+            loadCreatedPages();
+            showToast('Đã cập nhật danh sách Fanpage đã tạo.');
+        });
+    }
+
     // ---- 2FA Code Generator ----
     tfaToggleBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1833,7 +1985,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 6. Log Card: Show on operational tabs, hide on profiles and settings
+        // 6. Create Page Right Panel: ONLY on Create Page
+        if (createPagePanelRight) {
+            if (mode === 'create-page') {
+                createPagePanelRight.classList.remove('hidden');
+            } else {
+                createPagePanelRight.classList.add('hidden');
+            }
+        }
+
+        // 7. Log Card: Show on operational tabs, hide on profiles and settings
         if (logCard) {
             if (mode === 'profiles' || mode === 'settings') {
                 logCard.classList.add('hidden');
@@ -1842,9 +2003,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 7. Visual Progress Dashboard: Hide on profiles and settings
+        // 8. Visual Progress Dashboard: Hide on profiles, settings, and create-page
         if (visualProgressDashboard) {
-            if (mode === 'profiles' || mode === 'settings') {
+            if (mode === 'profiles' || mode === 'settings' || mode === 'create-page') {
                 visualProgressDashboard.classList.add('hidden');
             } else {
                 visualProgressDashboard.classList.remove('hidden');
@@ -1958,10 +2119,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadAccounts();
                 loadProfileActivity();
             } else if (currentMode === 'create-page') {
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
                 if (createPageSection) createPageSection.classList.remove('hidden');
-                if (accountSelectorContainer) accountSelectorContainer.classList.remove('hidden');
-                if (composerBodyCard) composerBodyCard.classList.remove('hidden');
                 if (postBtn) postBtn.classList.add('hidden');
+                populateCreatePageProfiles();
+                loadCreatedPages();
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -2173,11 +2338,11 @@ document.addEventListener('DOMContentLoaded', () => {
         appendLog(`▶ Bắt đầu lệnh: ${command}...`);
 
         // Add account attributes to payload if selected
-        const accId = accountSelector ? accountSelector.value : '';
+        const accId = (payload.accountId !== undefined && payload.accountId !== '') ? payload.accountId : (accountSelector ? accountSelector.value : '');
         const gpmApi = gpmApiInput ? gpmApiInput.value.trim() : '';
         
         if (accId === '__rotate__') {
-            payload.rotateAccounts = (command !== 'auth');
+            payload.rotateAccounts = (command !== 'auth' && command !== 'create-page');
             payload.accountId = (command === 'auth' && accountsList.length > 0) ? accountsList[0].id : '';
             payload.accountIds = accountsList.map(a => a.id);
             payload.accounts = accountsList;

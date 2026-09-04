@@ -294,6 +294,29 @@ def profile_activity():
     return jsonify(activities[:limit])
 
 
+@app.route('/api/created-pages', methods=['GET'])
+def api_created_pages():
+    try:
+        import fb_create_page
+        pages = fb_create_page.load_created_pages()
+        allowed, count, reason = fb_create_page.can_create_page(max_per_day=2)
+        return jsonify({
+            "pages": pages,
+            "allowed": allowed,
+            "count_24h": count,
+            "max_per_day": 2,
+            "reason": reason
+        })
+    except Exception as e:
+        return jsonify({
+            "pages": [],
+            "allowed": True,
+            "count_24h": 0,
+            "max_per_day": 2,
+            "reason": str(e)
+        })
+
+
 GROUP_STATUSES = {"not_requested", "requested_manually", "pending", "approved", "declined", "paused"}
 GROUP_TYPES = {"public", "private", "unknown"}
 

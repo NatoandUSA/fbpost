@@ -326,8 +326,45 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </div>
 
+                        <!-- Anti-Spam Safe Delay Bar & Auto Join Group Option (Hiển thị trực diện ngay trên nút Đăng) -->
+                        <div class="field-group" id="delay-settings-bar" style="margin-top: 12px; margin-bottom: 12px; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #1E293B;">⏱️ Giãn cách an toàn giữa các bài (Chống spam Facebook)</label>
+                                <span id="delay-preview-badge" style="font-size: 11px; background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 2px 8px; border-radius: 10px;">5 - 10 phút (Khuyến nghị)</span>
+                            </div>
+                            <select id="delay-preset-select" class="field-input" style="padding: 7px 10px; font-size: 13px; font-weight: 600;">
+                                <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
+                                <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
+                                <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chạy nhanh)</option>
+                                <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test nhanh giữa các bài)</option>
+                                <option value="custom">⚙️ Tùy chỉnh số phút theo ý muốn...</option>
+                            </select>
+                            <div id="custom-delay-inputs" class="hidden" style="gap: 8px; margin-top: 8px; align-items: center;">
+                                <span style="font-size: 12px; color: #64748B;">Nghỉ từ:</span>
+                                <input type="number" id="custom-delay-min" class="field-input" value="5" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
+                                <span style="font-size: 12px; color: #64748B;">đến:</span>
+                                <input type="number" id="custom-delay-max" class="field-input" value="10" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
+                                <span style="font-size: 12px; color: #64748B;">phút / mỗi bài</span>
+                            </div>
+
+                            <!-- Auto Join Group During Delay Option -->
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #CBD5E1;">
+                                <label class="checkbox-label" style="font-weight: 700; color: #1D4ED8; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                                    <input type="checkbox" id="auto-join-groups-opt">
+                                    <span>🔍 Tự tìm & gia nhập 1 Group theo từ khóa trong lúc chờ giãn cách giữa các bài</span>
+                                </label>
+                                <div id="auto-join-kw-container" class="hidden" style="margin-top: 8px; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 12px;">
+                                    <label class="field-label" style="font-size: 12px; font-weight: 700; color: #1E40AF; margin-bottom: 4px;">Từ khóa tìm kiếm nhóm Facebook (cách nhau bằng dấu phẩy):</label>
+                                    <input type="text" id="auto-join-keywords" class="field-input" value="Homestay Huế, Du lịch Huế, Thuê phòng Huế" placeholder="Từ khóa tìm nhóm (cách nhau bởi dấu phẩy)" style="font-size: 12px; padding: 7px 10px; background: #ffffff;">
+                                    <p class="field-hint" style="font-size: 11px; margin-top: 4px; color: #2563EB; line-height: 1.4;">
+                                        💡 <strong>Cơ chế tự động:</strong> Trong khoảng thời gian nghỉ 5 - 10 phút giữa bài 1 và bài 2, nick Facebook sẽ tự động tìm kiếm group theo các từ khóa trên và gửi yêu cầu tham gia 1 nhóm để tăng tệp group mà không bị Facebook quét checkpoint!
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Action Bar for Group & Page Posting (Hiển thị ngay dưới ô soạn thảo) -->
-                        <div class="composer-action-bar" id="composer-action-bar" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 12px;">
+                        <div class="composer-action-bar" id="composer-action-bar" style="display: flex; gap: 10px; margin-top: 8px; margin-bottom: 12px;">
                             <button id="post-btn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
                             <button id="add-to-queue-btn" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
                         </div>
@@ -636,54 +673,66 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 </div>
                                 <div id="sched-log-output" class="sched-log-output"></div>
                             </div>
-                        <!-- Create Personal Page Section -->
-                        <div id="create-page-section" class="hidden">
-                            <div class="sched-card">
-                                <div class="sched-card-header">
-                                    <span class="sched-step">🚩</span>
-                                    <h4>Tự động tạo Fanpage cá nhân chuẩn như người thật</h4>
-                                    <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px;">Tối đa 02 Page / 24h</span>
-                                </div>
-                                <div class="sched-card-body">
-                                    <p class="field-hint" style="margin-bottom: 12px; color:#475569;">Hệ thống tự động điền Tên, Hạng mục, Tiểu sử, và upload Avatar & Cover để Fanpage có độ trust cao, chống checkpoint.</p>
-                                    
-                                    <div class="field-group">
-                                        <label class="field-label">Tên Fanpage cá nhân *</label>
-                                        <input type="text" id="create-page-name" class="field-input" placeholder="VD: Nguyễn Văn A - Review Homestay Huế">
-                                    </div>
-                                    
-                                    <div class="grid2">
-                                        <div class="field-group">
-                                            <label class="field-label">Hạng mục chính</label>
-                                            <select id="create-page-category" class="field-input">
-                                                <option value="Blogger" selected>Blogger</option>
-                                                <option value="Khách sạn">Khách sạn / Dịch vụ lưu trú</option>
-                                                <option value="Đại lý du lịch">Đại lý du lịch</option>
-                                                <option value="Bất động sản">Bất động sản / Cho thuê phòng</option>
-                                                <option value="Người sáng tạo nội dung">Người sáng tạo nội dung</option>
-                                            </select>
-                                        </div>
-                                        <div class="field-group">
-                                            <label class="field-label">Tiểu sử ngắn (Bio)</label>
-                                            <input type="text" id="create-page-bio" class="field-input" placeholder="Chia sẻ trải nghiệm homestay, du lịch và ẩm thực Cố Đô Huế.">
-                                        </div>
-                                    </div>
-
-                                    <div class="grid2" style="margin-top: 8px;">
-                                        <div class="field-group">
-                                            <label class="field-label">Ảnh đại diện (Avatar) (Tùy chọn)</label>
-                                            <input type="text" id="create-page-avatar" class="field-input" placeholder="Đường dẫn ảnh cục bộ (VD: uploads/avatar.jpg)">
-                                        </div>
-                                        <div class="field-group">
-                                            <label class="field-label">Ảnh bìa (Cover) (Tùy chọn)</label>
-                                            <input type="text" id="create-page-cover" class="field-input" placeholder="Đường dẫn ảnh cục bộ (VD: uploads/cover.jpg)">
-                                        </div>
-                                    </div>
-
-                                    <button id="submit-create-page-btn" class="btn btn-primary btn-full" style="margin-top: 14px; padding: 10px; font-weight:700;">🚩 Bắt đầu tạo Fanpage ngay</button>
-                                </div>
-                            </div>
                         </div>
+
+                        <!-- Create Personal Page Section (Tự tạo Fanpage cá nhân chuẩn người thật) -->
+                        <section id="create-page-section" class="card hidden" style="margin-bottom: 16px;">
+                            <div class="card-header" style="background: linear-gradient(135deg, #1877F2 0%, #0D5AC7 100%); color: white; padding: 14px 18px; border-radius: 8px 8px 0 0;">
+                                <div class="card-title-group">
+                                    <span style="font-size: 20px;">🚩</span>
+                                    <div>
+                                        <h3 style="color: white; margin: 0; font-size: 16px;">Tự động tạo Fanpage cá nhân chuẩn như người thật</h3>
+                                        <p style="color: #DBEAFE; margin: 2px 0 0 0; font-size: 12px;">Hệ thống tự động điền Tên, Hạng mục, Tiểu sử, và upload Avatar & Cover để Fanpage có độ trust cao, chống checkpoint.</p>
+                                    </div>
+                                </div>
+                                <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px; padding: 4px 10px; border-radius: 12px;">Tối đa 02 Page / 24h</span>
+                            </div>
+                            <div style="padding: 16px;">
+                                <!-- Chọn Profile thực hiện tạo Page -->
+                                <div class="field-group" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+                                    <label class="field-label" style="font-weight: 700; color: #1E293B;">👤 Chọn Profile Facebook thực hiện tạo Page *</label>
+                                    <select id="create-page-profile-select" class="field-input" style="background: #fff; font-weight: 600;">
+                                        <option value="">Đang tải danh sách profile...</option>
+                                    </select>
+                                    <p class="field-hint" style="color: #64748B; font-size: 11px; margin-top: 4px;">Profile được chọn sẽ mở qua GPMLogin/Playwright để đăng ký và tạo Trang mới với tư cách cá nhân.</p>
+                                </div>
+
+                                <div class="field-group">
+                                    <label class="field-label">Tên Fanpage cá nhân *</label>
+                                    <input type="text" id="create-page-name" class="field-input" placeholder="VD: Nguyễn Văn A - Review Homestay Huế">
+                                </div>
+                                
+                                <div class="grid2">
+                                    <div class="field-group">
+                                        <label class="field-label">Hạng mục chính</label>
+                                        <select id="create-page-category" class="field-input">
+                                            <option value="Blogger" selected>Blogger</option>
+                                            <option value="Khách sạn">Khách sạn / Dịch vụ lưu trú</option>
+                                            <option value="Đại lý du lịch">Đại lý du lịch</option>
+                                            <option value="Bất động sản">Bất động sản / Cho thuê phòng</option>
+                                            <option value="Người sáng tạo nội dung">Người sáng tạo nội dung</option>
+                                        </select>
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Tiểu sử ngắn (Bio)</label>
+                                        <input type="text" id="create-page-bio" class="field-input" placeholder="Chia sẻ trải nghiệm homestay, du lịch và ẩm thực Cố Đô Huế.">
+                                    </div>
+                                </div>
+
+                                <div class="grid2" style="margin-top: 8px;">
+                                    <div class="field-group">
+                                        <label class="field-label">Ảnh đại diện (Avatar) (Tùy chọn)</label>
+                                        <input type="text" id="create-page-avatar" class="field-input" placeholder="Đường dẫn ảnh cục bộ (VD: uploads/avatar.jpg)">
+                                    </div>
+                                    <div class="field-group">
+                                        <label class="field-label">Ảnh bìa (Cover) (Tùy chọn)</label>
+                                        <input type="text" id="create-page-cover" class="field-input" placeholder="Đường dẫn ảnh cục bộ (VD: uploads/cover.jpg)">
+                                    </div>
+                                </div>
+
+                                <button id="submit-create-page-btn" class="btn btn-primary btn-full" style="margin-top: 16px; padding: 12px; font-weight: 700; font-size: 15px; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚩 BẮT ĐẦU TỰ ĐỘNG TẠO FANPAGE NGAY (MAX 2/NGÀY)</button>
+                            </div>
+                        </section>
 
                         <section id="settings-section" class="settings-section hidden" aria-labelledby="settings-title">
                             <div class="settings-hero" style="margin-bottom: 16px;">
@@ -881,41 +930,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </label>
                         </div>
 
-
-                        <!-- Anti-Spam Safe Delay Bar -->
-                        <div class="field-group" id="delay-settings-bar" style="margin-top: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #1E293B;">⏱️ Giãn cách ngẫu nhiên (Tránh spam FB)</label>
-                                <span id="delay-preview-badge" style="font-size: 11px; background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 2px 8px; border-radius: 10px;">5 - 10 phút (Khuyến nghị)</span>
-                            </div>
-                            <select id="delay-preset-select" class="field-input" style="padding: 6px 10px; font-size: 13px;">
-                                <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
-                                <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
-                                <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chạy nhanh)</option>
-                                <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test nhanh giữa các bài)</option>
-                                <option value="custom">⚙️ Tùy chỉnh số phút theo ý muốn...</option>
-                            </select>
-                            <div id="custom-delay-inputs" class="hidden" style="gap: 8px; margin-top: 8px; align-items: center;">
-                                <span style="font-size: 12px; color: #64748B;">Nghỉ từ:</span>
-                                <input type="number" id="custom-delay-min" class="field-input" value="5" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
-                                <span style="font-size: 12px; color: #64748B;">đến:</span>
-                                <input type="number" id="custom-delay-max" class="field-input" value="10" min="1" max="120" style="width: 70px; padding: 4px 8px; font-size: 13px;">
-                                <span style="font-size: 12px; color: #64748B;">phút / mỗi bài</span>
-                            </div>
-
-                            <!-- Auto Join Group During Delay Option -->
-                            <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #CBD5E1;">
-                                <label class="checkbox-label" style="font-weight: 600; color: #2563EB;">
-                                    <input type="checkbox" id="auto-join-groups-opt">
-                                    <span>🔍 Tự tìm & gia nhập 1 Group theo từ khóa trong lúc chờ giãn cách</span>
-                                </label>
-                                <div id="auto-join-kw-container" class="hidden" style="margin-top: 6px;">
-                                    <input type="text" id="auto-join-keywords" class="field-input" value="Homestay Huế, Du lịch Huế, Thuê phòng Huế" placeholder="Từ khóa tìm nhóm (cách nhau bởi dấu phẩy)" style="font-size: 12px; padding: 6px 10px;">
-                                    <p class="field-hint" style="font-size: 11px; margin-top: 3px; color: #2563EB;">Mỗi lượt chờ sẽ tự động tìm và xin vào tối đa 1 nhóm để chống checkpoint Facebook.</p>
-                                </div>
-                            </div>
-                        </div>
-
                         <div style="display: flex; gap: 10px; margin-top: 12px;" id="composer-bottom-actions">
                             <button id="post-btn-bottom" type="button" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
                             <button id="add-to-queue-btn-bottom" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
@@ -1004,6 +1018,47 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     </thead>
                                     <tbody id="scrape-table-body">
                                         <tr><td colspan="4" style="text-align: center; color: #64748B; padding: 24px;">Chưa quét bài viết nào. Hãy nhập link bài viết bên trái và bấm '🔎 BẮT ĐẦU QUÉT BÌNH LUẬN'.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Khối bên phải cho Tab Tự tạo Fanpage cá nhân (Hạn mức 24h & Lịch sử Page đã tạo) -->
+                    <div class="card hidden" id="create-page-panel-right">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>🚩</span><h3>Hạn mức & Lịch sử tạo Fanpage</h3></div>
+                            <button id="refresh-created-pages-btn" class="btn-ghost btn-xs" type="button">🔄 Làm mới</button>
+                        </div>
+                        <div style="padding: 14px;">
+                            <!-- Quota Indicator -->
+                            <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="font-weight: 700; color: #166534; font-size: 13px;">🛡️ Hạn mức an toàn 24h</div>
+                                    <div style="font-size: 11px; color: #15803D; margin-top: 2px;">Tối đa 2 Fanpage / 24h / nick để bảo vệ Profile Facebook chống checkpoint.</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span id="created-pages-quota-badge" style="background: #16A34A; color: white; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; display: inline-block;">0 / 2 Page</span>
+                                </div>
+                            </div>
+                            
+                            <!-- History Table -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h5 style="font-size: 12px; font-weight: 700; color: #475569; margin: 0; text-transform: uppercase;">Fanpage đã tạo gần đây</h5>
+                                <span style="font-size: 11px; color: #64748B;">Lưu cục bộ tại created_pages.json</span>
+                            </div>
+                            <div style="max-height: 240px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 6px;">
+                                <table class="sched-table" style="width: 100%; font-size: 12px;">
+                                    <thead>
+                                        <tr style="background: #F8FAFC;">
+                                            <th style="padding: 6px 8px; text-align: left;">Tên Page</th>
+                                            <th style="padding: 6px 8px; text-align: left;">Hạng mục</th>
+                                            <th style="padding: 6px 8px; text-align: left;">Thời gian</th>
+                                            <th style="padding: 6px 8px; text-align: center;">Trạng thái</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="created-pages-table-body">
+                                        <tr><td colspan="4" style="text-align: center; color: #94A3B8; padding: 16px;">Đang tải danh sách...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
