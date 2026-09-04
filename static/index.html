@@ -163,9 +163,10 @@
                                 <h3>Quản lý Profiles & Tài khoản</h3>
                             </div>
                             <div class="card-header-actions">
-                                <button id="sync-gpm-table-btn" class="btn btn-secondary btn-xs" type="button" title="Tải trực tiếp danh sách Profile từ GPMLogin">🔄 Tải danh sách GPM</button>
+                                <button id="open-gpm-import-modal-btn" class="btn btn-primary btn-xs" type="button" title="Chọn và lưu các nick Facebook từ GPM vào danh sách">📥 Nhập Nick FB từ GPM</button>
+                                <button id="sync-gpm-table-btn" class="btn btn-secondary btn-xs" type="button" title="Tải lại toàn bộ danh sách Profile từ GPMLogin">🔄 Tải lại GPM</button>
                                 <button id="manage-accounts-btn" class="btn btn-ghost btn-xs" type="button">Thu gọn</button>
-                                <button id="add-account-toggle-btn" class="btn btn-primary btn-xs" type="button">➕ Thêm Profile</button>
+                                <button id="add-account-toggle-btn" class="btn btn-secondary btn-xs" type="button">➕ Thêm thủ công</button>
                             </div>
                         </div>
                         <div id="accounts-content" class="accounts-content">
@@ -198,6 +199,15 @@
                         </div>
 
                         <div class="accounts-list-container">
+                            <div class="accounts-subtabs" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #E2E8F0; padding-bottom: 8px;">
+                                <div style="display: flex; gap: 8px;">
+                                    <button id="tab-saved-accounts" class="btn btn-primary btn-xs" type="button">📂 Nick Facebook đã lưu (<span id="saved-accounts-count">0</span>)</button>
+                                    <button id="tab-all-gpm-accounts" class="btn btn-ghost btn-xs" type="button">🌐 Tất cả Profile GPM (<span id="gpm-accounts-count">0</span>)</button>
+                                </div>
+                                <div id="gpm-quick-filter-container" class="hidden" style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="text" id="gpm-quick-filter-input" placeholder="🔍 Lọc profile..." style="padding: 4px 8px; font-size: 12px; border: 1px solid #CBD5E1; border-radius: 4px; width: 160px;">
+                                </div>
+                            </div>
                             <table id="accounts-table">
                                 <thead>
                                     <tr>
@@ -898,6 +908,54 @@ https://www.facebook.com/groups/648990015540886/</textarea>
 
             </div>
         </main>
+    </div>
+
+    <!-- Modal Nhập Nick FB từ GPM -->
+    <div id="gpm-import-modal" class="modal-overlay hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 9999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
+        <div class="modal-card" style="background: #fff; width: 92%; max-width: 760px; max-height: 88vh; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden;">
+            <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 22px;">📥</span>
+                    <div>
+                        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: #1E293B;">Chọn Nick Facebook từ GPM để lưu vào hệ thống</h3>
+                        <div style="font-size: 12px; color: #64748B; margin-top: 2px;">Chỉ các tài khoản được lưu vào đây mới được dùng để xoay tua (SPIN) đăng bài & tương tác</div>
+                    </div>
+                </div>
+                <button id="close-gpm-modal-btn" class="btn-ghost" type="button" style="font-size: 20px; cursor: pointer; border: none; background: none; color: #64748B;">✖</button>
+            </div>
+            <div class="modal-body" style="padding: 16px 20px; overflow-y: auto; flex: 1;">
+                <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+                    <div style="position: relative; flex: 1;">
+                        <input type="text" id="modal-gpm-search" class="field-input" placeholder="🔍 Tìm kiếm nhanh theo tên Profile (VD: M14, M4, Hue, FB...)" style="width: 100%; padding-left: 12px;">
+                    </div>
+                    <button id="modal-gpm-select-all" class="btn btn-secondary btn-sm" type="button">Chọn tất cả đang lọc</button>
+                    <button id="modal-gpm-deselect-all" class="btn btn-ghost btn-sm" type="button">Bỏ chọn</button>
+                </div>
+                <div style="max-height: 380px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="background: #F1F5F9; position: sticky; top: 0; z-index: 2;">
+                            <tr style="border-bottom: 1px solid #CBD5E1; text-align: left;">
+                                <th style="padding: 10px 12px; width: 44px; text-align: center;"><input type="checkbox" id="modal-select-all-header" title="Chọn tất cả"></th>
+                                <th style="padding: 10px 12px;">Tên Profile</th>
+                                <th style="padding: 10px 12px;">Trình duyệt</th>
+                                <th style="padding: 10px 12px;">Proxy</th>
+                                <th style="padding: 10px 12px;">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-gpm-table-body">
+                            <!-- Render rows with checkbox -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 14px 20px; border-top: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center; background: #F8FAFC;">
+                <span id="modal-selected-counter" style="font-size: 13px; font-weight: 600; color: #2563EB;">Đã chọn: 0 profile</span>
+                <div style="display: flex; gap: 8px;">
+                    <button id="modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">Đóng</button>
+                    <button id="modal-confirm-import-btn" class="btn btn-primary btn-sm" type="button" disabled>📥 Thêm vào Tài khoản đã lưu</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Toast message overlay -->

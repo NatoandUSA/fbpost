@@ -73,6 +73,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshGpmBtn = document.getElementById('refresh-gpm-btn');
     const syncGpmTableBtn = document.getElementById('sync-gpm-table-btn');
     const openSelectedProfileBtn = document.getElementById('open-selected-profile-btn');
+    const openGpmImportModalBtn = document.getElementById('open-gpm-import-modal-btn');
+    const gpmImportModal = document.getElementById('gpm-import-modal');
+    const closeGpmModalBtn = document.getElementById('close-gpm-modal-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+    const modalGpmSearch = document.getElementById('modal-gpm-search');
+    const modalGpmSelectAll = document.getElementById('modal-gpm-select-all');
+    const modalGpmDeselectAll = document.getElementById('modal-gpm-deselect-all');
+    const modalSelectAllHeader = document.getElementById('modal-select-all-header');
+    const modalGpmTableBody = document.getElementById('modal-gpm-table-body');
+    const modalSelectedCounter = document.getElementById('modal-selected-counter');
+    const modalConfirmImportBtn = document.getElementById('modal-confirm-import-btn');
+    const tabSavedAccounts = document.getElementById('tab-saved-accounts');
+    const tabAllGpmAccounts = document.getElementById('tab-all-gpm-accounts');
+    const savedAccountsCount = document.getElementById('saved-accounts-count');
+    const gpmAccountsCount = document.getElementById('gpm-accounts-count');
+    const gpmQuickFilterContainer = document.getElementById('gpm-quick-filter-container');
+    const gpmQuickFilterInput = document.getElementById('gpm-quick-filter-input');
     const manageAccountsBtn = document.getElementById('manage-accounts-btn');
     const accountsContent = document.getElementById('accounts-content');
     const addAccountToggleBtn = document.getElementById('add-account-toggle-btn');
@@ -542,19 +559,24 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Đã hủy đính kèm ảnh.');
     });
 
+    // ---- Account Management State ----
+    let currentAccountsTab = 'saved';
+    let cachedGpmProfiles = [];
+    let selectedGpmImportIds = new Set();
+
     // ---- Load and Render Accounts ----
     async function loadAccounts() {
         try {
             const gpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
 
-            // 1. Fetch configured accounts from accounts.json
+            // 1. Lấy danh sách tài khoản đã lưu (accounts.json)
             const res = await fetch('/api/accounts');
             accountsList = await res.json();
 
-            // 2. Fetch live profiles directly from GPMLogin v3 API
+            // 2. Lấy danh sách profiles trực tiếp từ GPMLogin v3 API
             let gpmData = { connected: false, profiles: [], total: 0 };
             try {
-                const gpmRes = await fetch(`/api/gpm/profiles?gpm_api_url=${encodeURIComponent(gpmUrl)}&page=1&page_size=200`);
+                const gpmRes = await fetch(`/api/gpm/profiles?gpm_api_url=${encodeURIComponent(gpmUrl)}&page=1&page_size=300`);
                 if (gpmRes.ok) {
                     gpmData = await gpmRes.json();
                 }
@@ -562,7 +584,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn("GPM API fetch error:", gpmErr);
             }
 
-            // Update GPM Status Badge
+            cachedGpmProfiles = (gpmData.connected && Array.isArray(gpmData.profiles)) ? gpmData.profiles : [];
+
+            // Cập nhật thẻ trạng thái GPM
             if (gpmStatusBadge) {
                 if (gpmData.connected) {
                     gpmStatusBadge.textContent = `🟢 GPM: Online (${gpmData.total} Profiles)`;
@@ -575,50 +599,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Populate account selector
+            // Cập nhật số lượng trên các thẻ Tab
+            if (savedAccountsCount) savedAccountsCount.textContent = accountsList.length;
+            if (gpmAccountsCount) gpmAccountsCount.textContent = cachedGpmProfiles.length;
+
+            // Đổ dữ liệu vào Dropdown chọn Profile (#account-selector)
             const selectedVal = accountSelector.value;
             accountSelector.innerHTML = '';
 
-            const gpmProfilesList = (gpmData.connected && Array.isArray(gpmData.profiles)) ? gpmData.profiles : [];
-            const totalAvailable = accountsList.length + gpmProfilesList.length;
-
-            if (totalAvailable > 1) {
+            // Tùy chọn xoay tua luân phiên: CHỈ XOAY TUA TRÊN CÁC NICK FACEBOOK ĐÃ LƯU
+            if (accountsList.length > 1) {
                 const rotateOpt = document.createElement('option');
                 rotateOpt.value = '__rotate__';
-                rotateOpt.textContent = `🔄 Luân phiên tất cả Profile GPM (${totalAvailable} tài khoản - Xoay vòng chống spam)`;
+                rotateOpt.textContent = `🔄 Luân phiên ${accountsList.length} tài khoản Facebook đã lưu (Xoay vòng chống spam)`;
                 accountSelector.appendChild(rotateOpt);
             }
 
-            // Group 1: Configured accounts (if any)
+            // Nhóm 1: Các nick Facebook đã lưu chính thức (được dùng để đăng bài/xoay tua)
             if (accountsList.length > 0) {
-                const grpConfigured = document.createElement('optgroup');
-                grpConfigured.label = `📂 Tài khoản đã lưu (${accountsList.length})`;
+                const grpSaved = document.createElement('optgroup');
+                grpSaved.label = `📂 Tài khoản Facebook đã lưu (${accountsList.length})`;
                 accountsList.forEach(acc => {
                     const opt = document.createElement('option');
                     opt.value = acc.id;
-                    opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
-                    grpConfigured.appendChild(opt);
+                    const proxyText = acc.proxy ? ` - ${acc.proxy.split(':')[0]}` : '';
+                    opt.textContent = `👤 ${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'}${proxyText})`;
+                    grpSaved.appendChild(opt);
                 });
-                accountSelector.appendChild(grpConfigured);
+                accountSelector.appendChild(grpSaved);
             }
 
-            // Group 2: Direct GPM Profiles (Zero-Config)
-            if (gpmProfilesList.length > 0) {
-                const grpGpm = document.createElement('optgroup');
-                grpGpm.label = `🌐 Profile GPM trực tiếp (${gpmProfilesList.length})`;
-                gpmProfilesList.forEach(p => {
-                    const alreadyInList = accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id);
-                    if (!alreadyInList) {
-                        const opt = document.createElement('option');
-                        opt.value = p.id;
-                        const proxyText = p.raw_proxy ? `Proxy: ${p.raw_proxy.split(':')[0]}:${p.raw_proxy.split(':')[1] || ''}` : 'Direct';
-                        opt.textContent = `📱 ${p.name} (${p.browser_type || 'Chrome'} - ${proxyText})`;
-                        grpGpm.appendChild(opt);
-                    }
+            // Nhóm 2: Các profile GPM khác chưa lưu (để người dùng có thể chọn chạy đơn lẻ nếu muốn)
+            const otherGpmProfiles = cachedGpmProfiles.filter(p => !accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id));
+            if (otherGpmProfiles.length > 0) {
+                const grpOther = document.createElement('optgroup');
+                grpOther.label = `🌐 Profile GPM khác (${otherGpmProfiles.length} - chọn chạy đơn lẻ)`;
+                otherGpmProfiles.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    const proxyText = p.raw_proxy ? ` - ${p.raw_proxy.split(':')[0]}` : '';
+                    opt.textContent = `📱 ${p.name} (${p.browser_type || 'Chrome'}${proxyText})`;
+                    grpOther.appendChild(opt);
                 });
-                if (grpGpm.children.length > 0) {
-                    accountSelector.appendChild(grpGpm);
-                }
+                accountSelector.appendChild(grpOther);
             }
 
             const fallbackOpt = document.createElement('option');
@@ -626,40 +649,41 @@ document.addEventListener('DOMContentLoaded', () => {
             fallbackOpt.textContent = '-- Mặc định (state.json) --';
             accountSelector.appendChild(fallbackOpt);
 
-            // Restore selection or select first available
+            // Giữ lựa chọn cũ nếu còn tồn tại, nếu không chọn tài khoản đã lưu đầu tiên
             if (selectedVal && [...accountSelector.querySelectorAll('option')].some(o => o.value === selectedVal)) {
                 accountSelector.value = selectedVal;
             } else if (accountsList.length > 0) {
                 accountSelector.value = accountsList[0].id;
-            } else if (gpmProfilesList.length > 0) {
-                accountSelector.value = gpmProfilesList[0].id;
+            } else if (otherGpmProfiles.length > 0) {
+                accountSelector.value = otherGpmProfiles[0].id;
             }
 
-            // Render accounts table (combine configured accounts & direct GPM profiles)
-            accountsTableBody.innerHTML = '';
-            const allDisplayAccounts = [...accountsList];
-            gpmProfilesList.forEach(p => {
-                const exists = allDisplayAccounts.some(a => a.id === p.id || a.profile_path_or_id === p.id);
-                if (!exists) {
-                    allDisplayAccounts.push({
-                        id: p.id,
-                        name: p.name,
-                        type: 'gpm',
-                        profile_path_or_id: p.id,
-                        proxy: p.raw_proxy || '',
-                        browser_type: p.browser_type || 'Chrome',
-                        status: 'GPM Sẵn sàng (Zero-Auth)',
-                        is_direct_gpm: true
-                    });
-                }
-            });
+            // Render bảng tài khoản
+            renderAccountsTable();
 
-            if (allDisplayAccounts.length === 0) {
-                accountsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--fb-text-secondary);">Chưa phát hiện tài khoản nào. Hãy bật GPMLogin hoặc nhấp nút "Thêm Profile" bên trên.</td></tr>';
+        } catch (e) {
+            console.error("Lỗi khi tải tài khoản:", e);
+        }
+    }
+
+    // ---- Render Bảng Accounts (Tab Đã lưu vs Tab GPM) ----
+    function renderAccountsTable() {
+        if (!accountsTableBody) return;
+        accountsTableBody.innerHTML = '';
+
+        if (currentAccountsTab === 'saved') {
+            if (accountsList.length === 0) {
+                accountsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 24px; color: var(--fb-text-secondary);">
+                            <div style="font-size: 15px; margin-bottom: 6px;">📂 Chưa có tài khoản Facebook nào trong danh sách đã lưu.</div>
+                            <div style="font-size: 13px; color: #64748B;">Nhấn nút <strong>"📥 Nhập Nick FB từ GPM"</strong> bên trên để chọn các nick Facebook mong muốn và đưa vào xoay tua!</div>
+                        </td>
+                    </tr>`;
                 return;
             }
 
-            allDisplayAccounts.forEach(acc => {
+            accountsList.forEach(acc => {
                 const tr = document.createElement('tr');
                 const makeCell = (text, tag = 'span') => {
                     const cell = document.createElement('td');
@@ -668,17 +692,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     cell.appendChild(value);
                     return cell;
                 };
+
                 const nameCell = makeCell(acc.name, 'strong');
-                const typeText = acc.is_direct_gpm ? 'GPM Trực tiếp' : (acc.type === 'gpm' ? 'GPM Login' : 'Cục bộ (Local)');
-                const typeCell = makeCell(typeText);
+                const typeCell = makeCell(acc.type === 'gpm' ? 'GPM Facebook' : 'Cục bộ (Local)');
                 typeCell.firstChild.className = `badge badge-${acc.type}`;
                 const profileCell = makeCell(acc.profile_path_or_id, 'code');
-                const proxyCell = makeCell(acc.proxy || 'Trực tiếp (Không dùng)');
+                const proxyCell = makeCell(acc.proxy || 'Trực tiếp');
 
                 const statusCell = document.createElement('td');
-                const isAuth = acc.status === 'Đã xác thực' || acc.status === 'Đã cấu hình' || acc.is_direct_gpm;
                 statusCell.innerHTML = `
-                    <span class="badge ${isAuth ? 'badge-success' : 'badge-neutral'}" style="font-size:11px; padding:2px 8px; border-radius:10px; background:${isAuth ? '#DCFCE7' : '#F1F5F9'}; color:${isAuth ? '#15803D' : '#475569'}; font-weight:600;">${acc.status || 'Sẵn sàng'}</span>
+                    <span class="badge badge-success" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#DCFCE7; color:#15803D; font-weight:600;">Sẵn sàng (Đã lưu)</span>
                     ${acc.created_at ? `<div style="font-size:11px; color:#94A3B8; margin-top:2px;">🕒 ${acc.created_at}</div>` : ''}
                 `;
 
@@ -690,91 +713,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     openGpmBtn.className = 'btn btn-primary btn-sm';
                     openGpmBtn.textContent = '🚀 Mở GPM';
                     openGpmBtn.style.marginRight = '4px';
-                    openGpmBtn.title = 'Khởi chạy trình duyệt GPM với Profile này';
-                    openGpmBtn.addEventListener('click', async () => {
-                        const currentGpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
-                        showToast(`Đang kết nối GPMLogin mở profile: ${acc.name}...`);
-                        try {
-                            const res = await fetch('/api/profiles/open-browser', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({ accountId: acc.id, gpmApiUrl: currentGpmUrl })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                                showToast(`✅ ${data.message}`);
-                            } else {
-                                showToast(`❌ ${data.error}`, 'error');
-                            }
-                        } catch (e) {
-                            showToast(`Lỗi: ${e.message}`, 'error');
-                        }
-                    });
+                    openGpmBtn.title = 'Mở trình duyệt GPM của profile này';
+                    openGpmBtn.addEventListener('click', () => openBrowserForAccount(acc.id, acc.name));
                     actions.appendChild(openGpmBtn);
                 }
 
-                if (!acc.is_direct_gpm) {
-                    for (const [label, className] of [['🔑 Xác thực', 'btn-auth-acc'], ['❌ Xóa', 'btn-delete-acc']]) {
-                        const button = document.createElement('button');
-                        button.className = `btn btn-${className === 'btn-delete-acc' ? 'danger' : 'secondary'} btn-sm ${className}`;
-                        button.dataset.id = acc.id;
-                        button.textContent = label;
-                        button.style.marginRight = '4px';
-                        actions.appendChild(button);
-                    }
-                } else {
-                    const saveToLocalBtn = document.createElement('button');
-                    saveToLocalBtn.className = 'btn btn-secondary btn-sm';
-                    saveToLocalBtn.textContent = '💾 Lưu cấu hình';
-                    saveToLocalBtn.style.marginRight = '4px';
-                    saveToLocalBtn.title = 'Lưu profile này vào accounts.json';
-                    saveToLocalBtn.addEventListener('click', async () => {
+                const authBtn = document.createElement('button');
+                authBtn.className = 'btn btn-secondary btn-sm btn-auth-acc';
+                authBtn.dataset.id = acc.id;
+                authBtn.textContent = '🔑 Xác thực';
+                authBtn.style.marginRight = '4px';
+                authBtn.addEventListener('click', () => runCommand('auth', { accountId: acc.id }));
+                actions.appendChild(authBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn btn-danger btn-sm btn-delete-acc';
+                delBtn.dataset.id = acc.id;
+                delBtn.textContent = '❌ Bỏ lưu';
+                delBtn.addEventListener('click', async () => {
+                    if (confirm(`Xác nhận bỏ lưu tài khoản "${acc.name}" khỏi danh sách?`)) {
                         try {
-                            const res = await fetch('/api/accounts', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify({
-                                    name: acc.name,
-                                    type: 'gpm',
-                                    profile_path_or_id: acc.id,
-                                    proxy: acc.proxy || ''
-                                })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                                showToast(`Đã lưu ${acc.name} vào cấu hình!`);
-                                loadAccounts();
-                            } else {
-                                showToast(data.error || 'Lỗi lưu', 'error');
-                            }
-                        } catch (err) {
-                            showToast('Lỗi kết nối', 'error');
-                        }
-                    });
-                    actions.appendChild(saveToLocalBtn);
-                }
-
-                tr.append(nameCell, typeCell, profileCell, proxyCell, statusCell, actions);
-                accountsTableBody.appendChild(tr);
-            });
-
-            // Bind actions for saved accounts
-            document.querySelectorAll('.btn-auth-acc').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const id = btn.dataset.id;
-                    runCommand('auth', { accountId: id });
-                });
-            });
-
-            document.querySelectorAll('.btn-delete-acc').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const id = btn.dataset.id;
-                    if (confirm('Bạn chắc chắn muốn xóa tài khoản này khỏi danh sách?')) {
-                        try {
-                            const response = await fetch(`/api/accounts/${id}`, { method: 'DELETE' });
+                            const response = await fetch(`/api/accounts/${acc.id}`, { method: 'DELETE' });
                             const result = await response.json();
                             if (result.success) {
-                                showToast('Đã xóa tài khoản thành công!');
+                                showToast(`Đã bỏ lưu ${acc.name}!`);
                                 loadAccounts();
                             } else {
                                 showToast(result.error || 'Lỗi khi xóa', 'error');
@@ -784,11 +746,296 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 });
+                actions.appendChild(delBtn);
+
+                tr.append(nameCell, typeCell, profileCell, proxyCell, statusCell, actions);
+                accountsTableBody.appendChild(tr);
             });
 
-        } catch (e) {
-            console.error("Lỗi khi tải tài khoản:", e);
+        } else {
+            // Tab 'all_gpm'
+            const filterKeyword = (gpmQuickFilterInput ? gpmQuickFilterInput.value.trim().toLowerCase() : '');
+            const filteredGpm = cachedGpmProfiles.filter(p => {
+                if (!filterKeyword) return true;
+                return (p.name || '').toLowerCase().includes(filterKeyword) || (p.id || '').toLowerCase().includes(filterKeyword);
+            });
+
+            if (filteredGpm.length === 0) {
+                accountsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--fb-text-secondary);">
+                            Không tìm thấy Profile GPM nào phù hợp từ khóa lọc.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            filteredGpm.forEach(p => {
+                const isSaved = accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id);
+                const tr = document.createElement('tr');
+                const makeCell = (text, tag = 'span') => {
+                    const cell = document.createElement('td');
+                    const value = document.createElement(tag);
+                    value.textContent = text;
+                    cell.appendChild(value);
+                    return cell;
+                };
+
+                const nameCell = makeCell(p.name, 'strong');
+                const typeCell = makeCell(p.browser_type || 'Chrome');
+                typeCell.firstChild.className = 'badge badge-gpm';
+                const profileCell = makeCell(p.id, 'code');
+                const proxyCell = makeCell(p.raw_proxy || 'Trực tiếp');
+
+                const statusCell = document.createElement('td');
+                statusCell.innerHTML = isSaved
+                    ? `<span class="badge badge-success" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#DCFCE7; color:#15803D; font-weight:600;">✅ Đã lưu</span>`
+                    : `<span class="badge badge-neutral" style="font-size:11px; padding:2px 8px; border-radius:10px; background:#F1F5F9; color:#475569;">Chưa lưu</span>`;
+
+                const actions = document.createElement('td');
+                actions.className = 'acc-action-btns';
+
+                const openGpmBtn = document.createElement('button');
+                openGpmBtn.className = 'btn btn-secondary btn-sm';
+                openGpmBtn.textContent = '🚀 Mở';
+                openGpmBtn.style.marginRight = '4px';
+                openGpmBtn.title = 'Mở trình duyệt GPM';
+                openGpmBtn.addEventListener('click', () => openBrowserForAccount(p.id, p.name));
+                actions.appendChild(openGpmBtn);
+
+                if (!isSaved) {
+                    const addBtn = document.createElement('button');
+                    addBtn.className = 'btn btn-primary btn-sm';
+                    addBtn.textContent = '➕ Thêm vào TK lưu';
+                    addBtn.addEventListener('click', async () => {
+                        try {
+                            const res = await fetch('/api/accounts/batch-import', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                    profiles: [{
+                                        id: p.id,
+                                        name: p.name,
+                                        raw_proxy: p.raw_proxy || '',
+                                        browser_type: p.browser_type || 'Chrome'
+                                    }]
+                                })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                showToast(`Đã thêm ${p.name} vào tài khoản đã lưu!`);
+                                loadAccounts();
+                            } else {
+                                showToast(data.error || 'Lỗi lưu tài khoản', 'error');
+                            }
+                        } catch (err) {
+                            showToast('Lỗi kết nối', 'error');
+                        }
+                    });
+                    actions.appendChild(addBtn);
+                }
+
+                tr.append(nameCell, typeCell, profileCell, proxyCell, statusCell, actions);
+                accountsTableBody.appendChild(tr);
+            });
         }
+    }
+
+    async function openBrowserForAccount(accId, accName) {
+        const gpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
+        showToast(`Đang mở trình duyệt: ${accName || accId}...`);
+        try {
+            const res = await fetch('/api/profiles/open-browser', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ accountId: accId, gpmApiUrl: gpmUrl })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(`✅ ${data.message}`);
+            } else {
+                showToast(`❌ ${data.error}`, 'error');
+            }
+        } catch (e) {
+            showToast(`Lỗi: ${e.message}`, 'error');
+        }
+    }
+
+    // ---- Subtabs switching ----
+    if (tabSavedAccounts) {
+        tabSavedAccounts.addEventListener('click', () => {
+            currentAccountsTab = 'saved';
+            tabSavedAccounts.className = 'btn btn-primary btn-xs';
+            if (tabAllGpmAccounts) tabAllGpmAccounts.className = 'btn btn-ghost btn-xs';
+            if (gpmQuickFilterContainer) gpmQuickFilterContainer.classList.add('hidden');
+            renderAccountsTable();
+        });
+    }
+
+    if (tabAllGpmAccounts) {
+        tabAllGpmAccounts.addEventListener('click', () => {
+            currentAccountsTab = 'all_gpm';
+            tabAllGpmAccounts.className = 'btn btn-primary btn-xs';
+            if (tabSavedAccounts) tabSavedAccounts.className = 'btn btn-ghost btn-xs';
+            if (gpmQuickFilterContainer) gpmQuickFilterContainer.classList.remove('hidden');
+            renderAccountsTable();
+        });
+    }
+
+    if (gpmQuickFilterInput) {
+        gpmQuickFilterInput.addEventListener('input', () => {
+            if (currentAccountsTab === 'all_gpm') renderAccountsTable();
+        });
+    }
+
+    // ---- Modal Nhập Nick FB từ GPM Logic ----
+    function renderModalGpmList() {
+        if (!modalGpmTableBody) return;
+        modalGpmTableBody.innerHTML = '';
+
+        const keyword = (modalGpmSearch ? modalGpmSearch.value.trim().toLowerCase() : '');
+        const filtered = cachedGpmProfiles.filter(p => {
+            if (!keyword) return true;
+            return (p.name || '').toLowerCase().includes(keyword) || (p.id || '').toLowerCase().includes(keyword);
+        });
+
+        if (filtered.length === 0) {
+            modalGpmTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#64748B;">Không tìm thấy profile nào khớp từ khóa.</td></tr>';
+            updateModalSelectionUI();
+            return;
+        }
+
+        filtered.forEach(p => {
+            const isSaved = accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id);
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #E2E8F0';
+
+            const isChecked = selectedGpmImportIds.has(p.id);
+
+            tr.innerHTML = `
+                <td style="padding: 8px 12px; text-align: center;">
+                    ${isSaved
+                        ? `<span title="Đã có trong danh sách lưu" style="color: #10B981; font-weight: bold;">✔</span>`
+                        : `<input type="checkbox" class="modal-gpm-chk" data-id="${p.id}" ${isChecked ? 'checked' : ''}>`
+                    }
+                </td>
+                <td style="padding: 8px 12px; font-weight: 600; color: #1E293B;">${p.name}</td>
+                <td style="padding: 8px 12px; color: #64748B;">${p.browser_type || 'Chrome'}</td>
+                <td style="padding: 8px 12px; font-family: monospace; font-size: 11px; color: #475569;">${p.raw_proxy || 'Direct'}</td>
+                <td style="padding: 8px 12px;">
+                    ${isSaved
+                        ? `<span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #DCFCE7; color: #15803D; font-weight: 600;">Đã lưu</span>`
+                        : `<span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #F1F5F9; color: #64748B;">Chưa chọn</span>`
+                    }
+                </td>
+            `;
+
+            if (!isSaved) {
+                const chk = tr.querySelector('.modal-gpm-chk');
+                if (chk) {
+                    chk.addEventListener('change', () => {
+                        if (chk.checked) selectedGpmImportIds.add(p.id);
+                        else selectedGpmImportIds.delete(p.id);
+                        updateModalSelectionUI();
+                    });
+                }
+            }
+
+            modalGpmTableBody.appendChild(tr);
+        });
+
+        updateModalSelectionUI();
+    }
+
+    function updateModalSelectionUI() {
+        const count = selectedGpmImportIds.size;
+        if (modalSelectedCounter) {
+            modalSelectedCounter.textContent = `Đã chọn: ${count} profile Facebook`;
+        }
+        if (modalConfirmImportBtn) {
+            modalConfirmImportBtn.disabled = (count === 0);
+            modalConfirmImportBtn.textContent = `📥 Thêm (${count}) Nick Facebook vào Danh Sách Đã Lưu`;
+        }
+    }
+
+    if (openGpmImportModalBtn) {
+        openGpmImportModalBtn.addEventListener('click', () => {
+            if (gpmImportModal) {
+                gpmImportModal.classList.remove('hidden');
+                selectedGpmImportIds.clear();
+                if (modalGpmSearch) modalGpmSearch.value = '';
+                renderModalGpmList();
+            }
+        });
+    }
+
+    if (closeGpmModalBtn) closeGpmModalBtn.addEventListener('click', () => gpmImportModal && gpmImportModal.classList.add('hidden'));
+    if (modalCancelBtn) modalCancelBtn.addEventListener('click', () => gpmImportModal && gpmImportModal.classList.add('hidden'));
+
+    if (modalGpmSearch) {
+        modalGpmSearch.addEventListener('input', () => {
+            renderModalGpmList();
+        });
+    }
+
+    if (modalGpmSelectAll) {
+        modalGpmSelectAll.addEventListener('click', () => {
+            const keyword = (modalGpmSearch ? modalGpmSearch.value.trim().toLowerCase() : '');
+            const filtered = cachedGpmProfiles.filter(p => {
+                const isSaved = accountsList.some(a => a.id === p.id || a.profile_path_or_id === p.id);
+                if (isSaved) return false;
+                if (!keyword) return true;
+                return (p.name || '').toLowerCase().includes(keyword) || (p.id || '').toLowerCase().includes(keyword);
+            });
+            filtered.forEach(p => selectedGpmImportIds.add(p.id));
+            renderModalGpmList();
+        });
+    }
+
+    if (modalGpmDeselectAll) {
+        modalGpmDeselectAll.addEventListener('click', () => {
+            selectedGpmImportIds.clear();
+            renderModalGpmList();
+        });
+    }
+
+    if (modalSelectAllHeader) {
+        modalSelectAllHeader.addEventListener('change', () => {
+            if (modalSelectAllHeader.checked) {
+                if (modalGpmSelectAll) modalGpmSelectAll.click();
+            } else {
+                if (modalGpmDeselectAll) modalGpmDeselectAll.click();
+            }
+        });
+    }
+
+    if (modalConfirmImportBtn) {
+        modalConfirmImportBtn.addEventListener('click', async () => {
+            if (selectedGpmImportIds.size === 0) return;
+            const profilesToImport = cachedGpmProfiles.filter(p => selectedGpmImportIds.has(p.id));
+            modalConfirmImportBtn.disabled = true;
+            modalConfirmImportBtn.textContent = '⏳ Đang lưu...';
+
+            try {
+                const res = await fetch('/api/accounts/batch-import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profiles: profilesToImport })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ ${data.message}`);
+                    if (gpmImportModal) gpmImportModal.classList.add('hidden');
+                    loadAccounts();
+                } else {
+                    showToast(`❌ ${data.error || 'Lỗi khi nhập profile'}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Lỗi kết nối: ${err.message}`, 'error');
+            } finally {
+                modalConfirmImportBtn.disabled = false;
+            }
+        });
     }
 
     if (refreshGpmBtn) {
@@ -814,23 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Vui lòng chọn một Profile cụ thể để mở!', 'error');
                 return;
             }
-            const currentGpmUrl = gpmApiInput ? gpmApiInput.value.trim() : 'http://127.0.0.1:19995';
-            showToast('Đang khởi chạy trình duyệt Profile...');
-            try {
-                const res = await fetch('/api/profiles/open-browser', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ accountId: accId, gpmApiUrl: currentGpmUrl })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    showToast(`✅ ${data.message}`);
-                } else {
-                    showToast(`❌ ${data.error}`, 'error');
-                }
-            } catch (e) {
-                showToast(`Lỗi: ${e.message}`, 'error');
-            }
+            openBrowserForAccount(accId, '');
         });
     }
 

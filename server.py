@@ -751,6 +751,62 @@ def delete_account(id):
         return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
 
 
+@app.route('/api/accounts/batch-import', methods=['POST'])
+def batch_import_accounts():
+    """Nhập danh sách Profile Facebook đã chọn từ GPM vào danh sách Tài khoản đã lưu (accounts.json)."""
+    from utils import load_accounts, save_accounts
+    data = json_body()
+    profiles = data.get('profiles', [])
+    if not isinstance(profiles, list) or not profiles:
+        return jsonify({"error": "Danh sách profile không hợp lệ."}), 400
+
+    accounts = load_accounts()
+    existing_ids = {str(a.get("profile_path_or_id")).strip() for a in accounts if a.get("profile_path_or_id")}
+    existing_ids.update({str(a.get("id")).strip() for a in accounts if a.get("id")})
+
+    added_profiles = []
+    for p in profiles:
+        pid = str(p.get('id', '')).strip()
+        pname = str(p.get('name', '')).strip() or pid
+        raw_proxy = str(p.get('raw_proxy', p.get('proxy', ''))).strip()
+        browser_type = str(p.get('browser_type', 'Chrome')).strip()
+
+        if not pid or pid in existing_ids:
+            continue
+
+        new_acc = {
+            "id": pid,
+            "name": pname,
+            "type": "gpm",
+            "profile_path_or_id": pid,
+            "proxy": raw_proxy,
+            "browser_type": browser_type,
+            "status": "Sẵn sàng (Facebook GPM)",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+        }
+        accounts.append(new_acc)
+        existing_ids.add(pid)
+        added_profiles.append(new_acc)
+
+    if added_profiles:
+        if save_accounts(accounts):
+            return jsonify({
+                "success": True,
+                "added_count": len(added_profiles),
+                "total_accounts": len(accounts),
+                "message": f"Đã thêm {len(added_profiles)} Profile Facebook vào danh sách lưu thành công!"
+            })
+        else:
+            return jsonify({"error": "Không thể ghi tệp accounts.json"}), 500
+
+    return jsonify({
+        "success": True,
+        "added_count": 0,
+        "total_accounts": len(accounts),
+        "message": "Các profile đã chọn đều đã tồn tại trong danh sách tài khoản đã lưu."
+    })
+
+
 @app.route('/api/gpm/profiles', methods=['GET'])
 def api_gpm_profiles():
     """Kéo danh sách Profile trực tiếp từ GPMLogin REST API v3 (mặc định port 19995)."""
@@ -960,7 +1016,7 @@ def run_script():
                 cmd_list.extend(["--gpm-api", gpm_api])
             return cmd_list
 
-        # Load accounts for round-robin rotation if requested
+        # Load accounts for round-robin rotation (CHỈ xoay tua trên các tài khoản đã lưu trong accounts.json)
         accounts_pool = []
         if rotate_accounts:
             try:
@@ -969,29 +1025,11 @@ def run_script():
             except Exception:
                 accounts_pool = []
 
-            # Nếu accounts.json chưa có nhiều tài khoản, tự động kéo trực tiếp từ GPM API v3
-            if len(accounts_pool) < 2:
-                try:
-                    from utils import fetch_gpm_profiles
-                    gpm_res = fetch_gpm_profiles(gpm_api_url=gpm_api, page_size=200)
-                    if gpm_res.get("connected") and gpm_res.get("profiles"):
-                        gpm_accs = [
-                            {
-                                "id": p.get("id"),
-                                "name": p.get("name", p.get("id")),
-                                "type": "gpm",
-                                "profile_path_or_id": p.get("id"),
-                                "proxy": p.get("raw_proxy", ""),
-                                "browser_type": p.get("browser_type", "Chrome"),
-                                "status": "GPM Trực tiếp"
-                            }
-                            for p in gpm_res.get("profiles", [])
-                            if p.get("id")
-                        ]
-                        if gpm_accs:
-                            accounts_pool = gpm_accs
-                except Exception:
-                    pass
+            if not accounts_pool:
+                yield "⚠️ [Cảnh báo Anti-Spam] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n"
+                yield "💡 Vui lòng nhấn nút '📥 Nhập Nick FB từ GPM' để chọn lọc các nick Facebook mong muốn trước khi bật luân phiên.\n"
+                yield "RUN_RESULT:failed\n"
+                return
 
         if cmd == 'auth':
             full_cmd = build_cmd_for_account(account_id) + ["auth"]

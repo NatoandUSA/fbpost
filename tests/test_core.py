@@ -498,7 +498,40 @@ class NclProInspiredFeatureTests(unittest.TestCase):
             self.assertTrue(status_data["connected"])
             self.assertEqual(status_data["total_profiles"], 1)
 
+    def test_batch_import_accounts(self):
+        saved_accounts = []
+        def mock_load():
+            return list(saved_accounts)
+        def mock_save(accs):
+            saved_accounts.clear()
+            saved_accounts.extend(accs)
+            return True
+
+        with patch("utils.load_accounts", side_effect=mock_load), patch("utils.save_accounts", side_effect=mock_save):
+            # 1. Nhập 2 profiles
+            payload = {
+                "profiles": [
+                    {"id": "uuid-fb-1", "name": "M14 Facebook", "raw_proxy": "14.241.72.253:28165", "browser_type": "Chrome"},
+                    {"id": "uuid-fb-2", "name": "M4 Facebook", "raw_proxy": "", "browser_type": "Chrome"}
+                ]
+            }
+            res = self.client.post("/api/accounts/batch-import", json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertTrue(data["success"])
+            self.assertEqual(data["added_count"], 2)
+            self.assertEqual(len(saved_accounts), 2)
+            self.assertEqual(saved_accounts[0]["name"], "M14 Facebook")
+
+            # 2. Thử nhập lại (chống trùng lặp)
+            res_dup = self.client.post("/api/accounts/batch-import", json=payload)
+            self.assertEqual(res_dup.status_code, 200)
+            data_dup = res_dup.get_json()
+            self.assertEqual(data_dup["added_count"], 0)
+            self.assertEqual(len(saved_accounts), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
