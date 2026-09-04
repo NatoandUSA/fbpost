@@ -583,6 +583,46 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         self.assertIn("join-group", server.ALLOWED_COMMANDS)
         self.assertIn("create-page", server.ALLOWED_COMMANDS)
 
+    def test_settings_api(self):
+        client = server.app.test_client()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_config = Path(temp_dir) / "config.json"
+            with patch("server.CONFIG_FILE", temp_config):
+                # Test GET default settings
+                res = client.get("/api/settings")
+                self.assertEqual(res.status_code, 200)
+                data = json.loads(res.data)
+                self.assertIn("gpm_api_url", data)
+                self.assertIn("delay_preset", data)
+                self.assertIn("gemini_api_key_configured", data)
+
+                # Test POST update settings
+                post_payload = {
+                    "gpm_api_url": "http://127.0.0.1:20000",
+                    "gemini_api_key": "AIzaSyTestKey1234567890",
+                    "delay_preset": "test",
+                    "delay_min": 10,
+                    "delay_max": 20,
+                    "auto_join_groups": True,
+                    "group_keywords": "Test Group 1, Test Group 2"
+                }
+                res = client.post("/api/settings", json=post_payload)
+                self.assertEqual(res.status_code, 200)
+                resp_data = json.loads(res.data)
+                self.assertTrue(resp_data["success"])
+                self.assertEqual(resp_data["settings"]["gpm_api_url"], "http://127.0.0.1:20000")
+                self.assertEqual(resp_data["settings"]["delay_preset"], "test")
+
+                # Verify GET returns updated masked key
+                res = client.get("/api/settings")
+                data = json.loads(res.data)
+                self.assertEqual(data["gpm_api_url"], "http://127.0.0.1:20000")
+                self.assertTrue(data["gemini_api_key_configured"])
+                self.assertTrue(data["gemini_api_key_masked"].startswith("..."))
+                self.assertTrue(data["gemini_api_key_masked"].endswith("7890"))
+                self.assertTrue(data["auto_join_groups"])
+                self.assertEqual(data["group_keywords"], "Test Group 1, Test Group 2")
+
 
 if __name__ == "__main__":
     unittest.main()

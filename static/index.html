@@ -22,9 +22,9 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v5.6.3</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v5.7.0</span>
                     </div>
-                    <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-04 16:00</span>
+                    <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-04 17:00</span>
                 </div>
             </div>
             
@@ -112,9 +112,9 @@
                 <div class="header-right">
                     <div id="header-build-badge" style="display:flex; align-items:center; gap:8px; background:#EFF6FF; border:1px solid #BFDBFE; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; color:#1E40AF; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                         <span style="display:inline-block; width:8px; height:8px; background:#10B981; border-radius:50%; box-shadow:0 0 6px #10B981;"></span>
-                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v5.6.3</span>
+                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v5.7.0</span>
                         <span style="color:#93C5FD;">|</span>
-                        <span id="header-build-time-text" style="color:#3B82F6; font-weight:600;">Build: 2026-09-04 16:00</span>
+                        <span id="header-build-time-text" style="color:#3B82F6; font-weight:600;">Build: 2026-09-04 17:00</span>
                     </div>
                     <div id="auth-status" class="status-badge checking">
                         <span class="status-dot"></span>
@@ -326,6 +326,12 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </div>
 
+                        <!-- Action Bar for Group & Page Posting (Hiển thị ngay dưới ô soạn thảo) -->
+                        <div class="composer-action-bar" id="composer-action-bar" style="display: flex; gap: 10px; margin-top: 14px; margin-bottom: 12px;">
+                            <button id="post-btn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
+                            <button id="add-to-queue-btn" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
+                        </div>
+
                         <!-- 3. Interact Seeding Section (Nuôi Nick) -->
                         <div id="interact-section" class="hidden">
                             <div class="field-group">
@@ -347,38 +353,20 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     </label>
                                 </div>
                             </div>
+                            <button id="interact-submit-btn" class="btn btn-primary btn-full" style="margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">🌾 BẮT ĐẦU NUÔI NICK TỰ ĐỘNG</button>
                         </div>
 
                         <!-- 4. Scrape Comments Section -->
                         <div id="scrape-section" class="hidden">
                             <div class="field-group">
-                                <label class="field-label">🔗 Link bài viết Facebook cần quét</label>
+                                <label class="field-label">🔗 Link bài viết Facebook cần quét bình luận</label>
                                 <input type="text" id="scrape-target" class="field-input" placeholder="https://www.facebook.com/posts/...">
                             </div>
                             <div class="field-group">
                                 <label class="field-label">📊 Số lượng comment tối đa</label>
                                 <input type="number" id="scrape-limit" class="field-input" value="50" min="10" max="500">
                             </div>
-                            
-                            <div id="scrape-results-container" class="scrape-results-container hidden" style="margin-top: 14px;">
-                                <div class="scrape-results-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                                    <h4>📋 Kết quả bình luận</h4>
-                                    <button id="download-csv-btn" class="btn btn-secondary btn-sm">📥 Tải về CSV</button>
-                                </div>
-                                <div class="table-wrapper">
-                                    <table id="scrape-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Họ tên</th>
-                                                <th>UID / Link</th>
-                                                <th>Nội dung</th>
-                                                <th>SĐT</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="scrape-table-body"></tbody>
-                                    </table>
-                                </div>
-                            </div>
+                            <button id="scrape-submit-btn" class="btn btn-primary btn-full" style="margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">🔎 BẮT ĐẦU QUÉT BÌNH LUẬN</button>
                         </div>
 
                         <!-- 5. Comment on Specific Post Links Section -->
@@ -415,6 +403,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     <span>🛡️ Chèn ký tự tàng hình Anti-Hash cho Comment (Chống thuật toán quét trùng chữ)</span>
                                 </label>
                             </div>
+                            <button id="comment-submit-btn" class="btn btn-primary btn-full" style="margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">💬 BẮT ĐẦU BÌNH LUẬN BÀI VIẾT</button>
                         </div>
 
                         <!-- 6. Thread Direct Message Section -->
@@ -431,6 +420,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     💡 Spintax: <code>{Xin chào|Chào bạn}</code> sẽ chọn ngẫu nhiên
                                 </div>
                             </div>
+                            <button id="thread-submit-btn" class="btn btn-primary btn-full" style="margin-top: 14px; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(37,99,235,0.25);">✉️ GỬI TIN NHẮN THREAD</button>
                         </div>
 
                         <!-- 7. Content Hub Integrated Section -->
@@ -696,39 +686,83 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         </div>
 
                         <section id="settings-section" class="settings-section hidden" aria-labelledby="settings-title">
-                            <div class="settings-hero">
+                            <div class="settings-hero" style="margin-bottom: 16px;">
                                 <div>
-                                    <span class="workflow-kicker">TRUNG TÂM CẤU HÌNH</span>
-                                    <h3 id="settings-title">Thiết lập an toàn, không cần mở file JSON</h3>
-                                    <p>Chỉ hiển thị trạng thái. Token, API key và session không được gửi ngược về màn hình.</p>
+                                    <span class="workflow-kicker">BẢO MẬT & CẤU HÌNH</span>
+                                    <h3 id="settings-title">Trung tâm điều khiển hệ thống</h3>
+                                    <p>Thiết lập API GPMLogin, Khóa AI Gemini, Giãn cách an toàn và quản trị bảo mật cục bộ.</p>
                                 </div>
                                 <div class="settings-hero-actions">
-                                    <span class="local-only-badge">🔒 Chỉ máy này</span>
+                                    <span class="local-only-badge">🔒 Lưu trữ máy này</span>
                                     <button id="security-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Cập nhật trạng thái</button>
                                 </div>
                             </div>
 
-                            <div class="security-health-grid" id="security-health-grid" aria-live="polite">
-                                <div class="security-health-card is-loading">Đang kiểm tra cấu hình...</div>
+                            <!-- Thẻ 1: Cấu hình GPMLogin v3 API -->
+                            <div class="card" style="margin-bottom: 14px;">
+                                <div class="card-header">
+                                    <div class="card-title-group"><span>🌐</span><h3>1. Cấu hình GPMLogin v3 API</h3></div>
+                                    <span id="settings-gpm-status-badge" class="badge" style="background:#F1F5F9; color:#475569; font-weight:700; font-size:11px; padding:3px 8px; border-radius:12px;">Chưa kiểm tra</span>
+                                </div>
+                                <div style="padding: 16px;">
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Hệ thống kết nối trực tiếp qua cổng API cục bộ của GPMLogin để lấy Profile và mở trình duyệt an toàn không bị Meta phát hiện bot.</p>
+                                    <div class="field-group">
+                                        <label class="field-label">GPM API URL</label>
+                                        <div style="display:flex; gap:8px;">
+                                            <input type="text" id="settings-gpm-input" value="http://127.0.0.1:19995" class="field-input" placeholder="http://127.0.0.1:19995" style="flex:1;">
+                                            <button id="settings-gpm-test-btn" type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;">🔄 Kiểm tra</button>
+                                            <button id="settings-gpm-save-btn" type="button" class="btn btn-primary btn-sm" style="white-space:nowrap;">💾 Lưu URL</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="settings-action-grid">
-                                <article class="settings-action-card">
-                                    <span>1</span><div><h4>Kết nối Facebook Page</h4><p>Dán token vào trường được che, xác thực và lưu. Token sẽ không hiện lại.</p></div>
-                                    <button class="btn btn-primary btn-sm" data-workspace-target="page-scheduler" type="button">Mở Page Scheduler</button>
-                                </article>
-                                <article class="settings-action-card">
-                                    <span>2</span><div><h4>Chuẩn bị Google Sheets</h4><p>Nhập URL CSV HTTPS và kiểm tra preview trước khi bật lịch.</p></div>
-                                    <button class="btn btn-secondary btn-sm" data-workspace-target="page-scheduler" type="button">Cấu hình lịch</button>
-                                </article>
-                                <article class="settings-action-card">
-                                    <span>3</span><div><h4>Quản lý Profile</h4><p>Thêm hoặc cập nhật profile từ Dashboard; không sửa accounts.json thủ công.</p></div>
-                                    <button id="security-manage-accounts-btn" class="btn btn-secondary btn-sm" type="button">Mở Profiles</button>
-                                </article>
+                            <!-- Thẻ 2: Cấu hình Google Gemini AI -->
+                            <div class="card" style="margin-bottom: 14px;">
+                                <div class="card-header">
+                                    <div class="card-title-group"><span>🤖</span><h3>2. Trí tuệ Nhân tạo Google Gemini AI</h3></div>
+                                    <span id="settings-gemini-status-badge" class="badge" style="background:#F3E8FF; color:#7E22CE; font-weight:700; font-size:11px; padding:3px 8px; border-radius:12px;">Đang kiểm tra...</span>
+                                </div>
+                                <div style="padding: 16px;">
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Dùng để tự động xào bài (AI Spin) độc nhất và tạo bình luận nuôi nick tự nhiên, chống Meta quét trùng lặp nội dung. Nếu để trống, hệ thống dùng thuật toán Local Smart Spinner thông minh hoàn toàn miễn phí.</p>
+                                    <div class="field-group">
+                                        <label class="field-label">Gemini API Key</label>
+                                        <div style="display:flex; gap:8px;">
+                                            <input type="password" id="settings-gemini-input" placeholder="Dán khóa API Google Gemini..." class="field-input" style="flex:1;">
+                                            <button id="settings-gemini-save-btn" type="button" class="btn btn-primary btn-sm" style="white-space:nowrap;">💾 Lưu Key</button>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                                            <span id="settings-gemini-masked-text" style="font-size:12px; color:#6B7280;">Đang kiểm tra...</span>
+                                            <button id="settings-gemini-test-btn" type="button" class="btn-ghost btn-xs" style="color:#7C3AED; font-weight:700;">🧪 Thử nghiệm xào bài mẫu</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div class="settings-notice">
-                                <strong>Quy tắc dành cho nhân viên:</strong> Không gửi token/Page access key, secret 2FA, file config hoặc ảnh chụp phần cấu hình cho người khác. Khi đổi máy, đăng nhập lại thay vì sao chép session.
+                            <!-- Thẻ 3: Cấu hình Giãn cách an toàn mặc định -->
+                            <div class="card" style="margin-bottom: 14px;">
+                                <div class="card-header">
+                                    <div class="card-title-group"><span>⏱️</span><h3>3. Giãn cách an toàn mặc định (Anti-Spam Delay)</h3></div>
+                                </div>
+                                <div style="padding: 16px;">
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Thiết lập khoảng thời gian nghỉ an toàn giữa hai bài đăng liên tiếp để tài khoản không bị Facebook checkpoint.</p>
+                                    <div class="field-group">
+                                        <label class="field-label">Mức giãn cách mặc định</label>
+                                        <select id="settings-delay-preset" class="field-input">
+                                            <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
+                                            <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
+                                            <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chỉ dùng khi cần gấp)</option>
+                                            <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test tính năng)</option>
+                                        </select>
+                                    </div>
+                                    <div class="field-group" style="margin-top:10px;">
+                                        <label class="checkbox-label" style="font-weight:600; color:#2563EB;">
+                                            <input type="checkbox" id="settings-auto-join-opt"> Tự động tìm & xin vào 1 Group theo từ khóa trong thời gian nghỉ giãn cách
+                                        </label>
+                                        <input type="text" id="settings-group-keywords" class="field-input" value="Homestay Huế, Du lịch Huế, Thuê phòng Huế" style="margin-top:6px; font-size:12px;">
+                                    </div>
+                                    <button id="settings-save-delay-btn" type="button" class="btn btn-primary btn-sm" style="margin-top:10px;">💾 Lưu thiết lập Giãn cách</button>
+                                </div>
                             </div>
                         </section>
 
@@ -857,7 +891,8 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <select id="delay-preset-select" class="field-input" style="padding: 6px 10px; font-size: 13px;">
                                 <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
                                 <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
-                                <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chỉ dùng khi test thử nghiệm)</option>
+                                <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chạy nhanh)</option>
+                                <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test nhanh giữa các bài)</option>
                                 <option value="custom">⚙️ Tùy chỉnh số phút theo ý muốn...</option>
                             </select>
                             <div id="custom-delay-inputs" class="hidden" style="gap: 8px; margin-top: 8px; align-items: center;">
@@ -881,9 +916,9 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </div>
 
-                        <div style="display: flex; gap: 10px; margin-top: 12px;">
-                            <button id="post-btn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
-                            <button id="add-to-queue-btn" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
+                        <div style="display: flex; gap: 10px; margin-top: 12px;" id="composer-bottom-actions">
+                            <button id="post-btn-bottom" type="button" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
+                            <button id="add-to-queue-btn-bottom" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
                         </div>
                     </section>
                 </div>
@@ -947,6 +982,123 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         </div>
                         <div id="posted-links-list" class="posted-links-list" style="max-height: 180px; overflow-y: auto;">
                             <span class="empty">Chưa có link bài đăng nào được ghi nhận.</span>
+                        </div>
+                    </div>
+
+                    <!-- Card Kết quả quét bình luận (Chỉ hiển thị khi ở tab Quét bình luận) -->
+                    <div class="card hidden" id="scrape-results-card">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>📋</span><h3>Kết quả bình luận đã quét</h3></div>
+                            <button id="download-csv-btn" class="btn btn-secondary btn-xs">📥 Tải về CSV</button>
+                        </div>
+                        <div style="padding: 10px;">
+                            <div class="table-wrapper" style="max-height: 380px; overflow-y: auto;">
+                                <table id="scrape-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Họ tên</th>
+                                            <th>UID / Link</th>
+                                            <th>Nội dung</th>
+                                            <th>SĐT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="scrape-table-body">
+                                        <tr><td colspan="4" style="text-align: center; color: #64748B; padding: 24px;">Chưa quét bài viết nào. Hãy nhập link bài viết bên trái và bấm '🔎 BẮT ĐẦU QUÉT BÌNH LUẬN'.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Khối bên phải cho Tab Quản lý Profiles & GPM -->
+                    <div class="profiles-panel-right hidden" id="profiles-panel-right">
+                        <!-- GPM Connection Status Card -->
+                        <div class="card" style="margin-bottom: 14px;">
+                            <div class="card-header">
+                                <div class="card-title-group"><span>🌐</span><h3>Kết nối GPMLogin v3 API</h3></div>
+                                <span id="gpm-panel-badge" class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:11px; padding:3px 8px; border-radius:12px;">Đang kiểm tra...</span>
+                            </div>
+                            <div style="padding: 14px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                                    <span style="font-size:13px; color:#475569;">Địa chỉ API:</span>
+                                    <code style="background:#F1F5F9; padding:2px 8px; border-radius:4px; font-weight:600; font-size:12px; color:#1E293B;" id="gpm-display-url">http://127.0.0.1:19995</code>
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <button id="gpm-test-btn" type="button" class="btn btn-secondary btn-sm" style="flex:1;">🔄 Kiểm tra GPM ngay</button>
+                                    <button id="open-selected-profile-btn-2" type="button" class="btn btn-primary btn-sm" style="flex:1;">🚀 Mở trình duyệt Profile</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Profile Activity History Card -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title-group"><span>🕒</span><h3>Nhật ký hoạt động Profile</h3></div>
+                                <button id="profile-activity-refresh-btn-2" type="button" class="btn-ghost btn-xs">↻ Làm mới</button>
+                            </div>
+                            <div style="padding: 12px;">
+                                <div style="margin-bottom: 10px;">
+                                    <select id="profile-activity-filter-2" class="field-input" style="font-size:12px; padding:6px 10px;">
+                                        <option value="">-- Tất cả Profile --</option>
+                                    </select>
+                                </div>
+                                <div id="profile-activity-list-2" style="max-height: 400px; overflow-y: auto;">
+                                    <span class="empty" style="display:block; padding:16px; text-align:center; color:#64748B;">Đang tải lịch sử hoạt động...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Khối bên phải cho Tab Bảo mật & Cấu hình -->
+                    <div class="settings-panel-right hidden" id="settings-panel-right">
+                        <!-- Security Health Card -->
+                        <div class="card" style="margin-bottom: 14px;">
+                            <div class="card-header">
+                                <div class="card-title-group"><span>🛡️</span><h3>Tổng quan Trạng thái An toàn</h3></div>
+                                <button id="settings-refresh-health-btn" type="button" class="btn-ghost btn-xs">↻ Làm mới</button>
+                            </div>
+                            <div style="padding: 14px;">
+                                <div class="security-health-grid" id="security-health-grid" aria-live="polite">
+                                    <div class="security-health-card is-loading">Đang kiểm tra cấu hình...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2FA Authenticator Card -->
+                        <div class="card" style="margin-bottom: 14px;">
+                            <div class="card-header">
+                                <div class="card-title-group"><span>🔑</span><h3>Trình tạo mã OTP 2FA</h3></div>
+                            </div>
+                            <div style="padding: 14px;">
+                                <p class="field-hint" style="margin-bottom:8px;">Nhập Secret Key 2FA của tài khoản Facebook để lấy mã OTP 6 số đăng nhập tức thì:</p>
+                                <div style="display:flex; gap:8px;">
+                                    <input type="text" id="settings-2fa-secret" class="field-input" placeholder="Dán Secret Key 2FA (VD: JBSWY3DPEHPK3PXP)..." style="flex:1;">
+                                    <button id="settings-2fa-generate-btn" type="button" class="btn btn-primary btn-sm" style="white-space:nowrap;">Tạo mã</button>
+                                </div>
+                                <div id="settings-2fa-result" class="hidden" style="margin-top:10px; display:flex; align-items:center; justify-content:space-between; background:#EFF6FF; border:1px solid #BFDBFE; padding:8px 14px; border-radius:8px;">
+                                    <div>
+                                        <span style="font-size:11px; color:#1E40AF; font-weight:600; display:block;">MÃ OTP 2FA:</span>
+                                        <span id="settings-2fa-code" style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:800; color:#1D4ED8; letter-spacing:3px;">------</span>
+                                    </div>
+                                    <button id="settings-2fa-copy-btn" class="btn btn-secondary btn-sm" type="button">📋 Sao chép</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5 Golden Rules Card -->
+                        <div class="card" style="background:#F8FAFC; border:1px solid #CBD5E1;">
+                            <div class="card-header" style="background:#F1F5F9;">
+                                <div class="card-title-group"><span>📜</span><h3>5 Nguyên tắc vàng bảo vệ nick chống checkpoint</h3></div>
+                            </div>
+                            <div style="padding: 14px; font-size: 13px; color: #334155; line-height: 1.6;">
+                                <ul style="padding-left: 18px; display:flex; flex-direction:column; gap:6px;">
+                                    <li><strong>1. Luôn dùng Giãn cách an toàn (5 - 10 phút):</strong> Tuyệt đối không đăng dồn dập nhiều bài trong vòng vài giây, Facebook sẽ nhận diện bot ngay lập tức.</li>
+                                    <li><strong>2. Luân phiên dàn nick (Profile Rotation):</strong> Mỗi nick chỉ nên đăng 3 - 5 bài/ngày. Sử dụng chế độ Luân phiên GPM để dàn trải bài viết.</li>
+                                    <li><strong>3. Bật AI Spin & Xóa EXIF ảnh:</strong> Luôn bật tính năng xào mới bài viết và xóa metadata ảnh để mỗi bài đăng lên Meta đều có chữ ký số (hash) độc nhất.</li>
+                                    <li><strong>4. Nuôi nick xen kẽ (Feed Interaction):</strong> Cho các nick lướt newsfeed, like bài, đọc tin tức trước và sau khi đăng bài để tăng trust score.</li>
+                                    <li><strong>5. Không đổi máy/đổi IP đột ngột:</strong> Gắn cố định proxy cho từng profile GPM tương ứng để giữ vững fingerprint trình duyệt.</li>
+                                </ul>
+                            </div>
                         </div>
                     </div>
 

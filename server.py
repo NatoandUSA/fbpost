@@ -30,8 +30,8 @@ AUTH_STATUS_FILE = str(BASE_DIR / "auth_status.json")
 UPLOAD_DIR = (BASE_DIR / "uploads").resolve()
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page"}
-APP_VERSION = "5.6.3"
-BUILD_TIME = "2026-09-04 16:00"
+APP_VERSION = "5.7.0"
+BUILD_TIME = "2026-09-04 17:00"
 
 
 def app_build_info():
@@ -217,6 +217,56 @@ def get_status():
 @app.route('/api/app-info', methods=['GET'])
 def get_app_info():
     return jsonify(app_build_info())
+
+
+@app.route('/api/settings', methods=['GET', 'POST'])
+def api_settings():
+    config = load_config()
+    if request.method == 'POST':
+        data = json_body()
+        if "gpm_api_url" in data:
+            config["gpm_api_url"] = str(data["gpm_api_url"]).strip()
+        if "gemini_api_key" in data:
+            new_key = str(data["gemini_api_key"]).strip()
+            if new_key:  # only update if non-empty
+                config["gemini_api_key"] = new_key
+        if "delay_preset" in data:
+            config["delay_preset"] = str(data["delay_preset"]).strip()
+        if "delay_min" in data:
+            config["delay_min"] = max(5, int(data["delay_min"]))
+        if "delay_max" in data:
+            config["delay_max"] = max(int(data.get("delay_min", 5)), int(data["delay_max"]))
+        if "auto_join_groups" in data:
+            config["auto_join_groups"] = bool(data["auto_join_groups"])
+        if "group_keywords" in data:
+            config["group_keywords"] = str(data["group_keywords"]).strip()
+        save_config(config)
+        return jsonify({
+            "success": True,
+            "message": "Đã lưu cấu hình thành công!",
+            "settings": {
+                "gpm_api_url": config.get("gpm_api_url", "http://127.0.0.1:19995"),
+                "delay_preset": config.get("delay_preset", "safe"),
+                "delay_min": config.get("delay_min", 300),
+                "delay_max": config.get("delay_max", 600),
+                "auto_join_groups": config.get("auto_join_groups", False),
+                "group_keywords": config.get("group_keywords", "Homestay Huế, Du lịch Huế"),
+            }
+        })
+
+    key = config.get("gemini_api_key", "")
+    masked_key = f"...{key[-6:]}" if len(key) > 6 else ("" if not key else key)
+    return jsonify({
+        "gpm_api_url": config.get("gpm_api_url", "http://127.0.0.1:19995"),
+        "gemini_api_key_masked": masked_key,
+        "has_gemini_key": bool(key),
+        "gemini_api_key_configured": bool(key),
+        "delay_preset": config.get("delay_preset", "safe"),
+        "delay_min": config.get("delay_min", 300),
+        "delay_max": config.get("delay_max", 600),
+        "auto_join_groups": config.get("auto_join_groups", False),
+        "group_keywords": config.get("group_keywords", "Homestay Huế, Du lịch Huế"),
+    })
 
 
 @app.route('/api/security/overview', methods=['GET'])
@@ -974,15 +1024,16 @@ def run_script():
     data = json_body()
     cmd = data.get('command')
     account_id = data.get('accountId')
-    gpm_api = data.get('gpmApiUrl')
+    cfg = load_config()
+    gpm_api = data.get('gpmApiUrl') or cfg.get('gpm_api_url', 'http://127.0.0.1:19995')
     
     # Rotate accounts and delay settings
     rotate_accounts = data.get('rotateAccounts', False)
     if account_id == '__rotate__':
         rotate_accounts = True
         account_id = None
-    delay_min = max(5, int(data.get('delayMin', 300))) # mặc định 300s (5 phút)
-    delay_max = max(delay_min, int(data.get('delayMax', 600))) # mặc định 600s (10 phút)
+    delay_min = max(5, int(data.get('delayMin') or cfg.get('delay_min', 300)))
+    delay_max = max(delay_min, int(data.get('delayMax') or cfg.get('delay_max', 600)))
 
     # Feeling and checkin settings
     feeling = data.get('feeling', False)
@@ -990,7 +1041,7 @@ def run_script():
 
     # NCL FB Pro Inspirations: AI Content Spinner, Random Photo Picker, Anti-Duplicate 24h
     auto_spin = data.get('autoSpin', False)
-    gemini_api_key = data.get('geminiApiKey', '')
+    gemini_api_key = data.get('geminiApiKey') or cfg.get('gemini_api_key', '')
     photo_folder = data.get('photoFolder', '').strip()
     photo_count_mode = data.get('photoCountMode', '2-4')
     skip_duplicate = data.get('skipDuplicate24h', True)
@@ -998,8 +1049,8 @@ def run_script():
     anti_hash_text = data.get('antiHashText', True)
 
     # Tự tìm & gia nhập Group theo keyword trong lúc chờ giãn cách
-    auto_join_groups = data.get('autoJoinGroups', False)
-    group_keywords = str(data.get('groupKeywords', 'Homestay Huế, Du lịch Huế')).strip()
+    auto_join_groups = data.get('autoJoinGroups', cfg.get('auto_join_groups', False))
+    group_keywords = str(data.get('groupKeywords') or cfg.get('group_keywords', 'Homestay Huế, Du lịch Huế')).strip()
     
     def generate():
         process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
@@ -1235,7 +1286,7 @@ def run_script():
                     delay = random.randint(delay_min, delay_max)
                     mins = delay // 60
                     secs = delay % 60
-                    yield f"\n⏳ [Anti-Spam] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
+                    yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
                     if auto_join_groups and group_keywords:
                         yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
                         jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
@@ -1245,7 +1296,7 @@ def run_script():
                         jg_process.wait()
                         yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                     for sec in range(delay, 0, -1):
-                        if sec % 30 == 0 or sec <= 10:
+                        if sec % 5 == 0 or sec <= 10:
                             s_m = sec // 60
                             s_s = sec % 60
                             yield f"... còn {s_m}p {s_s}s ({sec}s)\n"
@@ -1366,7 +1417,7 @@ def run_script():
                     jg_process.wait()
                     yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                 for sec in range(delay, 0, -1):
-                    if sec % 30 == 0 or sec <= 10:
+                    if sec % 5 == 0 or sec <= 10:
                         s_m = sec // 60
                         s_s = sec % 60
                         yield f"... còn {s_m}p {s_s}s ({sec}s)\n"

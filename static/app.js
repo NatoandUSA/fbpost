@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const scrapeSection = document.getElementById('scrape-section');
     const scrapeTarget = document.getElementById('scrape-target');
     const scrapeLimit = document.getElementById('scrape-limit');
-    const scrapeResultsContainer = document.getElementById('scrape-results-container');
+    const scrapeResultsContainer = document.getElementById('scrape-results-card') || document.getElementById('scrape-results-container');
     const scrapeTableBody = document.getElementById('scrape-table-body');
     const downloadCsvBtn = document.getElementById('download-csv-btn');
     const commentSection = document.getElementById('comment-section');
@@ -125,8 +125,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const preflightBtn = document.getElementById('preflight-btn');
     const queuePostBtn = document.getElementById('queue-post-btn');
     const preflightStatus = document.getElementById('preflight-status');
+    const approvalQueueCard = document.getElementById('approval-queue-card');
     const approvalQueueList = document.getElementById('approval-queue-list');
     const refreshQueueBtn = document.getElementById('refresh-queue-btn');
+    const profilesPanelRight = document.getElementById('profiles-panel-right');
+    const settingsPanelRight = document.getElementById('settings-panel-right');
+    const composerActionBar = document.getElementById('composer-action-bar');
+    const composerBottomActions = document.getElementById('composer-bottom-actions');
+    const logCard = document.querySelector('.card.log-card') || document.querySelector('.log-card');
+    const postBtnBottom = document.getElementById('post-btn-bottom');
+    const addToQueueBtnBottom = document.getElementById('add-to-queue-btn-bottom');
+    const interactSubmitBtn = document.getElementById('interact-submit-btn');
+    const scrapeSubmitBtn = document.getElementById('scrape-submit-btn');
+    const commentSubmitBtn = document.getElementById('comment-submit-btn');
+    const threadSubmitBtn = document.getElementById('thread-submit-btn');
     const campaignName = document.getElementById('campaign-name');
     const campaignBrand = document.getElementById('campaign-brand');
     const campaignTarget = document.getElementById('campaign-target');
@@ -1228,35 +1240,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Profile Activity & Security Health ----
     async function loadProfileActivity() {
         const activityList = document.getElementById('profile-activity-list');
+        const activityList2 = document.getElementById('profile-activity-list-2');
         const filterSelect = document.getElementById('profile-activity-filter');
-        if (!activityList) return;
+        const filterSelect2 = document.getElementById('profile-activity-filter-2');
+        if (!activityList && !activityList2) return;
         try {
-            const filterVal = filterSelect ? filterSelect.value : '';
+            const filterVal = (filterSelect && filterSelect.value) || (filterSelect2 && filterSelect2.value) || '';
             const url = filterVal ? `/api/profile-activity?profile_id=${encodeURIComponent(filterVal)}` : '/api/profile-activity';
             const res = await fetch(url);
             const data = await res.json();
             
-            // Populate filter select if needed
-            if (filterSelect && accountsList && accountsList.length > 0 && filterSelect.options.length <= 1) {
-                accountsList.forEach(acc => {
-                    const opt = document.createElement('option');
-                    opt.value = acc.id;
-                    opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
-                    filterSelect.appendChild(opt);
-                });
-            }
+            // Populate filter selects if needed
+            [filterSelect, filterSelect2].forEach(sel => {
+                if (sel && accountsList && accountsList.length > 0 && sel.options.length <= 1) {
+                    accountsList.forEach(acc => {
+                        const opt = document.createElement('option');
+                        opt.value = acc.id;
+                        opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                        sel.appendChild(opt);
+                    });
+                }
+            });
             
+            const emptyHtml = '<span class="empty" style="display:block; padding:16px; text-align:center; color:#64748B;">Chưa có lịch sử hoạt động nào được ghi nhận cho Profile.</span>';
             if (!data || data.length === 0) {
-                activityList.innerHTML = '<span class="empty" style="display:block; padding:16px; text-align:center; color:#64748B;">Chưa có lịch sử hoạt động nào được ghi nhận cho Profile.</span>';
+                if (activityList) activityList.innerHTML = emptyHtml;
+                if (activityList2) activityList2.innerHTML = emptyHtml;
                 return;
             }
             
-            activityList.innerHTML = '';
+            let html = '';
             data.forEach(act => {
-                const item = document.createElement('div');
-                item.className = 'management-item';
-                item.style.cssText = 'padding:12px; margin-bottom:8px; border:1px solid #E2E8F0; border-radius:8px; background:#F8FAFC;';
-                
                 const timeStr = act.timestamp ? new Date(act.timestamp).toLocaleString('vi-VN') : '';
                 const isSuccess = act.outcome === 'finished' || act.outcome === 'completed';
                 const statusColor = isSuccess ? '#16A34A' : '#DC2626';
@@ -1271,22 +1285,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 const actLabel = actionLabels[act.action] || act.action;
                 
-                item.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <strong style="font-size:13px; color:#1E293B;">${act.profile_id}</strong>
-                            <span style="font-size:11px; padding:2px 8px; border-radius:12px; background:#EFF6FF; color:#1D4ED8; font-weight:600;">${actLabel}</span>
+                html += `
+                    <div class="management-item" style="padding:12px; margin-bottom:8px; border:1px solid #E2E8F0; border-radius:8px; background:#F8FAFC;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <strong style="font-size:13px; color:#1E293B;">${act.profile_id}</strong>
+                                <span style="font-size:11px; padding:2px 8px; border-radius:12px; background:#EFF6FF; color:#1D4ED8; font-weight:600;">${actLabel}</span>
+                            </div>
+                            <span style="font-size:11px; color:#64748B;">🕒 ${timeStr}</span>
                         </div>
-                        <span style="font-size:11px; color:#64748B;">🕒 ${timeStr}</span>
+                        ${act.target ? `<div style="font-size:12px; color:#2563EB; margin-bottom:4px; word-break:break-all;">🎯 <strong>Mục tiêu:</strong> ${act.target}</div>` : ''}
+                        ${act.content ? `<div style="font-size:12px; color:#475569; margin-bottom:4px; font-style:italic;">📝 "${act.content.substring(0, 120)}${act.content.length > 120 ? '...' : ''}"</div>` : ''}
+                        <div style="font-size:11px; font-weight:700; color:${statusColor};">Kết quả: ${isSuccess ? '✅ Hoàn tất' : '❌ ' + (act.outcome || 'Lỗi')}</div>
                     </div>
-                    ${act.target ? `<div style="font-size:12px; color:#2563EB; margin-bottom:4px; word-break:break-all;">🎯 <strong>Mục tiêu:</strong> ${act.target}</div>` : ''}
-                    ${act.content ? `<div style="font-size:12px; color:#475569; margin-bottom:4px; font-style:italic;">📝 "${act.content.substring(0, 120)}${act.content.length > 120 ? '...' : ''}"</div>` : ''}
-                    <div style="font-size:11px; font-weight:700; color:${statusColor};">Kết quả: ${isSuccess ? '✅ Hoàn tất' : '❌ ' + (act.outcome || 'Lỗi')}</div>
                 `;
-                activityList.appendChild(item);
             });
+            if (activityList) activityList.innerHTML = html;
+            if (activityList2) activityList2.innerHTML = html;
         } catch (e) {
-            if (activityList) activityList.innerHTML = `<span class="empty">Lỗi tải nhật ký: ${e.message}</span>`;
+            const errHtml = `<span class="empty">Lỗi tải nhật ký: ${e.message}</span>`;
+            if (activityList) activityList.innerHTML = errHtml;
+            if (activityList2) activityList2.innerHTML = errHtml;
         }
     }
 
@@ -1294,9 +1313,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (profileActivityRefreshBtn) {
         profileActivityRefreshBtn.addEventListener('click', () => loadProfileActivity());
     }
+    const profileActivityRefreshBtn2 = document.getElementById('profile-activity-refresh-btn-2');
+    if (profileActivityRefreshBtn2) {
+        profileActivityRefreshBtn2.addEventListener('click', () => loadProfileActivity());
+    }
     const profileActivityFilter = document.getElementById('profile-activity-filter');
     if (profileActivityFilter) {
         profileActivityFilter.addEventListener('change', () => loadProfileActivity());
+    }
+    const profileActivityFilter2 = document.getElementById('profile-activity-filter-2');
+    if (profileActivityFilter2) {
+        profileActivityFilter2.addEventListener('change', () => loadProfileActivity());
     }
     const profileActivityManageBtn = document.getElementById('profile-activity-manage-btn');
     if (profileActivityManageBtn) {
@@ -1342,6 +1369,315 @@ document.addEventListener('DOMContentLoaded', () => {
     const securityRefreshBtn = document.getElementById('security-refresh-btn');
     if (securityRefreshBtn) {
         securityRefreshBtn.addEventListener('click', () => loadSecurityHealth());
+    }
+    const settingsRefreshHealthBtn = document.getElementById('settings-refresh-health-btn');
+    if (settingsRefreshHealthBtn) {
+        settingsRefreshHealthBtn.addEventListener('click', () => loadSecurityHealth());
+    }
+
+    // ---- Settings Management Center ----
+    async function loadSettings() {
+        try {
+            const res = await fetch('/api/settings');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            // GPM API
+            const settingsGpmInput = document.getElementById('settings-gpm-input');
+            if (settingsGpmInput && data.gpm_api_url) {
+                settingsGpmInput.value = data.gpm_api_url;
+            }
+            const gpmDisplayUrl = document.getElementById('gpm-display-url');
+            if (gpmDisplayUrl && data.gpm_api_url) {
+                gpmDisplayUrl.textContent = data.gpm_api_url;
+            }
+            const gpmInput = document.getElementById('gpm-api-input');
+            if (gpmInput && data.gpm_api_url) {
+                gpmInput.value = data.gpm_api_url;
+            }
+
+            // Gemini API Key
+            const geminiMaskedText = document.getElementById('settings-gemini-masked-text');
+            const geminiStatusBadge = document.getElementById('settings-gemini-status-badge');
+            if (data.gemini_api_key_configured) {
+                if (geminiMaskedText) geminiMaskedText.textContent = `Đã cấu hình: ${data.gemini_api_key_masked}`;
+                if (geminiStatusBadge) {
+                    geminiStatusBadge.textContent = '✅ Đã kết nối';
+                    geminiStatusBadge.style.background = '#DCFCE7';
+                    geminiStatusBadge.style.color = '#15803D';
+                }
+            } else {
+                if (geminiMaskedText) geminiMaskedText.textContent = 'Chưa cấu hình API Key';
+                if (geminiStatusBadge) {
+                    geminiStatusBadge.textContent = 'Chưa cấu hình';
+                    geminiStatusBadge.style.background = '#FEE2E2';
+                    geminiStatusBadge.style.color = '#B91C1C';
+                }
+            }
+
+            // Delay Preset & Auto Join
+            const settingsDelayPreset = document.getElementById('settings-delay-preset');
+            if (settingsDelayPreset && data.delay_preset) {
+                settingsDelayPreset.value = data.delay_preset;
+            }
+            const delayPresetSelect = document.getElementById('delay-preset-select');
+            if (delayPresetSelect && data.delay_preset) {
+                delayPresetSelect.value = data.delay_preset;
+            }
+
+            const settingsAutoJoin = document.getElementById('settings-auto-join-opt');
+            if (settingsAutoJoin !== null && data.auto_join_groups !== undefined) {
+                settingsAutoJoin.checked = !!data.auto_join_groups;
+            }
+            const autoJoinGroupsOpt = document.getElementById('auto-join-groups-opt');
+            if (autoJoinGroupsOpt !== null && data.auto_join_groups !== undefined) {
+                autoJoinGroupsOpt.checked = !!data.auto_join_groups;
+            }
+
+            const settingsGroupKeywords = document.getElementById('settings-group-keywords');
+            if (settingsGroupKeywords && data.group_keywords) {
+                settingsGroupKeywords.value = data.group_keywords;
+            }
+            const autoJoinKeywords = document.getElementById('auto-join-keywords');
+            if (autoJoinKeywords && data.group_keywords) {
+                autoJoinKeywords.value = data.group_keywords;
+            }
+        } catch (e) {
+            console.warn('Lỗi tải cấu hình:', e);
+        }
+    }
+
+    async function saveSettings(payload) {
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('Đã lưu cấu hình thành công!');
+                loadSettings();
+                return true;
+            } else {
+                showToast(`Lỗi lưu cấu hình: ${data.error || 'Thất bại'}`, 'error');
+                return false;
+            }
+        } catch (e) {
+            showToast(`Lỗi kết nối máy chủ: ${e.message}`, 'error');
+            return false;
+        }
+    }
+
+    // Settings Event Listeners
+    const settingsGpmSaveBtn = document.getElementById('settings-gpm-save-btn');
+    if (settingsGpmSaveBtn) {
+        settingsGpmSaveBtn.addEventListener('click', () => {
+            const gpmUrl = document.getElementById('settings-gpm-input')?.value.trim();
+            if (!gpmUrl) return showToast('Vui lòng nhập URL GPM API!', 'error');
+            saveSettings({ gpm_api_url: gpmUrl });
+        });
+    }
+
+    async function checkGpmHealth(gpmUrl, badgeEl) {
+        if (badgeEl) {
+            badgeEl.textContent = 'Đang kiểm tra...';
+            badgeEl.style.background = '#FEF3C7';
+            badgeEl.style.color = '#B45309';
+        }
+        try {
+            const res = await fetch(`/api/gpm/profiles?api_url=${encodeURIComponent(gpmUrl)}`);
+            const data = await res.json();
+            if (res.ok && data.success) {
+                const count = data.total || (data.data && data.data.length) || 0;
+                if (badgeEl) {
+                    badgeEl.textContent = `✅ OK (${count} profiles)`;
+                    badgeEl.style.background = '#DCFCE7';
+                    badgeEl.style.color = '#15803D';
+                }
+                showToast(`Kết nối GPMLogin thành công! Tìm thấy ${count} profile.`);
+            } else {
+                if (badgeEl) {
+                    badgeEl.textContent = '❌ Không kết nối được';
+                    badgeEl.style.background = '#FEE2E2';
+                    badgeEl.style.color = '#B91C1C';
+                }
+                showToast(`Không thể kết nối GPMLogin tại ${gpmUrl}. Hãy bật phần mềm GPMLogin!`, 'error');
+            }
+        } catch (e) {
+            if (badgeEl) {
+                badgeEl.textContent = '❌ Lỗi kết nối';
+                badgeEl.style.background = '#FEE2E2';
+                badgeEl.style.color = '#B91C1C';
+            }
+            showToast(`Lỗi kết nối GPM: ${e.message}`, 'error');
+        }
+    }
+
+    const settingsGpmTestBtn = document.getElementById('settings-gpm-test-btn');
+    if (settingsGpmTestBtn) {
+        settingsGpmTestBtn.addEventListener('click', () => {
+            const gpmUrl = document.getElementById('settings-gpm-input')?.value.trim() || 'http://127.0.0.1:19995';
+            checkGpmHealth(gpmUrl, document.getElementById('settings-gpm-status-badge'));
+        });
+    }
+
+    const gpmTestBtn = document.getElementById('gpm-test-btn');
+    if (gpmTestBtn) {
+        gpmTestBtn.addEventListener('click', () => {
+            const gpmUrl = document.getElementById('gpm-display-url')?.textContent.trim() || 'http://127.0.0.1:19995';
+            checkGpmHealth(gpmUrl, document.getElementById('gpm-panel-badge'));
+        });
+    }
+
+    const openSelectedProfileBtn2 = document.getElementById('open-selected-profile-btn-2');
+    if (openSelectedProfileBtn2) {
+        openSelectedProfileBtn2.addEventListener('click', () => {
+            if (openSelectedProfileBtn) openSelectedProfileBtn.click();
+        });
+    }
+
+    const settingsGeminiSaveBtn = document.getElementById('settings-gemini-save-btn');
+    if (settingsGeminiSaveBtn) {
+        settingsGeminiSaveBtn.addEventListener('click', async () => {
+            const key = document.getElementById('settings-gemini-input')?.value.trim();
+            if (!key) return showToast('Vui lòng nhập API Key Google Gemini!', 'error');
+            const ok = await saveSettings({ gemini_api_key: key });
+            if (ok) {
+                const input = document.getElementById('settings-gemini-input');
+                if (input) input.value = '';
+                const mainKeyInput = document.getElementById('gemini-api-key-input');
+                if (mainKeyInput) mainKeyInput.value = key;
+            }
+        });
+    }
+
+    const settingsGeminiTestBtn = document.getElementById('settings-gemini-test-btn');
+    if (settingsGeminiTestBtn) {
+        settingsGeminiTestBtn.addEventListener('click', async () => {
+            showToast('Đang gửi bài viết mẫu thử nghiệm đến Gemini AI...');
+            try {
+                const res = await fetch('/api/ai/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: 'Homestay Huế giá rẻ view sông Hương, đầy đủ tiện nghi, gần phố đi bộ.',
+                        api_key: document.getElementById('settings-gemini-input')?.value.trim() || ''
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.spinned) {
+                    showToast('AI Spin hoạt động xuất sắc!');
+                    alert(`✨ Kết quả bài viết mẫu sau khi AI xào mới:\n\n${data.spinned}`);
+                } else {
+                    showToast(`Lỗi kiểm tra AI: ${data.error || 'Không thể spin'}`, 'error');
+                }
+            } catch (e) {
+                showToast(`Lỗi kết nối AI: ${e.message}`, 'error');
+            }
+        });
+    }
+
+    const settingsSaveDelayBtn = document.getElementById('settings-save-delay-btn');
+    if (settingsSaveDelayBtn) {
+        settingsSaveDelayBtn.addEventListener('click', () => {
+            const preset = document.getElementById('settings-delay-preset')?.value || 'safe';
+            const autoJoin = document.getElementById('settings-auto-join-opt')?.checked || false;
+            const keywords = document.getElementById('settings-group-keywords')?.value.trim() || 'Homestay Huế, Du lịch Huế';
+
+            let delayMin = 300, delayMax = 600;
+            if (preset === 'test') { delayMin = 10; delayMax = 20; }
+            else if (preset === 'fast') { delayMin = 30; delayMax = 60; }
+            else if (preset === 'moderate') { delayMin = 120; delayMax = 300; }
+            else { delayMin = 300; delayMax = 600; }
+
+            saveSettings({
+                delay_preset: preset,
+                delay_min: delayMin,
+                delay_max: delayMax,
+                auto_join_groups: autoJoin,
+                group_keywords: keywords
+            });
+        });
+    }
+
+    // 2FA in Settings right panel
+    const settings2faGenerateBtn = document.getElementById('settings-2fa-generate-btn');
+    const settings2faSecret = document.getElementById('settings-2fa-secret');
+    const settings2faResult = document.getElementById('settings-2fa-result');
+    const settings2faCode = document.getElementById('settings-2fa-code');
+    const settings2faCopyBtn = document.getElementById('settings-2fa-copy-btn');
+
+    if (settings2faGenerateBtn) {
+        settings2faGenerateBtn.addEventListener('click', async () => {
+            const secret = settings2faSecret ? settings2faSecret.value.trim().replace(/\s+/g, '') : '';
+            if (!secret) return showToast('Vui lòng nhập Secret Key 2FA!', 'error');
+
+            try {
+                const res = await fetch('/api/2fa', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret })
+                });
+                const data = await res.json();
+                if (res.ok && data.token) {
+                    if (settings2faCode) settings2faCode.textContent = data.token;
+                    if (settings2faResult) settings2faResult.classList.remove('hidden');
+                    showToast(`Đã tạo mã OTP: ${data.token}`);
+                } else {
+                    showToast(data.error || 'Secret Key không hợp lệ!', 'error');
+                }
+            } catch (e) {
+                showToast(`Lỗi tạo mã: ${e.message}`, 'error');
+            }
+        });
+    }
+
+    if (settings2faCopyBtn) {
+        settings2faCopyBtn.addEventListener('click', () => {
+            const code = settings2faCode ? settings2faCode.textContent.trim() : '';
+            if (code && code !== '------') {
+                navigator.clipboard.writeText(code).then(() => {
+                    showToast(`Đã sao chép mã ${code} vào bộ nhớ tạm!`);
+                });
+            }
+        });
+    }
+
+    // Action button bridges
+    if (postBtnBottom) {
+        postBtnBottom.addEventListener('click', () => {
+            if (postBtn) postBtn.click();
+        });
+    }
+    if (addToQueueBtnBottom) {
+        addToQueueBtnBottom.addEventListener('click', () => {
+            if (addToQueueBtn) addToQueueBtn.click();
+        });
+    }
+    if (interactSubmitBtn) {
+        interactSubmitBtn.addEventListener('click', () => {
+            currentMode = 'interact';
+            if (postBtn) postBtn.click();
+        });
+    }
+    if (scrapeSubmitBtn) {
+        scrapeSubmitBtn.addEventListener('click', () => {
+            currentMode = 'scrape';
+            if (postBtn) postBtn.click();
+        });
+    }
+    if (commentSubmitBtn) {
+        commentSubmitBtn.addEventListener('click', () => {
+            currentMode = 'comment';
+            if (postBtn) postBtn.click();
+        });
+    }
+    if (threadSubmitBtn) {
+        threadSubmitBtn.addEventListener('click', () => {
+            currentMode = 'thread';
+            if (postBtn) postBtn.click();
+        });
     }
 
     // ---- 2FA Code Generator ----
@@ -1450,6 +1786,88 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const workspaceTitleEl = document.getElementById('active-workspace-title');
 
+    // ---- Tab Panel Isolation Logic ----
+    function applyTabIsolation(mode) {
+        // 1. Approval Queue: ONLY on Group and Page
+        if (approvalQueueCard) {
+            if (mode === 'group' || mode === 'page') {
+                approvalQueueCard.classList.remove('hidden');
+            } else {
+                approvalQueueCard.classList.add('hidden');
+            }
+        }
+
+        // 2. Posted Links: on Group, Page, Comment
+        if (postedLinksCard) {
+            if (mode === 'group' || mode === 'page' || mode === 'comment') {
+                postedLinksCard.classList.remove('hidden');
+            } else {
+                postedLinksCard.classList.add('hidden');
+            }
+        }
+
+        // 3. Scrape Results Card: ONLY on Scrape
+        if (scrapeResultsContainer) {
+            if (mode === 'scrape') {
+                scrapeResultsContainer.classList.remove('hidden');
+            } else {
+                scrapeResultsContainer.classList.add('hidden');
+            }
+        }
+
+        // 4. Profiles Right Panel: ONLY on Profiles
+        if (profilesPanelRight) {
+            if (mode === 'profiles') {
+                profilesPanelRight.classList.remove('hidden');
+            } else {
+                profilesPanelRight.classList.add('hidden');
+            }
+        }
+
+        // 5. Settings Right Panel: ONLY on Settings
+        if (settingsPanelRight) {
+            if (mode === 'settings') {
+                settingsPanelRight.classList.remove('hidden');
+            } else {
+                settingsPanelRight.classList.add('hidden');
+            }
+        }
+
+        // 6. Log Card: Show on operational tabs, hide on profiles and settings
+        if (logCard) {
+            if (mode === 'profiles' || mode === 'settings') {
+                logCard.classList.add('hidden');
+            } else {
+                logCard.classList.remove('hidden');
+            }
+        }
+
+        // 7. Visual Progress Dashboard: Hide on profiles and settings
+        if (visualProgressDashboard) {
+            if (mode === 'profiles' || mode === 'settings') {
+                visualProgressDashboard.classList.add('hidden');
+            } else {
+                visualProgressDashboard.classList.remove('hidden');
+            }
+        }
+
+        // 8. Composer action bar & bottom actions: ONLY on Group and Page
+        if (composerActionBar) {
+            if (mode === 'group' || mode === 'page') {
+                composerActionBar.classList.remove('hidden');
+            } else {
+                composerActionBar.classList.add('hidden');
+            }
+        }
+        if (composerBottomActions) {
+            if (mode === 'group' || mode === 'page') {
+                composerBottomActions.classList.remove('hidden');
+            } else {
+                composerBottomActions.classList.add('hidden');
+            }
+        }
+    }
+
     document.querySelectorAll('.composer-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             document.querySelectorAll('.composer-tab').forEach(t => t.classList.remove('active'));
@@ -1473,7 +1891,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (createPageSection) createPageSection.classList.add('hidden');
             if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
             if (addToPostBar) addToPostBar.classList.add('hidden');
-            if (composerDividerBar) composerDividerBar.classList.add('hidden');
+            if (composerDividerBar) composerDividerBar.classList.remove('hidden');
             if (diversePostSettingsBar) diversePostSettingsBar.classList.add('hidden');
             if (folderPhotoBar) folderPhotoBar.classList.add('hidden');
             if (delaySettingsBar) delaySettingsBar.classList.add('hidden');
@@ -1531,6 +1949,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Quản lý Profiles & GPM: Ẩn hoàn toàn composer card, hiển thị bảng Profile & Activity Log
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
                 if (accountsCard) {
                     accountsCard.classList.remove('hidden');
                     if (accountsContent) accountsContent.classList.remove('hidden');
@@ -1547,7 +1966,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
                 if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
                 if (settingsSection) settingsSection.classList.remove('hidden');
+                loadSettings();
                 loadSecurityHealth();
             } else {
                 // Standard posting modes (Group, Page)
@@ -1577,6 +1998,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
+
+            // Apply Right Panel & Action Isolation for all tabs
+            applyTabIsolation(currentMode);
         });
     });
 
@@ -1775,6 +2199,8 @@ document.addEventListener('DOMContentLoaded', () => {
             delayMin = 120; delayMax = 300; // 2 - 5 phút
         } else if (delayPreset === 'fast') {
             delayMin = 30; delayMax = 60;   // 30 - 60 giây
+        } else if (delayPreset === 'test') {
+            delayMin = 10; delayMax = 20;   // 10 - 20 giây (Test nhanh)
         } else if (delayPreset === 'custom') {
             const cMin = parseInt(document.getElementById('custom-delay-min')?.value) || 5;
             const cMax = parseInt(document.getElementById('custom-delay-max')?.value) || 10;
@@ -1904,15 +2330,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (activeItem) activeItem.className = 'stepper-item error';
                             }
 
-                            // Anti-Spam Cooldown timer
-                            const delayMatch = cleanLine.match(/\[Anti-Spam\] Waiting (\d+) seconds/);
+                            // Anti-Spam Cooldown timer (hỗ trợ cả tiếng Việt và tiếng Anh)
+                            const delayMatch = cleanLine.match(/\[Anti-Spam.*?\] (?:Waiting|Nghỉ ngẫu nhiên) (\d+) (?:seconds|giây)/i);
                             if (delayMatch) {
                                 let timeLeft = parseInt(delayMatch[1]);
                                 const totalDelay = timeLeft;
                                 statusIndicatorDot.className = 'status-indicator-dot wait';
-                                statusDetailText.textContent = '⏳ Giãn cách nghỉ tránh spam để bảo vệ tài khoản...';
+                                const initM = Math.floor(timeLeft / 60);
+                                const initS = timeLeft % 60;
+                                const initDisplay = initM > 0 ? `${initM}p ${initS}s (${timeLeft}s)` : `${timeLeft}s`;
+                                statusDetailText.textContent = `⏳ Giãn cách an toàn (${initDisplay}) để chống checkpoint Facebook...`;
                                 
-                                cooldownTimeLeft.textContent = `${timeLeft}s`;
+                                cooldownTimeLeft.textContent = initDisplay;
                                 cooldownTimerCard.classList.remove('hidden');
                                 cooldownProgressFill.style.transition = 'none';
                                 cooldownProgressFill.style.width = '100%';
@@ -1927,16 +2356,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (timeLeft <= 0) {
                                         clearInterval(cooldownInterval);
                                         cooldownTimerCard.classList.add('hidden');
+                                        statusDetailText.textContent = '🚀 Hết thời gian nghỉ an toàn. Đang đăng bài tiếp theo...';
                                     } else {
-                                        cooldownTimeLeft.textContent = `${timeLeft}s`;
+                                        const curM = Math.floor(timeLeft / 60);
+                                        const curS = timeLeft % 60;
+                                        cooldownTimeLeft.textContent = curM > 0 ? `${curM}p ${curS}s (${timeLeft}s)` : `${timeLeft}s`;
+                                        statusDetailText.textContent = `⏳ Đang nghỉ an toàn (${curM > 0 ? `${curM}p ${curS}s` : `${curS}s`}) chống checkpoint...`;
                                     }
                                 }, 1000);
                             }
 
-                            const remainMatch = cleanLine.match(/\.\.\.\s*(\d+)s remaining/);
+                            const remainMatch = cleanLine.match(/\.\.\.\s*(?:còn\s+)?(?:(\d+)p\s+)?(?:(\d+)s\s+)?\((\d+)s\)/i) || cleanLine.match(/\.\.\.\s*(\d+)s remaining/i);
                             if (remainMatch) {
-                                const secondsLeft = parseInt(remainMatch[1]);
-                                cooldownTimeLeft.textContent = `${secondsLeft}s`;
+                                const secondsLeft = remainMatch[3] ? parseInt(remainMatch[3]) : parseInt(remainMatch[1]);
+                                if (!isNaN(secondsLeft)) {
+                                    const curM = Math.floor(secondsLeft / 60);
+                                    const curS = secondsLeft % 60;
+                                    cooldownTimeLeft.textContent = curM > 0 ? `${curM}p ${curS}s (${secondsLeft}s)` : `${secondsLeft}s`;
+                                }
                             }
 
                             // Interact Newsfeed parsing
@@ -3810,6 +4247,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     delayPreviewBadge.textContent = '30 - 60s (Thử nghiệm)';
                     delayPreviewBadge.style.background = '#FEE2E2';
                     delayPreviewBadge.style.color = '#B91C1C';
+                } else if (val === 'test') {
+                    delayPreviewBadge.textContent = '10 - 20s (Test nhanh)';
+                    delayPreviewBadge.style.background = '#DCFCE7';
+                    delayPreviewBadge.style.color = '#15803D';
                 }
             }
         });
@@ -3818,11 +4259,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tải danh sách link đã đăng ban đầu
     loadPostedLinks();
 
+    // Khởi tạo trạng thái cách ly panel theo tab mặc định & nạp cấu hình hệ thống
+    applyTabIsolation(currentMode);
+    loadSettings();
+
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(() => {
-        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.5.2 [Build: 2026-09-04 06:45]');
+        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.7.0 [Build: 2026-09-04 17:00]');
         appendLog('💡 Hệ thống đã sẵn sàng với tài khoản GPM M14 và 3 nhóm Homestay tại Huế.');
         appendLog('🛡️ Chế độ chống spam: Giãn cách an toàn 5 - 10 phút & Hỗ trợ xoay tua Profile GPM.');
+        appendLog('📋 Quy trình duyệt: Hỗ trợ Đưa vào hàng đợi & bấm Duyệt bài trước khi đăng.');
     }, 500);
 });
 
