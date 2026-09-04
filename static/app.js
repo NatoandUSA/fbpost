@@ -337,7 +337,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderQueue(items) {
         approvalQueueList.innerHTML = '';
         if (!items.length) {
-            approvalQueueList.innerHTML = '<span class="empty">Chưa có bài nào trong hàng đợi.</span>';
+            approvalQueueList.innerHTML = `
+                <div style="background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 14px; text-align: center; color: #64748B;">
+                    <p style="font-weight: 700; font-size: 13px; margin-bottom: 6px; color: #1E293B;">Chưa có bài nào trong hàng đợi</p>
+                    <p style="font-size: 12px; margin: 0; line-height: 1.5;">
+                        👉 Soạn bài và nhập link ở bên trái, sau đó bấm <strong>"📋 Đưa vào Hàng đợi duyệt"</strong>.<br>
+                        Bài viết sẽ xuất hiện tại đây kèm nút <strong>"✅ Duyệt bài này"</strong> để bạn kiểm duyệt trước khi đăng!
+                    </p>
+                </div>`;
             return;
         }
         items.forEach(item => {
@@ -351,7 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? '<span style="background:#e6f4ea; color:#1e7e34; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">✅ Đã duyệt</span>' 
                 : item.state === 'cancelled' 
                 ? '<span style="background:#fdecea; color:#c62828; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">⏹ Đã hủy</span>' 
-                : '<span style="background:#fff3cd; color:#856404; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">📝 Nháp</span>';
+                : '<span style="background:#fff3cd; color:#856404; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">📝 Nháp (Chờ duyệt)</span>';
             title.innerHTML = `${statusBadge} <strong>${item.target}</strong>`;
 
             const preview = document.createElement('div');
@@ -364,8 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.state === 'draft') {
                 const approve = document.createElement('button');
                 approve.className = 'btn btn-primary btn-sm';
-                approve.style.cssText = 'flex: 1; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;';
-                approve.textContent = '✅ Duyệt bài này';
+                approve.style.cssText = 'flex: 1; padding: 8px 14px; font-size: 13px; font-weight: 700; background: #10B981; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 3px rgba(16,185,129,0.3); display: flex; align-items: center; justify-content: center; gap: 6px;';
+                approve.innerHTML = '✅ <strong>Duyệt bài này</strong>';
                 approve.addEventListener('click', () => updateQueueItem(item.id, 'approve'));
                 actions.appendChild(approve);
             }
@@ -483,6 +490,81 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     refreshQueueBtn.addEventListener('click', loadQueue);
+
+    // ---- Add to Queue (Đưa vào Hàng đợi duyệt) from Composer ----
+    const addToQueueBtn = document.getElementById('add-to-queue-btn');
+    if (addToQueueBtn) {
+        addToQueueBtn.addEventListener('click', async () => {
+            const rawTargets = targetInput.value.trim();
+            const content = postContent.value.trim();
+
+            if (!rawTargets || !content) {
+                showToast('Vui lòng điền link mục tiêu và nội dung bài viết trước!', 'error');
+                return;
+            }
+
+            const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
+            if (!targets.length) {
+                showToast('Chưa có link mục tiêu nào!', 'error');
+                return;
+            }
+
+            addToQueueBtn.disabled = true;
+            const originalText = addToQueueBtn.innerHTML;
+            addToQueueBtn.innerHTML = '⏳ Đang thêm...';
+
+            let addedCount = 0;
+            for (const target of targets) {
+                try {
+                    const res = await fetch('/api/queue', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target,
+                            content,
+                            image_url: ''
+                        })
+                    });
+                    if (res.ok) addedCount++;
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            addToQueueBtn.disabled = false;
+            addToQueueBtn.innerHTML = originalText;
+
+            if (addedCount > 0) {
+                showToast(`Đã đưa ${addedCount} bài vào Hàng đợi cần duyệt! Hãy bấm nút '✅ Duyệt bài này' để duyệt.`);
+                loadQueue();
+            } else {
+                showToast('Không thể thêm bài vào hàng đợi.', 'error');
+            }
+        });
+    }
+
+    // ---- Approve All Queue Drafts (Duyệt tất cả bài nháp) ----
+    const approveAllQueueBtn = document.getElementById('approve-all-queue-btn');
+    if (approveAllQueueBtn) {
+        approveAllQueueBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/queue');
+                const items = await res.json();
+                const drafts = items.filter(i => i.state === 'draft');
+                if (!drafts.length) {
+                    showToast('Không có bài nháp nào cần duyệt trong hàng đợi!', 'info');
+                    return;
+                }
+                for (const d of drafts) {
+                    await fetch(`/api/queue/${d.id}/approve`, { method: 'POST' });
+                }
+                showToast(`✅ Đã duyệt thành công ${drafts.length} bài đăng! Bây giờ bạn có thể bấm '🚀 Đăng bài đã duyệt'.`);
+                loadQueue();
+            } catch (e) {
+                showToast('Lỗi khi duyệt bài', 'error');
+            }
+        });
+    }
 
     function saveLink(url) {
         if (!savedPostLinks.includes(url)) {

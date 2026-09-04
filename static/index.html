@@ -881,7 +881,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </div>
 
-                        <button id="post-btn" class="btn btn-primary btn-full" style="padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
+                        <div style="display: flex; gap: 10px; margin-top: 12px;">
+                            <button id="post-btn" class="btn btn-primary" style="flex: 1; padding: 12px; font-size: 15px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">🚀 BẮT ĐẦU ĐĂNG BÀI NGAY</button>
+                            <button id="add-to-queue-btn" type="button" class="btn btn-secondary" style="padding: 12px 18px; font-size: 14px; font-weight: 700; border-radius: 8px; border: 1px solid #CBD5E1; background: #EFF6FF; color: #1D4ED8; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" title="Đưa nội dung và các link mục tiêu vào Hàng đợi để kiểm tra và bấm nút 'Duyệt bài' trước khi đăng">📋 Đưa vào Hàng đợi duyệt</button>
+                        </div>
                     </section>
                 </div>
 
@@ -924,6 +927,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <div class="card-header">
                             <div class="card-title-group"><span>📋</span><h3>Hàng đợi cần duyệt</h3></div>
                             <div style="display:flex; gap:6px;">
+                                <button id="approve-all-queue-btn" class="btn btn-secondary btn-xs" type="button" style="background: #10B981; color: white; border: none; font-weight: 700; border-radius: 4px; padding: 4px 8px; cursor: pointer;">✅ Duyệt tất cả</button>
                                 <button id="post-all-approved-btn" class="btn btn-primary btn-xs" type="button">🚀 Đăng bài đã duyệt</button>
                                 <button id="refresh-queue-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
                             </div>
