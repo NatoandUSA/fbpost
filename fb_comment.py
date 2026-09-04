@@ -8,13 +8,13 @@ from utils import process_spintax, human_type, load_accounts, launch_browser, cl
 
 STATE_FILE = "state.json"
 
-def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=True):
+def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=True, anti_hash_text=True):
     """
     Tự động mở một bài viết Facebook (trong Group public hoặc Fanpage public) và để lại bình luận.
     Hỗ trợ Spintax, human typing, like trước khi comment, và xử lý các loại giao diện Facebook.
     """
     print(f"🔗 Đang mở bài viết để bình luận: {post_url}")
-    parsed_comment = process_spintax(comment_content)
+    parsed_comment = process_spintax(comment_content, anti_hash=anti_hash_text)
     
     account = None
     if account_id:
@@ -175,14 +175,10 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 except Exception:
                     pass
 
-def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=True, min_delay=25, max_delay=45):
+def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=True, min_delay=25, max_delay=45, anti_hash_text=True):
     """
-    Duyệt danh sách URLs bài viết và bình luận lần lượt kèm cơ chế Anti-spam delay.
+    Duyệt qua danh sách link bài viết và bình luận lần lượt.
     """
-    if not urls:
-        print("Danh sách link bài viết rỗng.")
-        return
-
     total = len(urls)
     print(f"\n=======================================================")
     print(f"🚀 BẮT ĐẦU CHẠY BÌNH LUẬN VÀO {total} BÀI VIẾT ĐÃ CHỌN")
@@ -202,7 +198,8 @@ def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, li
             comment_content=comment_content,
             account_id=account_id,
             gpm_api_url=gpm_api_url,
-            like_post=like_post
+            like_post=like_post,
+            anti_hash_text=anti_hash_text
         )
 
         if ok:
@@ -231,14 +228,16 @@ if __name__ == "__main__":
     parser.add_argument("--like", action="store_true", default=True, help="Tự động like trước khi comment")
     parser.add_argument("--min-delay", type=int, default=25, help="Thời gian nghỉ tối thiểu (giây)")
     parser.add_argument("--max-delay", type=int, default=45, help="Thời gian nghỉ tối đa (giây)")
+    parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Chèn ký tự tàng hình chống quét trùng lặp")
+    parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     args = parser.parse_args()
 
     if args.urls_file and os.path.exists(args.urls_file):
         with open(args.urls_file, "r", encoding="utf-8") as f:
             target_urls = [line.strip() for line in f if line.strip()]
         content = args.content or "Bài viết rất hữu ích!"
-        comment_on_list(target_urls, content, args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay)
+        comment_on_list(target_urls, content, args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text)
     elif args.url and args.content:
-        comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like)
+        comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
     else:
         parser.print_help()

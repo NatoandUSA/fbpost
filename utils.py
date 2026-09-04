@@ -21,10 +21,11 @@ VIEWPORTS = [
     {"width": 1920, "height": 1080}
 ]
 
-def process_spintax(text):
+def process_spintax(text, anti_hash=False):
     """
     Parses Spintax like {Hello|Hi|Hey} there!
     Supports simple, non-nested spintax.
+    Nếu anti_hash=True: Tự động chèn Zero-Width Space ngẫu nhiên để chống Meta trùng mã băm.
     """
     if not text:
         return ""
@@ -36,6 +37,14 @@ def process_spintax(text):
         options = match.group(1).split('|')
         choice = random.choice(options)
         text = text[:match.start()] + choice + text[match.end():]
+
+    if anti_hash:
+        try:
+            from ai_spinner import inject_zero_width_chars
+            text = inject_zero_width_chars(text)
+        except Exception:
+            pass
+
     return text
 
 def human_type(page, locator, text):
@@ -290,10 +299,92 @@ def close_browser(browser_or_context, account, api_url=None):
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 
-def pick_random_photos(folder_path, count_mode="2-4"):
+# =========================================================================
+# MEDIA ANTI-HASH PIPELINE (EXIF STRIPPER & PHASH RANDOMIZER)
+# =========================================================================
+
+def clean_and_randomize_image(image_path: str, output_dir: str = None) -> str:
+    """
+    Xóa sạch EXIF metadata và vi chỉnh nhẹ hình ảnh để thay đổi mã băm (pHash/MD5) của ảnh:
+    - Bóc tách toàn bộ metadata EXIF (GPS, thông số camera, timestamp chụp).
+    - Vi chỉnh kích thước ngẫu nhiên (cắt xén hoặc co giãn cực nhẹ ±1 đến ±2 pixel).
+    - Lưu file vào thư mục runtime/processed_media/ (giữ nguyên file gốc của người dùng).
+    - Nếu Pillow chưa có hoặc gặp lỗi, trả về image_path gốc an toàn.
+    """
+    if not image_path or not os.path.exists(image_path):
+        return image_path
+
+    if "processed_media" in os.path.abspath(image_path):
+        return image_path
+
+    try:
+        from PIL import Image, ImageOps
+        import uuid
+        
+        if not output_dir:
+            output_dir = os.path.join("runtime", "processed_media")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        ext = os.path.splitext(image_path)[1].lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
+            return image_path
+            
+        unique_name = f"clean_{uuid.uuid4().hex[:10]}{ext if ext != '.webp' else '.jpg'}"
+        out_path = os.path.abspath(os.path.join(output_dir, unique_name))
+
+        with Image.open(image_path) as img:
+            # 1. Tự động xoay ảnh theo hướng chuẩn trước khi xóa EXIF
+            try:
+                img = ImageOps.exif_transpose(img)
+            except Exception:
+                pass
+                
+            # 2. Tạo bản sao ảnh RGB mới hoàn toàn không chứa EXIF
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            else:
+                img = img.copy()
+
+            # 3. Vi chỉnh kích thước ngẫu nhiên ±1 đến ±2 pixel để đổi Perceptual Hash
+            w, h = img.size
+            if w > 100 and h > 100:
+                delta_w = random.choice([-2, -1, 1, 2])
+                delta_h = random.choice([-2, -1, 1, 2])
+                new_w = max(100, w + delta_w)
+                new_h = max(100, h + delta_h)
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            # 4. Lưu lại với EXIF rỗng và chất lượng nén ngẫu nhiên (92 - 96)
+            save_quality = random.randint(92, 96)
+            img.save(out_path, format="JPEG" if ext in {".jpg", ".jpeg", ".webp"} else "PNG", quality=save_quality)
+
+        return out_path
+    except Exception as e:
+        try:
+            print(f"⚠️ [Media Anti-Hash] Không thể xử lý ảnh ({e}), dùng ảnh gốc: {image_path}")
+        except Exception:
+            pass
+        return image_path
+
+
+def process_images_anti_hash(image_paths: list) -> list:
+    """
+    Xử lý danh sách ảnh qua Media Anti-Hash Pipeline trước khi đính kèm vào bài đăng.
+    """
+    if not image_paths:
+        return []
+    cleaned_paths = []
+    for path in image_paths:
+        cleaned = clean_and_randomize_image(path)
+        cleaned_paths.append(cleaned)
+    return cleaned_paths
+
+
+def pick_random_photos(folder_path, count_mode="2-4", clean_exif=True):
     """
     Quét thư mục ảnh và bốc ngẫu nhiên số lượng ảnh theo cấu hình:
     count_mode: '2-4' (ngẫu nhiên 2 đến 4 ảnh), '1', '2', '3', '4', hoặc 'all'.
+    Nếu clean_exif=True: Tự động xóa sạch EXIF và vi chỉnh kích thước để chống Meta quét trùng ảnh.
     Trả về danh sách đường dẫn tuyệt đối của các ảnh được chọn.
     """
     if not folder_path or not os.path.exists(folder_path):
@@ -331,6 +422,21 @@ def pick_random_photos(folder_path, count_mode="2-4"):
             count = min(2, total)
 
     selected = photos[:count]
+    
+    # Áp dụng Media Anti-Hash Pipeline nếu được bật
+    if clean_exif:
+        try:
+            selected = process_images_anti_hash(selected)
+            try:
+                print("🛡️ [Media Anti-Hash] Đã xóa EXIF và đổi mã băm thành công cho ảnh trước khi đăng.")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                print(f"⚠️ [Media Anti-Hash] Bỏ qua ({e})")
+            except Exception:
+                pass
+
     try:
         print(f"[Bốc ảnh ngẫu nhiên] Đã chọn {len(selected)}/{total} ảnh từ thư mục '{folder_path}'")
     except UnicodeEncodeError:
@@ -339,11 +445,12 @@ def pick_random_photos(folder_path, count_mode="2-4"):
 
 
 
-def attach_image_to_composer(page, dialog, image_path):
+def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
     """
     Đính kèm hình ảnh chuẩn xác vào khung soạn thảo Facebook (Group & Page).
     Hỗ trợ cả 1 file ảnh (str) hoặc danh sách nhiều ảnh (list[str]).
     Tự động bấm nút Ảnh/video để mở vùng chọn file, sau đó gán file ảnh vào đúng input file.
+    Nếu clean_exif=True: Tự động xóa EXIF và đổi mã băm trước khi upload.
     """
     if not image_path:
         return False
@@ -358,6 +465,19 @@ def attach_image_to_composer(page, dialog, image_path):
 
     if not files_to_attach:
         return False
+
+    if clean_exif:
+        try:
+            files_to_attach = process_images_anti_hash(files_to_attach)
+            try:
+                print("🛡️ [Media Anti-Hash] Đã xóa EXIF và đổi mã băm cho ảnh đính kèm.")
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                print(f"⚠️ [Media Anti-Hash] Bỏ qua ({e})")
+            except Exception:
+                pass
 
     print(f"📸 Đang đính kèm {len(files_to_attach)} hình ảnh vào bài viết...")
     attached = False

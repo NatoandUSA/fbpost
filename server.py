@@ -917,6 +917,8 @@ def run_script():
     photo_folder = data.get('photoFolder', '').strip()
     photo_count_mode = data.get('photoCountMode', '2-4')
     skip_duplicate = data.get('skipDuplicate24h', True)
+    clean_exif = data.get('cleanExif', True)
+    anti_hash_text = data.get('antiHashText', True)
     
     def generate():
         process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
@@ -1067,6 +1069,8 @@ def run_script():
                 full_cmd = build_cmd_for_account(curr_acc_id) + ["comment", target_url, task_comment]
                 if like_post:
                     full_cmd.append("--like")
+                if not anti_hash_text:
+                    full_cmd.append("--no-anti-hash-text")
 
                 process = start_cli_process(full_cmd)
                 for line in iter(process.stdout.readline, ''):
@@ -1153,7 +1157,7 @@ def run_script():
             task_images = []
             if photo_folder and not image:
                 from utils import pick_random_photos
-                task_images = pick_random_photos(photo_folder, photo_count_mode)
+                task_images = pick_random_photos(photo_folder, photo_count_mode, clean_exif=clean_exif)
                 if task_images:
                     yield f"📁 [Thư mục ảnh] Đã bốc ngẫu nhiên {len(task_images)} ảnh cho mục tiêu {i+1}/{total}.\n"
 
@@ -1177,6 +1181,10 @@ def run_script():
                 full_cmd.append("--feeling")
             if task_checkin:
                 full_cmd.append("--checkin")
+            if not clean_exif:
+                full_cmd.append("--no-clean-exif")
+            if not anti_hash_text:
+                full_cmd.append("--no-anti-hash-text")
                 
             process = start_cli_process(full_cmd)
             for line in iter(process.stdout.readline, ''):

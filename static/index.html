@@ -382,10 +382,14 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     </label>
                                 </div>
                             </div>
-                            <div class="field-group" style="margin-top: 10px;">
+                            <div class="field-group" style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="comment-like-post" checked>
                                     <span>❤️ Tự động Thả Tim (Love) / Thích (Like) bài viết trước khi bình luận</span>
+                                </label>
+                                <label class="checkbox-label" style="font-weight: 600; color: #4338CA;">
+                                    <input type="checkbox" id="comment-anti-hash-opt" checked>
+                                    <span>🛡️ Chèn ký tự tàng hình Anti-Hash cho Comment (Chống thuật toán quét trùng chữ)</span>
                                 </label>
                             </div>
                         </div>
@@ -758,6 +762,12 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <div class="diverse-post-settings" id="diverse-post-settings-bar">
                             <label class="checkbox-label" style="font-weight: 600; color: #047857;">
                                 <input type="checkbox" id="skip-duplicate-24h-opt" checked> 🛡️ Bỏ qua Nhóm/Trang đã đăng trong 24h (Tránh trùng lặp spam)
+                            </label>
+                            <label class="checkbox-label" style="font-weight: 600; color: #15803D;">
+                                <input type="checkbox" id="clean-exif-opt" checked> 🛡️ Tự động xóa EXIF &amp; Đổi mã băm ảnh (Chống quét trùng ảnh Meta)
+                            </label>
+                            <label class="checkbox-label" style="font-weight: 600; color: #4338CA;">
+                                <input type="checkbox" id="anti-hash-text-opt" checked> 🛡️ Chèn ký tự tàng hình Anti-Hash (Chống thuật toán quét trùng chữ)
                             </label>
                             <label class="checkbox-label">
                                 <input type="checkbox" id="post-feeling-opt"> 😊 Gắn cảm xúc ngẫu nhiên (Feeling)

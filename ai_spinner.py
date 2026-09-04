@@ -309,3 +309,95 @@ def generate_interact_comments(base_comments: str = "", api_key: str = None) -> 
 
     return ";".join(spun_items)
 
+
+# =========================================================================
+# ANTI-HASH TEXT SPINNER (ZERO-WIDTH SPACE INJECTION)
+# =========================================================================
+
+ZERO_WIDTH_CHARS = [
+    '\u200B',  # Zero-Width Space
+    '\u200C',  # Zero-Width Non-Joiner
+    '\u200D',  # Zero-Width Joiner
+    '\uFEFF',  # Zero-Width No-Break Space
+]
+
+
+def inject_zero_width_chars(text: str, frequency: float = 0.35) -> str:
+    """
+    Chèn các ký tự tàng hình (Zero-Width Characters) vào văn bản ngẫu nhiên.
+    Mục đích:
+    - Mắt người đọc hoàn toàn không thấy gì khác biệt, nội dung đọc tự nhiên 100%.
+    - Thuật toán băm chuỗi (MD5/SHA-256/String Hash) của Facebook nhận diện đây là chuỗi văn bản mới,
+      triệt tiêu nguy cơ bị gắn cờ trùng lặp (Duplicate Spam Hash).
+    - Bảo vệ các URL và số điện thoại không bị ngắt quãng.
+    """
+    if not text:
+        return text
+
+    lines = text.split('\n')
+    processed_lines = []
+
+    url_pattern = re.compile(r'https?://[^\s]+')
+    phone_pattern = re.compile(r'\b(?:\+84|0)[1-9]\d{8,9}\b')
+
+    for line in lines:
+        if not line.strip():
+            processed_lines.append(line)
+            continue
+
+        words = line.split(' ')
+        new_words = []
+        for word in words:
+            # Giữ nguyên link và số điện thoại
+            if url_pattern.search(word) or phone_pattern.search(word):
+                new_words.append(word)
+                continue
+
+            if random.random() < frequency:
+                char = random.choice(ZERO_WIDTH_CHARS)
+                if len(word) > 4 and random.random() < 0.5:
+                    split_idx = random.randint(2, len(word) - 2)
+                    word = word[:split_idx] + char + word[split_idx:]
+                else:
+                    word = word + char
+            new_words.append(word)
+        processed_lines.append(' '.join(new_words))
+
+    res = '\n'.join(processed_lines)
+    # Đảm bảo ít nhất 1 ký tự tàng hình được chèn nếu có từ hợp lệ
+    if not any(c in res for c in ZERO_WIDTH_CHARS):
+        for i, line in enumerate(processed_lines):
+            words = line.split(' ')
+            for j, w in enumerate(words):
+                if not (url_pattern.search(w) or phone_pattern.search(w)) and len(w) > 0:
+                    char = random.choice(ZERO_WIDTH_CHARS)
+                    words[j] = w + char
+                    processed_lines[i] = ' '.join(words)
+                    return '\n'.join(processed_lines)
+
+    return res
+
+
+def spin_two_tier(text: str, frequency: float = 0.35) -> str:
+    """
+    Quy trình Spintax 2 lớp theo kinh nghiệm dịch ngược MKT Software:
+    Lớp 1: Xử lý Spintax ngữ nghĩa ({Chào bạn|Hello}).
+    Lớp 2: Chèn ký tự tàng hình Anti-Hash (Zero-Width Characters) để đổi mã băm chuỗi.
+    """
+    if not text:
+        return ""
+    # Lớp 1: Spintax thông thường
+    pattern = re.compile(r'\{([^{}]*)\}')
+    current = text
+    while True:
+        match = pattern.search(current)
+        if not match:
+            break
+        options = match.group(1).split('|')
+        choice = random.choice(options)
+        current = current[:match.start()] + choice + current[match.end():]
+
+    # Lớp 2: Anti-Hash Zero-Width Characters
+    return inject_zero_width_chars(current, frequency=frequency)
+
+

@@ -370,6 +370,61 @@ class NclProInspiredFeatureTests(unittest.TestCase):
             self.assertTrue(data.get("exists"))
             self.assertEqual(data.get("count"), 2)
 
+    def test_inject_zero_width_chars_and_spintax(self):
+        import hashlib
+        from ai_spinner import inject_zero_width_chars, spin_two_tier
+        from utils import process_spintax
+
+        original = "Homestay Huế giá rẻ 350k tại 0905123456 xem tại https://example.com"
+        injected = inject_zero_width_chars(original, frequency=0.8)
+        
+        # 1. Bảo toàn số điện thoại và URL không bị chia cắt
+        self.assertIn("0905123456", injected)
+        self.assertIn("https://example.com", injected)
+        
+        # 2. Chứa ít nhất một ký tự tàng hình Zero-Width
+        zero_width_chars = {'\u200B', '\u200C', '\u200D', '\uFEFF'}
+        self.assertTrue(any(c in injected for c in zero_width_chars))
+        
+        # 3. Mã băm SHA256 thay đổi
+        hash_orig = hashlib.sha256(original.encode('utf-8')).hexdigest()
+        hash_inj = hashlib.sha256(injected.encode('utf-8')).hexdigest()
+        self.assertNotEqual(hash_orig, hash_inj)
+
+        # 4. Spintax kết hợp anti_hash: khi loại bỏ ký tự tàng hình thì chuỗi đọc được giữ nguyên
+        spintax_res = process_spintax("{Chào bạn|Hello}", anti_hash=True)
+        self.assertTrue(any(c in spintax_res for c in zero_width_chars))
+        clean_res = "".join(c for c in spintax_res if c not in zero_width_chars)
+        self.assertTrue("Chào bạn" in clean_res or "Hello" in clean_res)
+
+    def test_clean_and_randomize_image(self):
+        from PIL import Image
+        from utils import clean_and_randomize_image
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Tạo 1 ảnh JPEG thật kích thước 150x150
+            src_img_path = Path(temp_dir) / "source_photo.jpg"
+            img = Image.new("RGB", (150, 150), color="blue")
+            img.save(src_img_path, format="JPEG", quality=95)
+
+            out_dir = Path(temp_dir) / "cleaned"
+            cleaned_path = clean_and_randomize_image(str(src_img_path), output_dir=str(out_dir))
+
+            self.assertTrue(Path(cleaned_path).exists())
+            self.assertNotEqual(str(src_img_path), cleaned_path)
+
+            # Đọc lại ảnh đã làm sạch
+            with Image.open(cleaned_path) as cleaned_img:
+                w, h = cleaned_img.size
+                # Kích thước vi chỉnh nhẹ xung quanh 150 (±2 px)
+                self.assertTrue(148 <= w <= 152)
+                self.assertTrue(148 <= h <= 152)
+                # EXIF metadata trống
+                exif_data = cleaned_img.getexif()
+                self.assertEqual(len(exif_data), 0)
+
+            # Ảnh nguồn ban đầu vẫn giữ nguyên vẹn
+            self.assertTrue(src_img_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

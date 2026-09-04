@@ -1311,6 +1311,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const skipDuplicateOpt = document.getElementById('skip-duplicate-24h-opt');
             payload.skipDuplicate24h = skipDuplicateOpt ? skipDuplicateOpt.checked : true;
+
+            const cleanExifOpt = document.getElementById('clean-exif-opt');
+            payload.cleanExif = cleanExifOpt ? cleanExifOpt.checked : true;
+
+            const antiHashTextOpt = document.getElementById('anti-hash-text-opt');
+            payload.antiHashText = antiHashTextOpt ? antiHashTextOpt.checked : true;
         }
 
 
@@ -1518,9 +1524,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
             const tasks = targets.map(t => ({ target: t, content: content }));
             initProgressDashboard('Bình luận bài viết theo link', targets);
+            const commentAntiHashOpt = document.getElementById('comment-anti-hash-opt');
             runCommand('comment', {
                 tasks,
                 likePost: commentLikePost ? commentLikePost.checked : true,
+                antiHashText: commentAntiHashOpt ? commentAntiHashOpt.checked : true,
                 autoSpin: autoSpin,
                 geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
                 accountId: accountSelector.value

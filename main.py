@@ -40,6 +40,10 @@ def main():
     group_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
     group_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
     group_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
+    group_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    group_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
+    group_parser.add_argument("--clean-exif", action="store_true", default=True, help="Strip EXIF and randomize image pHash")
+    group_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
     
     # Page command
     page_parser = subparsers.add_parser("page", help="Post to a Facebook Page you manage")
@@ -54,6 +58,10 @@ def main():
     page_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
     page_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
     page_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
+    page_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    page_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
+    page_parser.add_argument("--clean-exif", action="store_true", default=True, help="Strip EXIF and randomize image pHash")
+    page_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
     
     # Thread command
     thread_parser = subparsers.add_parser("thread", help="Send a message to a Messenger Thread")
@@ -79,6 +87,8 @@ def main():
     comment_parser.add_argument("--like", action="store_true", default=False, help="Like the post before commenting")
     comment_parser.add_argument("--min-delay", type=int, default=25, help="Min delay between comments in seconds")
     comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
+    comment_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    comment_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     
     args = parser.parse_args()
     
@@ -93,7 +103,9 @@ def main():
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
             auto_spin=args.auto_spin, gemini_key=args.gemini_key,
-            skip_duplicate=args.skip_duplicate
+            skip_duplicate=args.skip_duplicate,
+            anti_hash_text=args.anti_hash_text,
+            clean_exif=args.clean_exif
         )
     elif args.command == "page":
         from fb_page import post_to_page
@@ -103,7 +115,9 @@ def main():
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
             auto_spin=args.auto_spin, gemini_key=args.gemini_key,
-            skip_duplicate=args.skip_duplicate
+            skip_duplicate=args.skip_duplicate,
+            anti_hash_text=args.anti_hash_text,
+            clean_exif=args.clean_exif
         )
     elif args.command == "thread":
         from fb_thread import send_message
@@ -119,9 +133,9 @@ def main():
         if args.urls_file and os.path.exists(args.urls_file):
             with open(args.urls_file, "r", encoding="utf-8") as f:
                 urls = [l.strip() for l in f if l.strip()]
-            comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay)
+            comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text)
         elif args.url and args.content:
-            comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like)
+            comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
         else:
             comment_parser.print_help()
     else:

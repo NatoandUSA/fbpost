@@ -14,7 +14,8 @@ from ai_spinner import generate_unique_variant
 STATE_FILE = "state.json"
 
 def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
-                  photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False):
+                  photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False,
+                  anti_hash_text=True, clean_exif=True):
     # 1. Kiểm tra lọc trùng lặp 24h nếu bật
     if skip_duplicate:
         is_dup, hours_ago, posted_at = is_recently_posted(group_url)
@@ -29,10 +30,10 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
 
     # 3. Bốc ảnh ngẫu nhiên từ thư mục nếu có chỉ định
     if photos_folder and not image_path:
-        image_path = pick_random_photos(photos_folder, photo_count)
+        image_path = pick_random_photos(photos_folder, photo_count, clean_exif=clean_exif)
 
     print(f"👉 Bắt đầu mở Group và đăng bài: {group_url}")
-    content = process_spintax(content)
+    content = process_spintax(content, anti_hash=anti_hash_text)
     
     # Load account if provided
     account = None
@@ -163,7 +164,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
 
             # Đính kèm ảnh nếu có
             if image_path:
-                attach_image_to_composer(page, dialog, image_path)
+                attach_image_to_composer(page, dialog, image_path, clean_exif=clean_exif)
             
             print("✍️ Đang nhập nội dung bài viết...")
             if textbox and textbox.is_visible():
