@@ -187,29 +187,76 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
 
             print("🚀 Đang bấm nút 'Đăng' bài viết...")
             post_button = None
+            # 1. Kiểm tra xem có nút 'Tiếp' / 'Next' trước khi đăng không
+            next_selectors = [
+                "div[role='dialog'] div[aria-label='Tiếp']",
+                "div[role='dialog'] div[aria-label='Next']",
+                "div[role='dialog'] div[role='button']:has-text('Tiếp')",
+                "div[role='dialog'] div[role='button']:has-text('Next')",
+                "div[role='dialog'] span:has-text('Tiếp')",
+                "div[role='dialog'] span:has-text('Next')"
+            ]
+            for n_sel in next_selectors:
+                n_btn = page.locator(n_sel).first
+                try:
+                    if n_btn.is_visible(timeout=1500) and n_btn.is_enabled():
+                        print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), đang bấm để chuyển sang màn hình xuất bản...")
+                        n_btn.click(force=True, timeout=5000)
+                        time.sleep(2.0)
+                        break
+                except Exception:
+                    continue
+
+            print("🚀 Đang bấm nút 'Đăng' bài viết...")
             post_selectors = [
                 "div[role='dialog'] div[aria-label='Đăng']",
                 "div[role='dialog'] div[aria-label='Post']",
+                "div[role='dialog'] div[aria-label='Chia sẻ ngay']",
+                "div[role='dialog'] div[aria-label='Share now']",
+                "div[role='dialog'] div[aria-label='Chia sẻ']",
                 "div[role='dialog'] div[role='button']:has-text('Đăng')",
                 "div[role='dialog'] div[role='button']:has-text('Post')",
+                "div[role='dialog'] div[role='button']:has-text('Chia sẻ ngay')",
+                "div[role='dialog'] div[role='button']:has-text('Chia sẻ')",
                 "div[aria-label='Đăng']",
-                "div[aria-label='Post']"
+                "div[aria-label='Post']",
+                "div[role='button']:has-text('Đăng')",
+                "div[role='button']:has-text('Post')"
             ]
 
+            clicked = False
             for btn_sel in post_selectors:
                 btn = page.locator(btn_sel).first
-                if btn.is_visible() and btn.is_enabled():
-                    post_button = btn
-                    break
-
-            if post_button:
                 try:
-                    post_button.click(force=True)
+                    if btn.is_visible(timeout=1500) and btn.is_enabled():
+                        btn.click(force=True, timeout=5000)
+                        clicked = True
+                        print(f"✅ Đã bấm nút xuất bản thành công qua selector: {btn_sel}")
+                        break
                 except Exception:
-                    post_button.click()
-            else:
-                # Fallback role button
-                page.get_by_role("button", name=re.compile(r"^(Đăng|Post)$", re.IGNORECASE)).first.click(force=True)
+                    continue
+
+            if not clicked:
+                try:
+                    role_btn = page.get_by_role("button", name=re.compile(r"^(Đăng|Post|Chia sẻ|Share)$", re.IGNORECASE)).first
+                    if role_btn.is_visible(timeout=3000):
+                        role_btn.click(force=True, timeout=5000)
+                        clicked = True
+                        print("✅ Đã bấm nút xuất bản qua role='button'")
+                except Exception:
+                    pass
+
+            if not clicked:
+                try:
+                    page.keyboard.press("Control+Enter")
+                    print("⌨️ Đã gửi phím tắt Ctrl+Enter để xuất bản bài viết!")
+                    clicked = True
+                except Exception:
+                    pass
+
+            if not clicked:
+                raise Exception("Không tìm thấy nút 'Đăng' trên giao diện Group.")
+
 
             # Chờ 6 - 10s để Facebook upload hoàn tất bài đăng lên máy chủ
             wait_uploaded = random.uniform(6.0, 10.0)

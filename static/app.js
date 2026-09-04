@@ -38,6 +38,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const commentTargets = document.getElementById('comment-targets');
     const commentContent = document.getElementById('comment-content');
     const commentLikePost = document.getElementById('comment-like-post');
+    const aiCommentSpinBtn = document.getElementById('ai-comment-spin-btn');
+    const autoSpinCommentOpt = document.getElementById('auto-spin-comment-opt');
+    const aiInteractSpinBtn = document.getElementById('ai-interact-spin-btn');
+    const interactRotateOpt = document.getElementById('interact-rotate-opt');
+    const interactAutoSpinOpt = document.getElementById('interact-auto-spin-opt');
+    const threadSection = document.getElementById('thread-section');
+    const threadTargetInput = document.getElementById('thread-target-input');
+    const threadContentInput = document.getElementById('thread-content-input');
+    const folderPhotoBar = document.getElementById('folder-photo-bar');
+    const delaySettingsBar = document.getElementById('delay-settings-bar');
+    const accountsCard = document.querySelector('.accounts-card');
+    const composerBodyCard = document.querySelector('.composer-body-card');
+    const workflowGuide = document.querySelector('.workflow-guide');
+    const profileActivitySection = document.getElementById('profile-activity-section');
+    const settingsSection = document.getElementById('settings-section');
     const addToPostBar = document.getElementById('add-to-post-bar');
     const composerDividerBar = document.getElementById('composer-divider-bar');
 
@@ -560,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Render accounts table
             accountsTableBody.innerHTML = '';
             if (accountsList.length === 0) {
-                accountsTableBody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--fb-text-secondary);">Chưa cấu hình tài khoản nào. Hãy nhấp nút "Thêm Profile" bên trên.</td></tr>';
+                accountsTableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--fb-text-secondary);">Chưa cấu hình tài khoản nào. Hãy nhấp nút "Thêm Profile" bên trên.</td></tr>';
                 return;
             }
             
@@ -578,6 +593,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 typeCell.firstChild.className = `badge badge-${acc.type}`;
                 const profileCell = makeCell(acc.profile_path_or_id, 'code');
                 const proxyCell = makeCell(acc.proxy || 'Trực tiếp (Không dùng)');
+
+                const statusCell = document.createElement('td');
+                const isAuth = acc.status === 'Đã xác thực' || acc.status === 'Đã cấu hình';
+                statusCell.innerHTML = `
+                    <span class="badge ${isAuth ? 'badge-success' : 'badge-neutral'}" style="font-size:11px; padding:2px 8px; border-radius:10px; background:${isAuth ? '#DCFCE7' : '#F1F5F9'}; color:${isAuth ? '#15803D' : '#475569'}; font-weight:600;">${acc.status || 'Sẵn sàng'}</span>
+                    ${acc.created_at ? `<div style="font-size:11px; color:#94A3B8; margin-top:2px;">🕒 ${acc.created_at}</div>` : ''}
+                `;
+
                 const actions = document.createElement('td');
                 actions.className = 'acc-action-btns';
                 
@@ -617,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     button.style.marginRight = '4px';
                     actions.appendChild(button);
                 }
-                tr.append(nameCell, typeCell, profileCell, proxyCell, actions);
+                tr.append(nameCell, typeCell, profileCell, proxyCell, statusCell, actions);
                 accountsTableBody.appendChild(tr);
             });
 
@@ -719,6 +742,125 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Lỗi máy chủ', 'error');
         }
     });
+
+    // ---- Profile Activity & Security Health ----
+    async function loadProfileActivity() {
+        const activityList = document.getElementById('profile-activity-list');
+        const filterSelect = document.getElementById('profile-activity-filter');
+        if (!activityList) return;
+        try {
+            const filterVal = filterSelect ? filterSelect.value : '';
+            const url = filterVal ? `/api/profile-activity?profile_id=${encodeURIComponent(filterVal)}` : '/api/profile-activity';
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            // Populate filter select if needed
+            if (filterSelect && accountsList && accountsList.length > 0 && filterSelect.options.length <= 1) {
+                accountsList.forEach(acc => {
+                    const opt = document.createElement('option');
+                    opt.value = acc.id;
+                    opt.textContent = `${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                    filterSelect.appendChild(opt);
+                });
+            }
+            
+            if (!data || data.length === 0) {
+                activityList.innerHTML = '<span class="empty" style="display:block; padding:16px; text-align:center; color:#64748B;">Chưa có lịch sử hoạt động nào được ghi nhận cho Profile.</span>';
+                return;
+            }
+            
+            activityList.innerHTML = '';
+            data.forEach(act => {
+                const item = document.createElement('div');
+                item.className = 'management-item';
+                item.style.cssText = 'padding:12px; margin-bottom:8px; border:1px solid #E2E8F0; border-radius:8px; background:#F8FAFC;';
+                
+                const timeStr = act.timestamp ? new Date(act.timestamp).toLocaleString('vi-VN') : '';
+                const isSuccess = act.outcome === 'finished' || act.outcome === 'completed';
+                const statusColor = isSuccess ? '#16A34A' : '#DC2626';
+                const actionLabels = {
+                    'auth': '🔑 Đăng nhập / Xác thực',
+                    'group': '👥 Đăng bài Nhóm',
+                    'page': '🚩 Đăng bài Page',
+                    'comment': '💬 Bình luận bài viết',
+                    'interact': '🌾 Nuôi nick (Feed)',
+                    'scrape': '🔎 Quét comment',
+                    'thread': '✉️ Gửi tin nhắn'
+                };
+                const actLabel = actionLabels[act.action] || act.action;
+                
+                item.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <strong style="font-size:13px; color:#1E293B;">${act.profile_id}</strong>
+                            <span style="font-size:11px; padding:2px 8px; border-radius:12px; background:#EFF6FF; color:#1D4ED8; font-weight:600;">${actLabel}</span>
+                        </div>
+                        <span style="font-size:11px; color:#64748B;">🕒 ${timeStr}</span>
+                    </div>
+                    ${act.target ? `<div style="font-size:12px; color:#2563EB; margin-bottom:4px; word-break:break-all;">🎯 <strong>Mục tiêu:</strong> ${act.target}</div>` : ''}
+                    ${act.content ? `<div style="font-size:12px; color:#475569; margin-bottom:4px; font-style:italic;">📝 "${act.content.substring(0, 120)}${act.content.length > 120 ? '...' : ''}"</div>` : ''}
+                    <div style="font-size:11px; font-weight:700; color:${statusColor};">Kết quả: ${isSuccess ? '✅ Hoàn tất' : '❌ ' + (act.outcome || 'Lỗi')}</div>
+                `;
+                activityList.appendChild(item);
+            });
+        } catch (e) {
+            if (activityList) activityList.innerHTML = `<span class="empty">Lỗi tải nhật ký: ${e.message}</span>`;
+        }
+    }
+
+    const profileActivityRefreshBtn = document.getElementById('profile-activity-refresh-btn');
+    if (profileActivityRefreshBtn) {
+        profileActivityRefreshBtn.addEventListener('click', () => loadProfileActivity());
+    }
+    const profileActivityFilter = document.getElementById('profile-activity-filter');
+    if (profileActivityFilter) {
+        profileActivityFilter.addEventListener('change', () => loadProfileActivity());
+    }
+    const profileActivityManageBtn = document.getElementById('profile-activity-manage-btn');
+    if (profileActivityManageBtn) {
+        profileActivityManageBtn.addEventListener('click', () => {
+            if (accountsContent) accountsContent.classList.remove('hidden');
+            if (addAccountForm) addAccountForm.classList.remove('hidden');
+        });
+    }
+
+    async function loadSecurityHealth() {
+        const grid = document.getElementById('security-health-grid');
+        if (!grid) return;
+        try {
+            const res = await fetch('/api/security/overview');
+            const data = await res.json();
+            grid.innerHTML = `
+                <div class="security-health-card ${data.browser_session_saved ? 'is-good' : 'is-warning'}">
+                    <div class="health-label">Phiên duyệt Facebook</div>
+                    <div class="health-value">${data.browser_session_saved ? '🟢 Đã lưu Session' : '🟡 Chưa có Session'}</div>
+                    <div class="health-desc">Tệp lưu phiên trình duyệt Playwright</div>
+                </div>
+                <div class="security-health-card ${data.profiles_configured > 0 ? 'is-good' : 'is-warning'}">
+                    <div class="health-label">Dàn Profile GPM / Local</div>
+                    <div class="health-value">👥 ${data.profiles_configured || 0} Profile</div>
+                    <div class="health-desc">Đã cấu hình trong hệ thống</div>
+                </div>
+                <div class="security-health-card ${data.page_token_configured ? 'is-good' : 'is-neutral'}">
+                    <div class="health-label">Kết nối Fanpage</div>
+                    <div class="health-value">${data.page_token_configured ? `🟢 ${data.page_name || 'Đã kết nối'}` : '⚪ Chưa thiết lập'}</div>
+                    <div class="health-desc">Access Token Graph API</div>
+                </div>
+                <div class="security-health-card ${data.sheets_configured ? 'is-good' : 'is-neutral'}">
+                    <div class="health-label">Google Sheets Scheduler</div>
+                    <div class="health-value">${data.sheets_configured ? '🟢 Đã kết nối' : '⚪ Chưa thiết lập'}</div>
+                    <div class="health-desc">${data.scheduler_history_count || 0} bài đã đăng trong lịch sử</div>
+                </div>
+            `;
+        } catch (e) {
+            grid.innerHTML = `<div class="security-health-card is-error">Lỗi đọc trạng thái: ${e.message}</div>`;
+        }
+    }
+
+    const securityRefreshBtn = document.getElementById('security-refresh-btn');
+    if (securityRefreshBtn) {
+        securityRefreshBtn.addEventListener('click', () => loadSecurityHealth());
+    }
 
     // ---- 2FA Code Generator ----
     tfaToggleBtn.addEventListener('click', (e) => {
@@ -837,57 +979,104 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Hide all specialized sections first
-            manualSection.classList.add('hidden');
-            csvSection.classList.add('hidden');
-            interactSection.classList.add('hidden');
-            scrapeSection.classList.add('hidden');
-            contentHubSection.classList.add('hidden');
-            schedSection.classList.add('hidden');
-            commentSection.classList.add('hidden');
-            modeToggleContainer.classList.add('hidden');
-            addToPostBar.classList.add('hidden');
-            composerDividerBar.classList.add('hidden');
-            diversePostSettingsBar.classList.add('hidden');
-            postBtn.classList.add('hidden');
-            accountSelectorContainer.classList.remove('hidden');
+            if (manualSection) manualSection.classList.add('hidden');
+            if (csvSection) csvSection.classList.add('hidden');
+            if (interactSection) interactSection.classList.add('hidden');
+            if (scrapeSection) scrapeSection.classList.add('hidden');
+            if (contentHubSection) contentHubSection.classList.add('hidden');
+            if (schedSection) schedSection.classList.add('hidden');
+            if (commentSection) commentSection.classList.add('hidden');
+            if (threadSection) threadSection.classList.add('hidden');
+            if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
+            if (addToPostBar) addToPostBar.classList.add('hidden');
+            if (composerDividerBar) composerDividerBar.classList.add('hidden');
+            if (diversePostSettingsBar) diversePostSettingsBar.classList.add('hidden');
+            if (folderPhotoBar) folderPhotoBar.classList.add('hidden');
+            if (delaySettingsBar) delaySettingsBar.classList.add('hidden');
+            if (postBtn) postBtn.classList.add('hidden');
+            if (accountSelectorContainer) accountSelectorContainer.classList.remove('hidden');
+
+            // Default visibility for panels
+            if (composerBodyCard) composerBodyCard.classList.remove('hidden');
+            if (accountsCard) accountsCard.classList.remove('hidden');
+            if (workflowGuide) workflowGuide.classList.remove('hidden');
+            if (profileActivitySection) profileActivitySection.classList.add('hidden');
+            if (settingsSection) settingsSection.classList.add('hidden');
 
             if (currentMode === 'interact') {
-                interactSection.classList.remove('hidden');
-                postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Bắt đầu tương tác Newsfeed';
+                if (interactSection) interactSection.classList.remove('hidden');
+                if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
+                if (postBtn) {
+                    postBtn.classList.remove('hidden');
+                    postBtn.textContent = '🌾 BẮT ĐẦU NUÔI NICK TỰ ĐỘNG';
+                }
             } else if (currentMode === 'scrape') {
-                scrapeSection.classList.remove('hidden');
-                postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Bắt đầu quét bình luận';
+                if (scrapeSection) scrapeSection.classList.remove('hidden');
+                // Hide folder photo, delay bar, add photo, feeling/checkin completely for scraping
+                if (postBtn) {
+                    postBtn.classList.remove('hidden');
+                    postBtn.textContent = '🔎 BẮT ĐẦU QUÉT BÌNH LUẬN';
+                }
+            } else if (currentMode === 'comment') {
+                if (commentSection) commentSection.classList.remove('hidden');
+                if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
+                if (postBtn) {
+                    postBtn.classList.remove('hidden');
+                    postBtn.textContent = '💬 BẮT ĐẦU BÌNH LUẬN BÀI VIẾT';
+                }
+            } else if (currentMode === 'thread') {
+                if (threadSection) threadSection.classList.remove('hidden');
+                if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
+                if (postBtn) {
+                    postBtn.classList.remove('hidden');
+                    postBtn.textContent = '✉️ GỬI TIN NHẮN THREAD';
+                }
             } else if (currentMode === 'content-hub') {
-                contentHubSection.classList.remove('hidden');
-                accountSelectorContainer.classList.add('hidden');
+                if (contentHubSection) contentHubSection.classList.remove('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
             } else if (currentMode === 'page-scheduler') {
-                schedSection.classList.remove('hidden');
-                accountSelectorContainer.classList.add('hidden');
+                if (schedSection) schedSection.classList.remove('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
                 loadSchedConfig();
                 loadSchedStatus();
-            } else if (currentMode === 'comment') {
-                commentSection.classList.remove('hidden');
-                postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Bắt đầu bình luận bài viết';
+            } else if (currentMode === 'profiles') {
+                // Quản lý Profiles & GPM: Ẩn hoàn toàn composer card, hiển thị bảng Profile & Activity Log
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountsCard) {
+                    accountsCard.classList.remove('hidden');
+                    if (accountsContent) accountsContent.classList.remove('hidden');
+                }
+                if (profileActivitySection) profileActivitySection.classList.remove('hidden');
+                loadAccounts();
+                loadProfileActivity();
+            } else if (currentMode === 'settings') {
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (settingsSection) settingsSection.classList.remove('hidden');
+                loadSecurityHealth();
             } else {
-                // Standard modes (Group, Page, Thread)
-                modeToggleContainer.classList.remove('hidden');
-                addToPostBar.classList.remove('hidden');
-                composerDividerBar.classList.remove('hidden');
-                postBtn.classList.remove('hidden');
-                postBtn.textContent = 'Đăng bài ngay';
-                
-                // Show diverse settings for post methods only
-                if (currentMode === 'group' || currentMode === 'page') {
-                    diversePostSettingsBar.classList.remove('hidden');
+                // Standard posting modes (Group, Page)
+                if (modeToggleContainer) modeToggleContainer.classList.remove('hidden');
+                if (addToPostBar) addToPostBar.classList.remove('hidden');
+                if (composerDividerBar) composerDividerBar.classList.remove('hidden');
+                if (folderPhotoBar) folderPhotoBar.classList.remove('hidden');
+                if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
+                if (diversePostSettingsBar) diversePostSettingsBar.classList.remove('hidden');
+                if (postBtn) {
+                    postBtn.classList.remove('hidden');
+                    postBtn.textContent = currentMode === 'page' ? '🚀 BẮT ĐẦU ĐĂNG BÀI TRANG' : '🚀 BẮT ĐẦU ĐĂNG BÀI NHÓM';
                 }
                 
                 if (isCsvMode) {
-                    csvSection.classList.remove('hidden');
+                    if (csvSection) csvSection.classList.remove('hidden');
                 } else {
-                    manualSection.classList.remove('hidden');
+                    if (manualSection) manualSection.classList.remove('hidden');
                 }
 
                 const config = tabConfig[currentMode];
@@ -1297,9 +1486,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentMode === 'interact') {
             const limit = parseInt(interactLimit.value) || 5;
             const comments = interactComments.value.trim();
+            const rotate = interactRotateOpt ? interactRotateOpt.checked : false;
+            const autoSpin = interactAutoSpinOpt ? interactAutoSpinOpt.checked : false;
             const dummyTargets = Array.from({ length: limit }, (_, i) => `Bài viết Newsfeed #${i+1}`);
-            initProgressDashboard('Nuôi Nick (Tương tác)', dummyTargets);
-            runCommand('interact', { limit, comments });
+            initProgressDashboard('Nuôi Nick (Tương tác Feed)', dummyTargets);
+            runCommand('interact', {
+                limit,
+                comments,
+                rotateAccounts: rotate,
+                autoSpin: autoSpin,
+                geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
+            });
         } else if (currentMode === 'scrape') {
             const target = scrapeTarget.value.trim();
             const limit = parseInt(scrapeLimit.value) || 50;
@@ -1309,7 +1506,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             scrapeResultsContainer.classList.add('hidden');
             initProgressDashboard('Quét bình luận bài viết', [target]);
-            runCommand('scrape', { target, limit });
+            runCommand('scrape', { target, limit, accountId: accountSelector.value });
         } else if (currentMode === 'comment') {
             const rawTargets = commentTargets.value.trim();
             const content = commentContent.value.trim();
@@ -1317,16 +1514,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Vui lòng nhập danh sách link bài viết và nội dung bình luận!', 'error');
                 return;
             }
+            const autoSpin = autoSpinCommentOpt ? autoSpinCommentOpt.checked : false;
             const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
             const tasks = targets.map(t => ({ target: t, content: content }));
             initProgressDashboard('Bình luận bài viết theo link', targets);
             runCommand('comment', {
                 tasks,
                 likePost: commentLikePost ? commentLikePost.checked : true,
+                autoSpin: autoSpin,
+                geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
                 accountId: accountSelector.value
             });
+        } else if (currentMode === 'thread') {
+            const rawTargets = (threadTargetInput?.value.trim() || targetInput.value.trim());
+            const content = (threadContentInput?.value.trim() || postContent.value.trim());
+            if (!rawTargets || !content) {
+                showToast('Vui lòng nhập Thread ID người nhận và nội dung tin nhắn!', 'error');
+                return;
+            }
+            const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
+            const tasks = targets.map(t => ({ target: t, content: content, image: null }));
+            initProgressDashboard('Gửi tin nhắn Thread', targets);
+            runCommand('thread', { tasks });
         } else {
-            // Standard posting modes
+            // Standard posting modes (Group, Page)
             let tasks = [];
 
             if (isCsvMode) {
@@ -1425,6 +1636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         content: content,
+                        mode: 'post',
                         apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
                     })
                 });
@@ -1441,6 +1653,76 @@ document.addEventListener('DOMContentLoaded', () => {
             } finally {
                 aiSpinBtn.disabled = false;
                 aiSpinBtn.innerHTML = origText;
+            }
+        });
+    }
+
+    if (aiCommentSpinBtn) {
+        aiCommentSpinBtn.addEventListener('click', async () => {
+            const content = commentContent.value.trim();
+            if (!content) {
+                showToast('Vui lòng nhập nội dung bình luận mẫu trước khi xào!', 'error');
+                return;
+            }
+            const origText = aiCommentSpinBtn.innerHTML;
+            aiCommentSpinBtn.disabled = true;
+            aiCommentSpinBtn.innerHTML = '⏳ Đang xào...';
+            try {
+                const res = await fetch('/api/ai/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: content,
+                        mode: 'comment',
+                        apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
+                    })
+                });
+                const data = await res.json();
+                if (data.success && data.spun_content) {
+                    commentContent.value = data.spun_content;
+                    showToast('Đã xào bình luận mới thành công!', 'success');
+                    appendLog('🤖 [AI Comment Spinner] Đã tạo bình luận độc nhất!');
+                } else {
+                    showToast(data.error || 'Không thể xào bình luận!', 'error');
+                }
+            } catch (err) {
+                showToast(`Lỗi: ${err.message}`, 'error');
+            } finally {
+                aiCommentSpinBtn.disabled = false;
+                aiCommentSpinBtn.innerHTML = origText;
+            }
+        });
+    }
+
+    if (aiInteractSpinBtn) {
+        aiInteractSpinBtn.addEventListener('click', async () => {
+            const content = interactComments.value.trim();
+            const origText = aiInteractSpinBtn.innerHTML;
+            aiInteractSpinBtn.disabled = true;
+            aiInteractSpinBtn.innerHTML = '⏳ Đang tạo...';
+            try {
+                const res = await fetch('/api/ai/spin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: content,
+                        mode: 'interact',
+                        apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
+                    })
+                });
+                const data = await res.json();
+                if (data.success && data.spun_content) {
+                    interactComments.value = data.spun_content;
+                    showToast('Đã tạo và xào danh sách bình luận nuôi nick!', 'success');
+                    appendLog('🤖 [AI Interact Spinner] Đã tạo danh sách bình luận tương tác tự nhiên!');
+                } else {
+                    showToast(data.error || 'Không thể tạo bình luận!', 'error');
+                }
+            } catch (err) {
+                showToast(`Lỗi: ${err.message}`, 'error');
+            } finally {
+                aiInteractSpinBtn.disabled = false;
+                aiInteractSpinBtn.innerHTML = origText;
             }
         });
     }

@@ -204,6 +204,7 @@
                                         <th>Loại</th>
                                         <th>Thư mục / ID GPM</th>
                                         <th>Proxy</th>
+                                        <th>Ngày nhập / Trạng thái</th>
                                         <th>Thao tác</th>
                                     </tr>
                                 </thead>
@@ -305,12 +306,23 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <!-- 3. Interact Seeding Section (Nuôi Nick) -->
                         <div id="interact-section" class="hidden">
                             <div class="field-group">
-                                <label class="field-label">📈 Số bài tương tác</label>
+                                <label class="field-label">📈 Số bài tương tác trên Newsfeed</label>
                                 <input type="number" id="interact-limit" class="field-input" value="5" min="1" max="50">
                             </div>
                             <div class="field-group">
-                                <label class="field-label">💬 Danh sách bình luận (Phân tách bằng dấu <code>;</code>)</label>
-                                <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Like mạnh!"></textarea>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="field-label" style="margin-bottom:0;">💬 Danh sách bình luận nuôi nick (cách nhau bằng <code>;</code>)</label>
+                                    <button id="ai-interact-spin-btn" type="button" class="btn btn-secondary btn-xs" style="background:#8B5CF6; color:#fff; font-weight:700; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" title="Tạo & xào bình luận nuôi nick bằng AI">🤖 AI Tạo & Xào bình luận</button>
+                                </div>
+                                <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Like mạnh!">{Tuyệt vời quá|Bài viết rất hay|Quá đỉnh ạ};{Cảm ơn bạn đã chia sẻ|Thông tin rất hữu ích|Like mạnh nha};{Chúc bạn ngày mới vui vẻ|Chúc một ngày tốt lành|Tuyệt vời luôn bạn ơi}</textarea>
+                                <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+                                    <label class="checkbox-label" style="font-weight:600; color:#2563EB; font-size:12px; margin-bottom:0;">
+                                        <input type="checkbox" id="interact-rotate-opt"> 🔄 Luân phiên tất cả Profile GPM khi nuôi nick (Xoay tua chống spam)
+                                    </label>
+                                    <label class="checkbox-label" style="font-weight:600; color:#7C3AED; font-size:12px; margin-bottom:0;">
+                                        <input type="checkbox" id="interact-auto-spin-opt"> 🤖 Tự động xào bình luận mới trước mỗi Profile
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -356,10 +368,18 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <textarea id="comment-targets" class="field-textarea" rows="4" placeholder="https://www.facebook.com/groups/123/posts/456&#10;https://www.facebook.com/FanpageName/posts/789"></textarea>
                             </div>
                             <div class="field-group">
-                                <label class="field-label">💬 Nội dung bình luận (Hỗ trợ Spintax)</label>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <label class="field-label" style="margin-bottom:0;">💬 Nội dung bình luận (Hỗ trợ Spintax)</label>
+                                    <button id="ai-comment-spin-btn" type="button" class="btn btn-secondary btn-xs" style="background:#8B5CF6; color:#fff; font-weight:700; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" title="Xào mới bình luận bằng AI">🤖 AI Xào nội dung Comment</button>
+                                </div>
                                 <textarea id="comment-content" class="field-textarea" rows="3" placeholder="Nội dung bình luận...">{Chào bạn|Chào ad|Hello}! {Bên mình có homestay xinh xắn tại Huế giá rất tốt ạ|Homestay view đẹp tại trung tâm Huế, bạn cần phòng nhắn mình nhé|Thông tin rất hữu ích, cảm ơn bạn}!</textarea>
-                                <div class="spintax-hint" style="margin-top: 8px;">
-                                    💡 Spintax: <code>{Hay quá|Tuyệt vời|Bài viết hữu ích}</code> sẽ chọn ngẫu nhiên
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                                    <div class="spintax-hint" style="margin-top:0;">
+                                        💡 Spintax: <code>{Hay quá|Tuyệt vời|Bài viết hữu ích}</code> sẽ chọn ngẫu nhiên
+                                    </div>
+                                    <label class="checkbox-label" style="font-weight:600; color:#7C3AED; font-size:12px; margin-bottom:0;">
+                                        <input type="checkbox" id="auto-spin-comment-opt"> 🤖 Tự động xào bình luận (AI Spin) độc nhất cho mỗi link
+                                    </label>
                                 </div>
                             </div>
                             <div class="field-group" style="margin-top: 10px;">
@@ -370,7 +390,23 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </div>
 
-                        <!-- 6. Content Hub Integrated Section -->
+                        <!-- 6. Thread Direct Message Section -->
+                        <div id="thread-section" class="hidden">
+                            <div class="field-group">
+                                <label class="field-label" id="thread-target-label">🔗 Thread ID / Username người nhận (mỗi dòng 1 ID)</label>
+                                <textarea id="thread-target-input" class="field-textarea" rows="4" placeholder="markzuckerberg&#10;user_12345&#10;homestay_hue"></textarea>
+                                <p class="field-hint">Nhập username hoặc ID cá nhân cần gửi tin nhắn riêng.</p>
+                            </div>
+                            <div class="field-group">
+                                <label class="field-label">💬 Nội dung tin nhắn gửi (Hỗ trợ Spintax)</label>
+                                <textarea id="thread-content-input" class="field-textarea" rows="4" placeholder="Nội dung tin nhắn...">{Xin chào|Chào bạn}! Mình thấy bạn đang tìm hiểu về homestay tại Huế. Bên mình có nhiều phòng đẹp, giá tốt trung tâm thành phố. Bạn cần hỗ trợ gì cứ nhắn mình nhé!</textarea>
+                                <div class="spintax-hint" style="margin-top: 8px;">
+                                    💡 Spintax: <code>{Xin chào|Chào bạn}</code> sẽ chọn ngẫu nhiên
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 7. Content Hub Integrated Section -->
                         <div id="content-hub-section" class="hidden">
                             <div class="brands">
                                 <button type="button" class="brand active" id="brandLacasa">🌿 Lacasa</button>
@@ -790,19 +826,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         </div>
                     </div>
 
-                    <!-- Posted Successful Links Card -->
-                    <div id="posted-links-card" class="card posted-links-card hidden">
-                        <div class="card-header">
-                            <div class="card-title-group">
-                                <span>🔗</span>
-                                <h3>Liên kết đã đăng thành công</h3>
-                            </div>
-                            <button id="clear-links-btn" class="btn-ghost btn-xs">Xóa danh sách</button>
-                        </div>
-                        <div class="posted-links-list" id="posted-links-list">
-                            <!-- JS loaded dynamic links -->
-                        </div>
-                    </div>
+
 
                     <div class="card" id="approval-queue-card">
                         <div class="card-header">
@@ -822,6 +846,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <div style="display:flex; gap:6px;">
                                 <button id="send-to-comment-btn" class="btn btn-primary btn-xs" type="button" title="Đưa danh sách link này sang tab Comment">💬 Comment các bài này</button>
                                 <button id="refresh-links-btn" class="btn-ghost btn-xs" type="button">Làm mới</button>
+                                <button id="clear-links-btn" class="btn-ghost btn-xs" type="button">Xóa</button>
                             </div>
                         </div>
                         <div id="posted-links-list" class="posted-links-list" style="max-height: 180px; overflow-y: auto;">
@@ -859,6 +884,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <!-- Toast message overlay -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app.js?v=5.5.2"></script>
+    <script src="app.js?v=5.6.0"></script>
 </body>
 </html>

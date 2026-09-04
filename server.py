@@ -726,7 +726,8 @@ def add_account():
         "type": acc_type,
         "profile_path_or_id": profile_id,
         "proxy": proxy,
-        "status": "Chưa xác thực"
+        "status": "Chưa xác thực",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
     accounts.append(new_acc)
@@ -848,14 +849,20 @@ def api_posted_links():
 
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
-    from ai_spinner import generate_unique_variant
+    from ai_spinner import generate_unique_variant, spin_comment, generate_interact_comments
     data = json_body()
     content = data.get("content", "").strip()
     api_key = data.get("apiKey", "").strip()
-    if not content:
-        return jsonify({"error": "Vui lòng nhập nội dung bài viết cần xào."}), 400
+    mode = data.get("mode", "post")
+    if not content and mode != "interact":
+        return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
     try:
-        spun = generate_unique_variant(content, api_key)
+        if mode == "comment":
+            spun = spin_comment(content, api_key)
+        elif mode == "interact":
+            spun = generate_interact_comments(content, api_key)
+        else:
+            spun = generate_unique_variant(content, api_key)
         return jsonify({"success": True, "spun_content": spun})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -961,16 +968,44 @@ def run_script():
         if cmd == 'interact':
             limit = max(1, min(int(data.get('limit', 5)), 50))
             comments = data.get('comments', '')
-            full_cmd = build_cmd_for_account(account_id) + ["interact", "--limit", str(limit)]
-            if comments:
-                full_cmd.extend(["--comments", comments])
-                
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(account_id, "interact", target="newsfeed", content=comments, outcome=outcome)
+
+            target_accs = accounts_pool if (rotate_accounts and accounts_pool) else ([{'id': account_id}] if account_id else [{'id': None}])
+            total_accs = len(target_accs)
+            interact_failed = False
+
+            for acc_idx, acc_item in enumerate(target_accs):
+                cur_id = acc_item.get("id") if isinstance(acc_item, dict) else acc_item
+                acc_name = acc_item.get("name", cur_id) if isinstance(acc_item, dict) else cur_id
+
+                if total_accs > 1:
+                    yield f"\n🔄 [Luân phiên Nuôi nick] Khởi chạy Profile {acc_idx+1}/{total_accs}: {acc_name}\n"
+
+                cur_comments = comments
+                if auto_spin and comments:
+                    from ai_spinner import generate_interact_comments
+                    cur_comments = generate_interact_comments(comments, gemini_api_key)
+                    yield f"🤖 [AI Spin] Đã tạo danh sách bình luận nuôi nick mới cho {acc_name}!\n"
+
+                full_cmd = build_cmd_for_account(cur_id) + ["interact", "--limit", str(limit)]
+                if cur_comments:
+                    full_cmd.extend(["--comments", cur_comments])
+
+                process = start_cli_process(full_cmd)
+                for line in iter(process.stdout.readline, ''):
+                    yield line
+                outcome = "finished" if process.wait() == 0 else "failed"
+                if outcome == "failed":
+                    interact_failed = True
+                record_profile_activity(cur_id, "interact", target="newsfeed", content=cur_comments, outcome=outcome)
+
+                if acc_idx < total_accs - 1:
+                    delay = random.randint(delay_min, delay_max)
+                    mins = delay // 60
+                    secs = delay % 60
+                    yield f"\n⏳ [Anti-Spam] Nghỉ {delay}s ({mins}p {secs}s) trước khi đổi sang Profile tiếp theo...\n"
+                    time.sleep(min(delay, 5))
+
+            yield f"RUN_RESULT:{'failed' if interact_failed else 'finished'}\n"
             return
 
         if cmd == 'scrape':
@@ -1016,10 +1051,20 @@ def run_script():
                 else:
                     curr_acc_id = account_id
 
+                # AI Content Spinner cho từng comment nếu bật autoSpin
+                task_comment = comment_text
+                if auto_spin:
+                    from ai_spinner import spin_comment
+                    try:
+                        task_comment = spin_comment(comment_text, gemini_api_key)
+                        yield f"🤖 [AI Comment Spinner] Đã tạo câu bình luận mới cho bài viết {i+1}/{total}!\n"
+                    except Exception:
+                        task_comment = comment_text
+
                 yield f"\n========== [Bài viết {i+1}/{total}] ==========\n"
                 yield f"Đang mở bài viết: {target_url}\n"
 
-                full_cmd = build_cmd_for_account(curr_acc_id) + ["comment", target_url, comment_text]
+                full_cmd = build_cmd_for_account(curr_acc_id) + ["comment", target_url, task_comment]
                 if like_post:
                     full_cmd.append("--like")
 
@@ -1029,7 +1074,8 @@ def run_script():
                 outcome = "finished" if process.wait() == 0 else "failed"
                 if outcome == "failed":
                     batch_failed = True
-                record_profile_activity(curr_acc_id, "comment", target=target_url, content=comment_text, outcome=outcome)
+                record_profile_activity(curr_acc_id, "comment", target=target_url, content=task_comment, outcome=outcome)
+
 
                 if i < total - 1:
                     delay = random.randint(delay_min, delay_max)

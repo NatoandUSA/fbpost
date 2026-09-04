@@ -198,3 +198,114 @@ def generate_unique_variant(content: str, api_key: str = None) -> str:
             print(f"⚠️ [AI Spinner] Gemini API gặp lỗi ({e}), chuyển sang chế độ Local Smart Spinner.")
             
     return spin_content_local(content)
+
+
+COMMENT_HOOKS = [
+    "Chào bạn nha! ", "Hello bạn! ", "Chào ad ạ! ", "Bài viết tuyệt vời quá! ",
+    "Cảm ơn bài chia sẻ rất hay của bạn! ", "Thích bài viết này quá nè! ", "Hello mọi người! "
+]
+
+COMMENT_BODIES = [
+    "Bên mình có căn homestay Huế ấm cúng, không gian xanh cực chill ngay trung tâm, giá rất ưu đãi cho bạn ghé thăm nè.",
+    "Bạn đi Huế cần tìm phòng homestay view đẹp, gần các điểm tham quan cứ nhắn tin cho mình tư vấn phòng đẹp nhé.",
+    "Không gian homestay xinh xắn tại Cố Đô Huế, đầy đủ tiện nghi như ở nhà, bạn cần phòng nhắn mình giữ phòng nhé.",
+    "Homestay nhà mình gần Sông Hương và Đại Nội, view thoáng mát, dịch vụ nhiệt tình chu đáo lắm nha."
+]
+
+COMMENT_CTAS = [
+    " Cần thông tin phòng bạn cứ inbox mình nhé!",
+    " Chúc bạn một ngày mới thật nhiều niềm vui!",
+    " Chúc bài viết của bạn nhận được thật nhiều tương tác nha!",
+    " Chúc bạn có kỳ nghỉ khám phá Huế thật tuyệt vời!"
+]
+
+def spin_comment(content: str, api_key: str = None) -> str:
+    """
+    Xào nội dung bình luận (Comment) bằng Gemini AI hoặc Local Smart Engine.
+    Tạo câu bình luận tự nhiên, ngắn gọn (1-3 câu), giữ nguyên số điện thoại/link nếu có.
+    """
+    if not content or not content.strip():
+        return content
+
+    core = extract_core_info(content)
+
+    if api_key and len(api_key.strip()) > 10:
+        try:
+            prompt = (
+                "Bạn là một người dùng Facebook đang bình luận dưới bài viết trên Facebook (Group hoặc Fanpage).\n"
+                "Hãy viết lại đoạn bình luận sau thành một phiên bản ngắn gọn (1 đến 3 câu), tự nhiên, thân thiện, có emoji phù hợp.\n"
+                "YÊU CẦU: Giữ nguyên số điện thoại, Zalo, địa chỉ hoặc link nếu có trong nội dung gốc. "
+                "Chỉ trả về nội dung bình luận, không thêm lời dẫn giải.\n\n"
+                f"NỘI DUNG BÌNH LUẬN GỐC:\n{content}"
+            )
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key.strip()}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": 0.85, "maxOutputTokens": 300}
+            }
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
+                spun = candidates[0]["content"]["parts"][0].get("text", "").strip()
+                if spun:
+                    return spun
+        except Exception as e:
+            print(f"⚠️ [AI Comment Spinner] Gemini API gặp lỗi ({e}), chuyển sang Local Comment Spinner.")
+
+    # Local comment spinning
+    hook = random.choice(COMMENT_HOOKS)
+    body = random.choice(COMMENT_BODIES)
+    cta = random.choice(COMMENT_CTAS)
+    
+    # Nếu nội dung ban đầu có thông tin liên hệ, gắn vào
+    extra = ""
+    if core["phones"]:
+        extra += f" (Zalo/Hotline: {core['phones'][0]})"
+    if core["prices"]:
+        extra += f" - Giá từ {core['prices'][0]}"
+
+    return f"{hook}{body}{extra}{cta}".strip()
+
+
+def generate_interact_comments(base_comments: str = "", api_key: str = None) -> str:
+    """
+    Tạo hoặc xào danh sách các bình luận nuôi nick (tương tác Newsfeed),
+    phân tách bằng dấu ';'.
+    """
+    default_pool = [
+        "Bài viết tuyệt vời quá bạn ơi!",
+        "Rất ý nghĩa và hữu ích, cảm ơn bạn đã chia sẻ!",
+        "Like mạnh cho bài viết này nhé!",
+        "Ảnh chụp góc này đẹp xuất sắc luôn!",
+        "Tuyệt vời quá, chúc bạn ngày mới thật nhiều năng lượng!",
+        "Nội dung rất hay và truyền cảm hứng!",
+        "Thả tim cho bài viết chất lượng này nha ❤️",
+        "Đúng thông tin mình đang quan tâm, cảm ơn bạn nhiều!",
+        "Chúc bạn và gia đình một ngày an lành, may mắn!",
+        "Quá xịn sò luôn ạ!"
+    ]
+
+    if not base_comments or len(base_comments.strip()) < 5:
+        # Xáo trộn và chọn ngẫu nhiên 6-8 câu
+        random.shuffle(default_pool)
+        return ";".join(default_pool[:7])
+
+    # Nếu người dùng có nhập một số câu gốc, xào các câu đó
+    user_items = [c.strip() for c in base_comments.split(";") if c.strip()]
+    if not user_items:
+        return ";".join(default_pool[:7])
+
+    spun_items = []
+    for item in user_items:
+        spun_items.append(spin_comment(item, api_key))
+
+    # Nếu ít hơn 5 câu, bổ sung thêm từ default pool
+    while len(spun_items) < 6:
+        candidate = random.choice(default_pool)
+        if candidate not in spun_items:
+            spun_items.append(candidate)
+
+    return ";".join(spun_items)
+

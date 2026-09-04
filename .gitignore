@@ -26,3 +26,4 @@ profiles/
 uploads/
 posted_links.json
 accounts.json
+auth_status.json
