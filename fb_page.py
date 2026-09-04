@@ -7,7 +7,8 @@ from playwright.sync_api import sync_playwright
 from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
-    attach_image_to_composer, pick_random_photos, is_recently_posted
+    attach_image_to_composer, pick_random_photos, is_recently_posted,
+    click_post_publish_button
 )
 from ai_spinner import generate_unique_variant
 
@@ -168,16 +169,22 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
                         textbox = c
                         break
             
-            # Đính kèm ảnh nếu có
-            if image_path:
-                attach_image_to_composer(page, dialog, image_path, clean_exif=clean_exif)
-            
+            # 1. Nhập nội dung bài viết trước để tránh bị nuốt phím khi gắn ảnh
             print("✍️ Đang nhập nội dung bài viết...")
             if textbox and textbox.is_visible():
                 human_type(page, textbox, content)
             else:
+                if dialog and dialog.is_visible():
+                    try:
+                        dialog.click()
+                    except Exception:
+                        pass
                 page.keyboard.type(content)
             time.sleep(random.uniform(1.5, 2.5))
+
+            # 2. Đính kèm ảnh nếu có (sau khi đã có nội dung văn bản)
+            if image_path:
+                attach_image_to_composer(page, dialog, image_path, clean_exif=clean_exif)
             
             # Thêm Feeling
             if feeling:
@@ -192,75 +199,12 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             print(f"👀 Tạm dừng {review_delay:.1f}s kiểm tra lại bài viết trước khi đăng...")
             time.sleep(review_delay)
 
-            # 1. Kiểm tra xem có nút 'Tiếp' / 'Next' trước khi đăng không (Thường xuất hiện khi đính kèm ảnh)
-            next_selectors = [
-                "div[role='dialog'] div[aria-label='Tiếp']",
-                "div[role='dialog'] div[aria-label='Next']",
-                "div[role='dialog'] div[role='button']:has-text('Tiếp')",
-                "div[role='dialog'] div[role='button']:has-text('Next')",
-                "div[role='dialog'] span:has-text('Tiếp')",
-                "div[role='dialog'] span:has-text('Next')"
-            ]
-            for n_sel in next_selectors:
-                n_btn = page.locator(n_sel).first
-                try:
-                    if n_btn.is_visible(timeout=1500) and n_btn.is_enabled():
-                        print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), đang bấm để chuyển sang màn hình xuất bản...")
-                        n_btn.click(force=True, timeout=5000)
-                        time.sleep(2.0)
-                        break
-                except Exception:
-                    continue
-
+            # 3. Tìm và bấm chính xác nút 'Đăng' (loại bỏ các nút sai và xác nhận dialog đóng)
             print("🚀 Đang bấm nút 'Đăng' / 'Chia sẻ' bài viết...")
-            post_selectors = [
-                "div[role='dialog'] div[aria-label='Đăng']",
-                "div[role='dialog'] div[aria-label='Post']",
-                "div[role='dialog'] div[aria-label='Chia sẻ ngay']",
-                "div[role='dialog'] div[aria-label='Share now']",
-                "div[role='dialog'] div[aria-label='Chia sẻ']",
-                "div[role='dialog'] div[role='button']:has-text('Đăng')",
-                "div[role='dialog'] div[role='button']:has-text('Post')",
-                "div[role='dialog'] div[role='button']:has-text('Chia sẻ ngay')",
-                "div[role='dialog'] div[role='button']:has-text('Chia sẻ')",
-                "div[aria-label='Đăng']",
-                "div[aria-label='Post']",
-                "div[role='button']:has-text('Đăng')",
-                "div[role='button']:has-text('Post')"
-            ]
+            click_post_publish_button(page, dialog)
 
-            clicked = False
-            for btn_sel in post_selectors:
-                btn = page.locator(btn_sel).first
-                try:
-                    if btn.is_visible(timeout=1500) and btn.is_enabled():
-                        btn.click(force=True, timeout=5000)
-                        clicked = True
-                        print(f"✅ Đã bấm nút xuất bản thành công qua selector: {btn_sel}")
-                        break
-                except Exception:
-                    continue
-
-            if not clicked:
-                try:
-                    role_btn = page.get_by_role("button", name=re.compile(r"^(Đăng|Post|Chia sẻ|Share)$", re.IGNORECASE)).first
-                    if role_btn.is_visible(timeout=3000):
-                        role_btn.click(force=True, timeout=5000)
-                        clicked = True
-                        print("✅ Đã bấm nút xuất bản qua role='button'")
-                except Exception:
-                    pass
-
-            if not clicked:
-                try:
-                    page.keyboard.press("Control+Enter")
-                    print("⌨️ Đã gửi phím tắt Ctrl+Enter để xuất bản bài viết!")
-                    clicked = True
-                except Exception:
-                    pass
-
-            if not clicked:
-                raise Exception("Không tìm thấy nút 'Đăng' hoặc 'Chia sẻ' trên giao diện Fanpage.")
+            # Chờ 3 - 5s để Facebook cập nhật feed
+            time.sleep(random.uniform(3.0, 5.0))
 
 
             # Chờ 6 - 10s để Facebook upload hoàn tất bài đăng lên máy chủ

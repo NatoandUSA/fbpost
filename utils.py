@@ -2,8 +2,18 @@ import re
 import random
 import time
 import os
+import sys
 import json
 import tempfile
+
+if sys.platform == "win32":
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ACCOUNTS_FILE = os.path.join(BASE_DIR, "accounts.json")
@@ -288,6 +298,19 @@ def launch_browser(account, p, api_url=None):
             cdp_client.send("Security.setIgnoreCertificateErrors", {"ignore": True})
         except Exception:
             pass
+
+        def _auto_accept_dialog(d):
+            try:
+                print(f"🔔 Tự động xử lý dialog trình duyệt: [{d.type}] '{d.message}' -> Chấp nhận (Accept)")
+                d.accept()
+            except Exception:
+                pass
+
+        try:
+            page.on("dialog", _auto_accept_dialog)
+            context.on("page", lambda p_new: p_new.on("dialog", _auto_accept_dialog))
+        except Exception:
+            pass
             
         return browser, context, page
         
@@ -326,6 +349,20 @@ def launch_browser(account, p, api_url=None):
             ]
         )
         page = context.pages[0] if context.pages else context.new_page()
+
+        def _auto_accept_local_dialog(d):
+            try:
+                print(f"🔔 Tự động xử lý dialog trình duyệt: [{d.type}] '{d.message}' -> Chấp nhận (Accept)")
+                d.accept()
+            except Exception:
+                pass
+
+        try:
+            page.on("dialog", _auto_accept_local_dialog)
+            context.on("page", lambda p_new: p_new.on("dialog", _auto_accept_local_dialog))
+        except Exception:
+            pass
+
         return None, context, page
 
 def close_browser(browser_or_context, account=None, api_url=None):
@@ -624,6 +661,142 @@ def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
         except Exception:
             time.sleep(4.0)
     return attached
+
+
+def click_post_publish_button(page, dialog=None):
+    """
+    Tìm và bấm chính xác nút Đăng / Post / Chia sẻ ở dưới cùng của dialog Facebook.
+    Loại trừ triệt để nút 'Đăng ẩn danh' (Anonymous posting switch) và các nút điều hướng khác.
+    Xác nhận dialog đóng lại sau khi xuất bản.
+    """
+    if not dialog or not dialog.is_visible():
+        try:
+            dialog = page.locator("div[role='dialog']").last
+        except Exception:
+            dialog = None
+
+    # 1. Kiểm tra bước xác nhận 'Tiếp' / 'Next' trước khi đăng (khi có ảnh)
+    next_selectors = [
+        "div[role='dialog'] div[aria-label='Tiếp']",
+        "div[role='dialog'] div[aria-label='Next']",
+        "div[role='dialog'] div[role='button']:has-text('Tiếp')",
+        "div[role='dialog'] div[role='button']:has-text('Next')",
+    ]
+    for n_sel in next_selectors:
+        try:
+            n_btn = page.locator(n_sel).first
+            if n_btn.is_visible(timeout=1000) and n_btn.is_enabled():
+                print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), đang bấm để chuyển sang màn hình xuất bản...")
+                n_btn.click(force=True, timeout=4000)
+                time.sleep(2.0)
+                break
+        except Exception:
+            continue
+
+    FORBIDDEN_WORDS = [
+        "ẩn danh", "anonym", "quy tắc", "rule", "chỉnh sửa", "cài đặt",
+        "setting", "lên lịch", "schedule", "bản nháp", "draft", "hủy", "cancel", "đóng", "close"
+    ]
+    PUBLISH_LABELS = ["đăng", "post", "chia sẻ ngay", "chia sẻ", "share now", "share"]
+
+    clicked = False
+
+    # 2. Thử các selector aria-label chính xác trên dialog
+    if dialog and dialog.is_visible():
+        for label in PUBLISH_LABELS:
+            btn = dialog.locator(f"div[role='button'][aria-label='{label}'], div[aria-label='{label}']").first
+            try:
+                if btn.is_visible(timeout=1000) and btn.is_enabled():
+                    btn_text = (btn.inner_text() or "").lower()
+                    aria = (btn.get_attribute("aria-label") or "").lower()
+                    if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
+                        btn.click(force=True, timeout=5000)
+                        clicked = True
+                        print(f"✅ Đã bấm nút xuất bản qua aria-label='{label}'")
+                        break
+            except Exception:
+                continue
+
+    # 3. Quét tất cả div[role='button'] và button trong dialog TỪ DƯỚI LÊN TRÊN (nút Đăng luôn ở đáy)
+    if not clicked and dialog and dialog.is_visible():
+        buttons = dialog.locator("div[role='button'], button")
+        count = buttons.count()
+        for idx in range(count - 1, -1, -1):
+            btn = buttons.nth(idx)
+            try:
+                if not btn.is_visible():
+                    continue
+                text = (btn.inner_text() or "").strip()
+                aria = (btn.get_attribute("aria-label") or "").strip()
+                full_str = (text + " " + aria).lower()
+
+                # Loại bỏ nút chứa từ cấm (ví dụ: 'Đăng ẩn danh')
+                if any(fw in full_str for fw in FORBIDDEN_WORDS):
+                    continue
+
+                first_line = text.split("\n")[0].strip().lower() if text else ""
+                is_match = False
+                if first_line in PUBLISH_LABELS or aria.lower() in PUBLISH_LABELS or text.lower() in PUBLISH_LABELS:
+                    is_match = True
+
+                if is_match:
+                    if btn.get_attribute("aria-disabled") == "true":
+                        print("⏳ Nút Đăng đang xử lý phương tiện (aria-disabled=true), chờ 3s...")
+                        time.sleep(3.0)
+                    btn.click(force=True, timeout=5000)
+                    clicked = True
+                    print(f"✅ Đã bấm nút xuất bản thành công: '{text or aria}'")
+                    break
+            except Exception:
+                continue
+
+    # 4. Fallback get_by_role Regex Exact Match
+    if not clicked:
+        try:
+            regex_post = re.compile(r"^(Đăng|Post|Chia sẻ|Share|Chia sẻ ngay|Share now)$", re.IGNORECASE)
+            search_ctx = dialog if (dialog and dialog.is_visible()) else page
+            role_btn = search_ctx.get_by_role("button", name=regex_post).last
+            if role_btn.is_visible(timeout=2000):
+                role_btn.click(force=True, timeout=5000)
+                clicked = True
+                print("✅ Đã bấm nút xuất bản qua role exact match.")
+        except Exception:
+            pass
+
+    # 5. Fallback Control+Enter sau khi đã focus vào textbox
+    if not clicked:
+        try:
+            tb = page.locator("div[role='dialog'] div[role='textbox'], div[role='textbox']").first
+            if tb.is_visible():
+                tb.focus()
+                time.sleep(0.5)
+            page.keyboard.press("Control+Enter")
+            clicked = True
+            print("⌨️ Đã gửi phím tắt Ctrl+Enter sau khi focus ô soạn thảo!")
+        except Exception:
+            pass
+
+    if not clicked:
+        raise Exception("Không tìm thấy nút 'Đăng' hợp lệ trên giao diện Facebook.")
+
+    # 6. Chờ và xác nhận dialog đóng lại sau khi bấm đăng (Xác nhận bài viết đã thực sự gửi lên FB)
+    print("⏳ Đang chờ Facebook xử lý và đóng khung bài viết...")
+    dialog_closed = False
+    for _ in range(12):
+        time.sleep(1.0)
+        try:
+            if dialog and not dialog.is_visible():
+                dialog_closed = True
+                print("🎉 Khung soạn thảo đã đóng — Bài đăng đã được Facebook tiếp nhận thành công!")
+                break
+        except Exception:
+            dialog_closed = True
+            break
+
+    if not dialog_closed:
+        print("⚠️ Khung soạn thảo chưa đóng hoàn toàn sau 12s. Có thể bài viết đang gửi phê duyệt hoặc chờ kiểm duyệt.")
+
+    return True
 
 
 def add_feeling(page):

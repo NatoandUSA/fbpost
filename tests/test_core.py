@@ -623,6 +623,52 @@ class NclProInspiredFeatureTests(unittest.TestCase):
                 self.assertTrue(data["auto_join_groups"])
                 self.assertEqual(data["group_keywords"], "Test Group 1, Test Group 2")
 
+    def test_click_post_publish_button_ignores_anonymous_toggle(self):
+        from unittest.mock import MagicMock
+        from utils import click_post_publish_button
+
+        mock_page = MagicMock()
+        mock_page.locator.return_value.first.is_visible.return_value = False
+        mock_dialog = MagicMock()
+
+        # Giả lập nút "Đăng ẩn danh" (top) và nút "Đăng" (bottom)
+        anon_btn = MagicMock()
+        anon_btn.is_visible.return_value = True
+        anon_btn.inner_text.return_value = "Đăng ẩn danh"
+        anon_btn.get_attribute.side_effect = lambda attr: "Đăng ẩn danh" if attr == "aria-label" else "false"
+
+        real_post_btn = MagicMock()
+        real_post_btn.is_visible.return_value = True
+        real_post_btn.inner_text.return_value = "Đăng"
+        real_post_btn.get_attribute.side_effect = lambda attr: "Đăng" if attr == "aria-label" else "false"
+
+        # Giả lập locator của dialog
+        buttons = [anon_btn, real_post_btn]
+        mock_buttons_locator = MagicMock()
+        mock_buttons_locator.count.return_value = 2
+        mock_buttons_locator.nth.side_effect = lambda idx: buttons[idx]
+
+        mock_dialog.is_visible.return_value = True
+        def fake_locator(sel):
+            loc = MagicMock()
+            if "aria-label='đăng'" in sel.lower():
+                loc.first = real_post_btn
+            elif "div[role='button']" in sel:
+                return mock_buttons_locator
+            else:
+                loc.first.is_visible.return_value = False
+            return loc
+
+        mock_dialog.locator.side_effect = fake_locator
+        # Giả lập sau khi click dialog đóng lại
+        visibility = [True, True, True, True, False]
+        mock_dialog.is_visible.side_effect = lambda: visibility.pop(0) if visibility else False
+
+        result = click_post_publish_button(mock_page, mock_dialog)
+        self.assertTrue(result)
+        anon_btn.click.assert_not_called()
+        real_post_btn.click.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
