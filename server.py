@@ -1312,11 +1312,13 @@ def run_script():
                     yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
                     if auto_join_groups and group_keywords:
                         yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
+                        time.sleep(3.0)
                         jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
                         jg_process = start_cli_process(jg_cmd)
                         for line in iter(jg_process.stdout.readline, ''):
                             yield line
                         jg_process.wait()
+                        time.sleep(2.0)
                         yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                     for sec in range(delay, 0, -1):
                         if sec % 5 == 0 or sec <= 10:
@@ -1433,11 +1435,13 @@ def run_script():
                 yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n"
                 if auto_join_groups and group_keywords:
                     yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
+                    time.sleep(3.0)
                     jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
                     jg_process = start_cli_process(jg_cmd)
                     for line in iter(jg_process.stdout.readline, ''):
                         yield line
                     jg_process.wait()
+                    time.sleep(2.0)
                     yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
                 for sec in range(delay, 0, -1):
                     if sec % 5 == 0 or sec <= 10:

@@ -78,7 +78,7 @@ def search_and_join_groups(keywords, max_groups=1, account_id=None, gpm_api_url=
                 if joined_count >= max_groups:
                     break
 
-                search_url = f"https://www.facebook.com/groups/search/groups/?q={urllib.parse.quote(kw)}"
+                search_url = f"https://www.facebook.com/search/groups/?q={urllib.parse.quote(kw)}"
                 print(f"\n🔍 Đang tìm kiếm nhóm Facebook với từ khóa: '{kw}'...")
                 try:
                     page.goto(search_url, wait_until="domcontentloaded", timeout=35000)
@@ -87,21 +87,48 @@ def search_and_join_groups(keywords, max_groups=1, account_id=None, gpm_api_url=
                     print(f"⚠️ Lỗi tải trang tìm kiếm: {e}")
                     continue
 
-                # Cuộn nhẹ để nạp danh sách kết quả
-                page.mouse.wheel(0, 400)
-                time.sleep(random.uniform(1.5, 2.5))
+                # Cuộn trang 2-3 lần để nạp thêm các nhóm mới
+                try:
+                    for _ in range(3):
+                        page.evaluate("window.scrollBy(0, 800)")
+                        time.sleep(1.0)
+                except Exception:
+                    pass
 
                 # Tìm các nút "Tham gia" / "Join"
-                join_buttons = page.locator('div[role="button"]:has-text("Tham gia"), div[role="button"]:has-text("Tham gia nhóm"), div[role="button"]:has-text("Join"), div[role="button"]:has-text("Join group")').all()
-
                 candidates = []
-                for btn in join_buttons:
-                    try:
-                        text = btn.inner_text().strip()
-                        if text in ("Tham gia", "Tham gia nhóm", "Join", "Join group"):
+                # Cách 1: Quét các nút có regex khớp chính xác
+                try:
+                    join_regex = re.compile(r"^\s*(Tham gia|Tham gia nhóm|Join|Join group)\s*$", re.IGNORECASE)
+                    matching_btns = page.locator('div[role="button"], button').filter(has_text=join_regex).all()
+                    for btn in matching_btns:
+                        try:
+                            if not btn.is_visible():
+                                continue
+                            txt = (btn.inner_text() or "").strip()
+                            # Loại trừ nhóm đã tham gia hoặc đã gửi yêu cầu
+                            if any(ex in txt.lower() for ex in ["đã tham gia", "đã yêu cầu", "truy cập", "joined", "requested"]):
+                                continue
                             candidates.append(btn)
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+                # Cách 2: Quét aria-label nếu chưa có candidates
+                if not candidates:
+                    try:
+                        aria_btns = page.locator('div[role="button"][aria-label*="Tham gia" i], div[role="button"][aria-label*="Join" i]').all()
+                        for btn in aria_btns:
+                            try:
+                                if btn.is_visible():
+                                    aria_txt = (btn.get_attribute("aria-label") or "").lower()
+                                    if not any(ex in aria_txt for ex in ["đã tham gia", "đã yêu cầu", "truy cập", "joined", "requested"]):
+                                        candidates.append(btn)
+                            except Exception:
+                                continue
                     except Exception:
-                        continue
+                        pass
 
                 if not candidates:
                     print(f"ℹ️ Không có nhóm mới nào chưa tham gia cho từ khóa '{kw}'.")

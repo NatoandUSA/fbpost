@@ -673,6 +673,7 @@ def click_post_publish_button(page, dialog=None):
     """
     Tìm và bấm chính xác nút Đăng / Post / Chia sẻ ở dưới cùng của dialog Facebook.
     Loại trừ triệt để nút 'Đăng ẩn danh' (Anonymous posting switch) và các nút điều hướng khác.
+    Tự động thoát các màn hình phụ (Cảm xúc/Check-in) nếu bị kẹt.
     Xác nhận dialog đóng lại sau khi xuất bản.
     """
     if not dialog or not dialog.is_visible():
@@ -681,10 +682,28 @@ def click_post_publish_button(page, dialog=None):
         except Exception:
             dialog = None
 
+    # 0. Nếu đang bị kẹt ở màn hình phụ (Cảm xúc, Vị trí...), bấm Quay lại để về màn hình soạn thảo chính
+    try:
+        back_selectors = [
+            "div[role='dialog'] div[aria-label*='Quay lại' i]",
+            "div[role='dialog'] div[aria-label*='Back' i]",
+            "div[role='dialog'] div[role='button']:has-text('Quay lại')",
+            "div[role='dialog'] div[role='button']:has-text('Back')"
+        ]
+        for b_sel in back_selectors:
+            b_btn = page.locator(b_sel).first
+            if b_btn.is_visible(timeout=1000):
+                print("👈 Phát hiện màn hình phụ, đang bấm Quay lại để về màn hình đăng bài...")
+                b_btn.click(force=True)
+                time.sleep(1.5)
+                break
+    except Exception:
+        pass
+
     # 1. Kiểm tra bước xác nhận 'Tiếp' / 'Next' trước khi đăng (khi có ảnh)
     next_selectors = [
-        "div[role='dialog'] div[aria-label='Tiếp']",
-        "div[role='dialog'] div[aria-label='Next']",
+        "div[role='dialog'] div[aria-label*='Tiếp' i]",
+        "div[role='dialog'] div[aria-label*='Next' i]",
         "div[role='dialog'] div[role='button']:has-text('Tiếp')",
         "div[role='dialog'] div[role='button']:has-text('Next')",
     ]
@@ -707,12 +726,12 @@ def click_post_publish_button(page, dialog=None):
 
     clicked = False
 
-    # 2. Thử các selector aria-label chính xác trên dialog
+    # 2. Thử các selector aria-label case-insensitive (cả chữ hoa chữ thường)
     if dialog and dialog.is_visible():
         for label in PUBLISH_LABELS:
-            btn = dialog.locator(f"div[role='button'][aria-label='{label}'], div[aria-label='{label}']").first
+            btn = dialog.locator(f"div[role='button'][aria-label='{label}' i], div[aria-label='{label}' i]").first
             try:
-                if btn.is_visible(timeout=1000) and btn.is_enabled():
+                if btn.is_visible(timeout=1000):
                     btn_text = (btn.inner_text() or "").lower()
                     aria = (btn.get_attribute("aria-label") or "").lower()
                     if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
@@ -752,7 +771,6 @@ def click_post_publish_button(page, dialog=None):
                     is_match = True
 
                 if is_match:
-                    # Chờ nếu nút đang bị aria-disabled (ảnh/video đang tải lên)
                     for _ in range(8):
                         if btn.get_attribute("aria-disabled") == "true":
                             print("⏳ Nút Đăng đang xử lý phương tiện (aria-disabled=true), chờ 1s...")
@@ -766,16 +784,22 @@ def click_post_publish_button(page, dialog=None):
             except Exception:
                 continue
 
-    # 4. Fallback get_by_role Regex Exact Match
-    if not clicked:
+    # 4. Fallback tìm nút có chữ chính xác bằng regex filter
+    if not clicked and dialog and dialog.is_visible():
         try:
-            regex_post = re.compile(r"^(Đăng|Post|Chia sẻ|Share|Chia sẻ ngay|Share now)$", re.IGNORECASE)
-            search_ctx = dialog if (dialog and dialog.is_visible()) else page
-            role_btn = search_ctx.get_by_role("button", name=regex_post).last
-            if role_btn.is_visible(timeout=2000):
-                role_btn.click(force=True, timeout=5000)
-                clicked = True
-                print("✅ Đã bấm nút xuất bản qua role exact match.")
+            regex_post = re.compile(r"^\s*(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)\s*$", re.IGNORECASE)
+            post_candidates = dialog.locator("div[role='button'], button").filter(has_text=regex_post)
+            if post_candidates.count() > 0:
+                target_btn = post_candidates.last
+                if not any(fw in (target_btn.inner_text() or "").lower() for fw in FORBIDDEN_WORDS):
+                    for _ in range(8):
+                        if target_btn.get_attribute("aria-disabled") == "true":
+                            time.sleep(1.0)
+                        else:
+                            break
+                    target_btn.click(force=True, timeout=5000)
+                    clicked = True
+                    print(f"✅ Đã bấm nút xuất bản qua regex filter: '{target_btn.inner_text().strip()}'")
         except Exception:
             pass
 
@@ -827,6 +851,7 @@ def click_post_publish_button(page, dialog=None):
 def add_feeling(page):
     """
     Selects a random feeling inside the Facebook post composer.
+    Luôn đảm bảo quay lại màn hình soạn thảo chính nếu không chọn được.
     """
     print("Đang thêm cảm xúc ngẫu nhiên cho bài viết...")
     try:
@@ -853,12 +878,26 @@ def add_feeling(page):
                     first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã gắn cảm xúc: {selected_feeling}")
                     time.sleep(random.uniform(1.0, 2.0))
+                    return
+
+        # Nếu không chọn được cảm xúc, bắt buộc bấm Quay lại để về màn hình đăng bài chính
+        back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
+        if back_btn.is_visible(timeout=1500):
+            back_btn.click(force=True)
+            time.sleep(1.0)
     except Exception as e:
         print(f"⚠️ Cảnh báo: Bỏ qua thêm cảm xúc ({e}).")
+        try:
+            back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
+            if back_btn.is_visible(timeout=1000):
+                back_btn.click(force=True)
+        except Exception:
+            pass
 
 def add_checkin(page):
     """
     Selects a random checkin location inside the Facebook post composer.
+    Luôn đảm bảo quay lại màn hình soạn thảo chính nếu không chọn được.
     """
     print("Đang check-in địa điểm ngẫu nhiên cho bài viết...")
     try:
@@ -896,8 +935,21 @@ def add_checkin(page):
                     first_option.click(force=True, timeout=5000)
                     print(f"✅ Đã check-in địa điểm: {selected_location}")
                     time.sleep(random.uniform(1.0, 2.0))
+                    return
+
+        # Nếu không chọn được checkin, bắt buộc bấm Quay lại để về màn hình đăng bài chính
+        back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
+        if back_btn.is_visible(timeout=1500):
+            back_btn.click(force=True)
+            time.sleep(1.0)
     except Exception as e:
         print(f"⚠️ Cảnh báo: Bỏ qua check-in ({e}).")
+        try:
+            back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
+            if back_btn.is_visible(timeout=1000):
+                back_btn.click(force=True)
+        except Exception:
+            pass
 
 POSTED_LINKS_FILE = "posted_links.json"
 
