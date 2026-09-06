@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from datetime import datetime
 
+# GPM profiles with proxies/extensions can take longer than 15s to start.
+GPM_START_TIMEOUT_SECONDS = 30
+
 if sys.platform == "win32":
     try:
         if hasattr(sys.stdout, "reconfigure"):
@@ -360,7 +363,7 @@ def launch_browser(account, p, api_url=None):
             try:
                 url = f"{api_base}/api/v3/profiles/start/{profile_id}"
                 print(f"Calling GPM Login v4/v3 API: {url}")
-                payload = requests.get(url, params={"win_scale": 0.8}, timeout=15).json()
+                payload = requests.get(url, params={"win_scale": 0.8}, timeout=GPM_START_TIMEOUT_SECONDS).json()
                 data = payload.get("data") if isinstance(payload, dict) else None
                 cdp_address = data.get("remote_debugging_address") if isinstance(data, dict) else None
                 if cdp_address and (payload.get("success") or payload.get("status") or True):

@@ -4739,7 +4739,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.1';
+        let ver = 'v6.0.2';
         let build = '2026-09-06';
         try {
             const res = await fetch('/api/app-info');

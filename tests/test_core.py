@@ -449,6 +449,10 @@ class NclProInspiredFeatureTests(unittest.TestCase):
             self.assertEqual(res["total"], 2)
             self.assertEqual(res["profiles"][0]["name"], "M14")
 
+    def test_gpm_start_timeout_allows_slow_profiles(self):
+        from utils import GPM_START_TIMEOUT_SECONDS
+        self.assertGreaterEqual(GPM_START_TIMEOUT_SECONDS, 30)
+
     def test_fetch_gpm_profiles_offline(self):
         from utils import fetch_gpm_profiles
         with patch("requests.get", side_effect=Exception("Connection refused")):
@@ -779,7 +783,7 @@ class NclProInspiredFeatureTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.1")
+        self.assertEqual(get_version(), "6.0.2")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
