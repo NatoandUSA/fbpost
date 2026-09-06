@@ -88,10 +88,17 @@ def main():
     comment_parser.add_argument("--min-delay", type=int, default=25, help="Min delay between comments in seconds")
     comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
     comment_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    comment_parser.add_argument("--no-anti-hash-text", action="store_false", dest="anti_hash_text", help="Disable anti-hash text")
+
     # Join-group command
     join_group_parser = subparsers.add_parser("join-group", help="Search and automatically join Facebook groups by keywords")
     join_group_parser.add_argument("--keywords", default="Homestay Huế, Du lịch Huế", help="Comma-separated keywords")
-    join_group_parser.add_argument("--limit", type=int, default=1, help="Max groups to join per run")
+    join_group_parser.add_argument("--limit", type=int, default=2, help="Max groups to join per run (Max 2 per profile)")
+    join_group_parser.add_argument("--delay-min", type=int, default=60, help="Min delay between groups in seconds")
+    join_group_parser.add_argument("--delay-max", type=int, default=180, help="Max delay between groups in seconds")
+    join_group_parser.add_argument("--interact-feed", action="store_true", default=True, help="Interact with group feed (Like/Comment)")
+    join_group_parser.add_argument("--no-interact-feed", action="store_false", dest="interact_feed", help="Disable group feed interaction")
+    join_group_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI comment generation")
 
     # Create-page command
     create_page_parser = subparsers.add_parser("create-page", help="Create a personal Facebook Fanpage with avatar and cover")
@@ -103,13 +110,15 @@ def main():
 
     args = parser.parse_args()
     
+    success = True
     if args.command == "auth":
         from fb_auth import login_account
-        login_account(args.account_id, args.gpm_api)
+        res = login_account(args.account_id, args.gpm_api)
+        success = (res is not False)
     elif args.command == "group":
         from fb_group import post_to_group
         img_arg = args.images if args.images else args.image
-        post_to_group(
+        success = bool(post_to_group(
             args.url, args.content, img_arg, args.account_id, args.gpm_api,
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
@@ -117,11 +126,11 @@ def main():
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
             clean_exif=args.clean_exif
-        )
+        ))
     elif args.command == "page":
         from fb_page import post_to_page
         img_arg = args.images if args.images else args.image
-        post_to_page(
+        success = bool(post_to_page(
             args.url, args.content, img_arg, args.account_id, args.gpm_api,
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
@@ -129,34 +138,55 @@ def main():
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
             clean_exif=args.clean_exif
-        )
+        ))
     elif args.command == "thread":
         from fb_thread import send_message
-        send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)
+        success = bool(send_message(args.id, args.content, args.image, args.account_id, args.gpm_api))
     elif args.command == "interact":
         from fb_interact import interact_newsfeed
-        interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
+        res = interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
+        success = (res is not False)
     elif args.command == "scrape":
         from fb_scraper import scrape_comments
-        scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
+        res = scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
+        success = (res is not None)
     elif args.command == "comment":
         from fb_comment import comment_on_post, comment_on_list
         if args.urls_file and os.path.exists(args.urls_file):
             with open(args.urls_file, "r", encoding="utf-8") as f:
                 urls = [l.strip() for l in f if l.strip()]
-            comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text)
+            success = bool(comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text))
         elif args.url and args.content:
-            comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
+            success = bool(comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text))
         else:
             comment_parser.print_help()
+            success = False
     elif args.command == "join-group":
         from fb_join_group import search_and_join_groups
-        search_and_join_groups(args.keywords, args.limit, args.account_id, args.gpm_api)
+        delay_min = getattr(args, "delay_min", 60)
+        delay_max = getattr(args, "delay_max", 180)
+        interact_feed = getattr(args, "interact_feed", True)
+        gemini_key = getattr(args, "gemini_key", None)
+        joined_count = search_and_join_groups(
+            args.keywords,
+            args.limit,
+            args.account_id,
+            args.gpm_api,
+            delay_min=delay_min,
+            delay_max=delay_max,
+            interact_feed=interact_feed,
+            gemini_key=gemini_key
+        )
+        success = (joined_count is not None and (joined_count > 0 or getattr(args, 'limit', 1) == 0))
     elif args.command == "create-page":
         from fb_create_page import create_facebook_page
-        create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api)
+        success = bool(create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api))
     else:
         parser.print_help()
+        success = False
+
+    if not success:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

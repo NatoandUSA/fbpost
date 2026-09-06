@@ -62,9 +62,11 @@ def send_message(thread_id, content, image_path=None, account_id=None, gpm_api_u
             print("Waiting for message to send...")
             time.sleep(random.uniform(2.0, 4.0))
             print("✅ Successfully sent message to thread!")
+            return True
             
         except Exception as e:
             print(f"❌ An error occurred: {e}")
+            return False
         finally:
             if account:
                 close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
@@ -74,6 +76,7 @@ def send_message(thread_id, content, image_path=None, account_id=None, gpm_api_u
 
 if __name__ == "__main__":
     import argparse
+    import sys
     parser = argparse.ArgumentParser()
     parser.add_argument("id")
     parser.add_argument("content")
@@ -82,4 +85,5 @@ if __name__ == "__main__":
     parser.add_argument("--gpm-api", default=None)
     args = parser.parse_args()
     
-    send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)
+    ok = send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)
+    sys.exit(0 if ok else 1)

@@ -4,21 +4,32 @@ import time
 import random
 import re
 import json
+import urllib.parse
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
-from utils import resolve_account, launch_browser, close_browser
+from utils import resolve_account, launch_browser, close_browser, ActionResult
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CREATED_PAGES_FILE = os.path.join(BASE_DIR, "created_pages.json")
 STATE_FILE = os.path.join(BASE_DIR, "state.json")
 
 
-def load_created_pages():
+def load_created_pages(account_id=None):
+    try:
+        from repositories.page_repo import PageRepository
+        rows = PageRepository().list_created_pages(account_id=account_id)
+        if rows:
+            return rows
+    except Exception:
+        pass
     if not os.path.exists(CREATED_PAGES_FILE):
         return []
     try:
         with open(CREATED_PAGES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            pages = json.load(f)
+            if account_id:
+                return [p for p in pages if p.get("account_id") == account_id]
+            return pages
     except Exception:
         return []
 
@@ -32,11 +43,11 @@ def save_created_pages(pages):
         return False
 
 
-def can_create_page(max_per_day=2):
+def can_create_page(account_id=None, max_per_day=2):
     """
     Kiểm tra hạn mức tạo Page: Tối đa 2 Page / ngày (24 giờ) để bảo vệ tài khoản chống checkpoint.
     """
-    records = load_created_pages()
+    records = load_created_pages(account_id=account_id)
     cutoff = datetime.now() - timedelta(hours=24)
     recent = []
     for r in records:
@@ -58,10 +69,10 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
     Tự động tạo Fanpage cá nhân theo tên chỉ định, có upload avatar và cover như Profile thật.
     Tuân thủ giới hạn tối đa 2 Page / ngày.
     """
-    allowed, count, reason = can_create_page(max_per_day=2)
+    allowed, count, reason = can_create_page(account_id=account_id, max_per_day=2)
     if not allowed:
         print(f"🛑 [Hạn chế An Toàn] {reason}")
-        return False
+        return ActionResult(success=False, code="RATE_LIMIT", message=reason)
 
     print(f"🚩 Bắt đầu quy trình tạo Fanpage cá nhân: '{page_name}' (Hạng mục: {category})")
 
@@ -70,12 +81,11 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
         account = resolve_account(account_id, gpm_api_url)
         if not account:
             print(f"❌ Không thể tìm thấy cấu hình tài khoản: {account_id}")
-            return False
+            return ActionResult(success=False, code="ACCOUNT_NOT_FOUND", message=f"Không thể tìm thấy cấu hình tài khoản: {account_id}")
         print(f"👤 Sử dụng Profile: {account.get('name', account_id)}")
 
     browser_obj = None
     context = None
-    success = False
 
     try:
         with sync_playwright() as p:
@@ -141,7 +151,17 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
             create_btn.scroll_into_view_if_needed()
             create_btn.click()
 
-            print("⏳ Đang chờ Facebook xử lý khởi tạo trang mới (10 - 15 giây)...")
+            # Kiểm tra xem Facebook có báo lỗi ngay sau khi bấm Tạo Trang không
+            time.sleep(2.5)
+            err_alert = page.locator("div[role='alert'], div[role='dialog']").filter(
+                has_text=re.compile(r"(quá nhiều|không thể tạo|không hợp lệ|bị chặn|too many|cannot create|invalid|something went wrong)", re.IGNORECASE)
+            ).first
+            if err_alert.is_visible(timeout=3000):
+                msg = err_alert.inner_text().strip().split("\n")[0]
+                print(f"❌ Facebook từ chối tạo trang: {msg}")
+                return ActionResult(success=False, code="PAGE_CREATION_REJECTED", message=msg)
+
+            print("⏳ Đang chờ Facebook xử lý khởi tạo trang mới (10 - 14 giây)...")
             time.sleep(random.uniform(10.0, 14.0))
 
             # 5. Upload Avatar & Cover nếu có file ảnh
@@ -176,24 +196,109 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
                 else:
                     break
 
-            time.sleep(3.0)
+            time.sleep(random.uniform(3.0, 5.0))
 
-            # Lưu vào danh sách created_pages.json
+            # 7. Xác thực kết quả tạo trang thực tế
+            curr_url = page.url
+            created_page_url = ""
+            is_verified = False
+
+            # Bỏ qua các URL không hợp lệ: trang chủ, checkpoint, login, trang tạo
+            invalid_paths = ["/pages/creation", "/checkpoint", "/login", "/home.php", "/recover"]
+            parsed_u = urllib.parse.urlparse(curr_url)
+            is_generic_root = parsed_u.path.strip("/") in ("", "home.php")
+            is_invalid_path = any(inv in parsed_u.path.lower() for inv in invalid_paths) or is_generic_root
+
+            # Kiểm tra tiêu đề trang hoặc h1/h2 khớp với tên page_name
+            try:
+                header_elem = page.locator('h1, div[role="main"] h1, div[role="main"] h2').first
+                if header_elem.is_visible(timeout=3000):
+                    txt = (header_elem.inner_text() or "").strip().lower()
+                    if page_name.lower() in txt:
+                        is_verified = True
+            except Exception:
+                pass
+
+            # Nếu chưa verify qua header, kiểm tra page title
+            if not is_verified:
+                try:
+                    title = page.title().lower()
+                    if page_name.lower() in title and "facebook" in title:
+                        is_verified = True
+                except Exception:
+                    pass
+
+            if is_verified and not is_invalid_path and "facebook.com/" in curr_url:
+                created_page_url = curr_url.split("?")[0]
+            elif not is_invalid_path and "facebook.com/" in curr_url and ("/pages/" in curr_url or "/profile.php" in curr_url):
+                created_page_url = curr_url.split("?")[0]
+                is_verified = True
+
+            if not is_verified:
+                print("⚠️ Không thể xác thực Fanpage đã được tạo thành công trên giao diện Facebook.")
+                return ActionResult(success=False, code="UNVERIFIED", message="Không thể xác thực Fanpage đã được tạo thành công trên giao diện Facebook.")
+
+            # Lưu vào CSDL SQLite
+            try:
+                from repositories.page_repo import PageRepository
+                PageRepository().add_created_page(
+                    page_name=page_name,
+                    category=category,
+                    page_url=created_page_url,
+                    account_id=account_id or "default",
+                    state="created",
+                )
+            except Exception as pe:
+                print(f"⚠️ Lỗi lưu page vào SQLite: {pe}")
+
+            # Lưu vào JSON (tránh duplicate)
             pages = load_created_pages()
-            pages.append({
-                "page_name": page_name,
-                "category": category,
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "account_id": account_id or "default"
-            })
-            save_created_pages(pages)
+            if not any(p.get("page_url") == created_page_url and p.get("page_name") == page_name for p in pages):
+                pages.append({
+                    "page_name": page_name,
+                    "category": category,
+                    "page_url": created_page_url,
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "account_id": account_id or "default"
+                })
+                save_created_pages(pages)
 
             print(f"\n🎉 [THÀNH CÔNG] Đã tạo xong Fanpage cá nhân: '{page_name}'!")
-            success = True
+            return ActionResult(
+                success=True,
+                code="SUCCESS",
+                state="created",
+                message=f"Đã tạo xong Fanpage cá nhân: '{page_name}'!",
+                result_url=created_page_url,
+                url_type="page",
+            )
 
     except Exception as e:
         print(f"❌ Lỗi trong quá trình tạo Fanpage: {e}")
+        return ActionResult(success=False, code="ERROR", message=str(e))
     finally:
         close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
 
-    return success
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Tự động tạo Facebook Fanpage")
+    parser.add_argument("--name", required=True, help="Tên Fanpage cần tạo")
+    parser.add_argument("--category", default="Blogger", help="Hạng mục Fanpage")
+    parser.add_argument("--bio", default="", help="Tiểu sử trang")
+    parser.add_argument("--avatar", default=None, help="Đường dẫn ảnh đại diện")
+    parser.add_argument("--cover", default=None, help="Đường dẫn ảnh bìa")
+    parser.add_argument("--account-id", default=None, help="ID tài khoản")
+    parser.add_argument("--gpm-api", default=None, help="URL GPM API")
+    args = parser.parse_args()
+
+    res = create_facebook_page(
+        page_name=args.name,
+        category=args.category,
+        bio=args.bio,
+        avatar_path=args.avatar,
+        cover_path=args.cover,
+        account_id=args.account_id,
+        gpm_api_url=args.gpm_api,
+    )
+    sys.exit(0 if res else 1)

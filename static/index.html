@@ -64,6 +64,10 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>
                     <span>🚩 Tự tạo Fanpage cá nhân (2/ngày)</span>
                 </button>
+                <button class="composer-tab nav-item" data-target="join-group" id="tab-join-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>🤝 Tự động gia nhập Nhóm (Join Group)</span>
+                </button>
 
                 <div class="menu-label" style="margin-top: 14px;">⚙️ HỆ THỐNG & TÀI KHOẢN</div>
                 <button class="composer-tab nav-item" data-target="profiles" id="tab-profiles">
@@ -734,6 +738,89 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             </div>
                         </section>
 
+                        <!-- Join Group Section (Tự động tìm kiếm & gia nhập Nhóm Facebook) -->
+                        <section id="join-group-section" class="card hidden" style="margin-bottom: 16px;">
+                            <div class="card-header" style="background: linear-gradient(135deg, #1877F2 0%, #0D5AC7 100%); color: white; padding: 14px 18px; border-radius: 8px 8px 0 0;">
+                                <div class="card-title-group">
+                                    <span style="font-size: 20px;">🤝</span>
+                                    <div>
+                                        <h3 style="color: white; margin: 0; font-size: 16px;">Tự động tìm & xin gia nhập Nhóm Facebook (Join Group)</h3>
+                                        <p style="color: #DBEAFE; margin: 2px 0 0 0; font-size: 12px;">Hỗ trợ tìm theo từ khóa hoặc dán danh sách link Nhóm trực tiếp. Tự động trả lời câu hỏi và đồng ý quy tắc nhóm.</p>
+                                    </div>
+                                </div>
+                                <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px; padding: 4px 10px; border-radius: 12px;">Chống Checkpoint</span>
+                            </div>
+                            <div style="padding: 16px;">
+                                <!-- Chọn Profile thực hiện -->
+                                <div class="field-group" style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px;">
+                                    <label class="field-label" style="font-weight: 700; color: #1E293B;">👤 Chọn Profile Facebook thực hiện gia nhập *</label>
+                                    <select id="join-group-profile-select" class="field-input" style="background: #fff; font-weight: 600;">
+                                        <option value="">Đang tải danh sách profile...</option>
+                                    </select>
+                                    <p class="field-hint" style="color: #64748B; font-size: 11px; margin-top: 4px;">Có thể chọn 1 nick cụ thể hoặc chế độ 🔄 Luân phiên toàn bộ nick đã lưu.</p>
+                                </div>
+
+                                <!-- Chế độ nhập: Từ khóa vs Link trực tiếp -->
+                                <div class="field-group" style="margin-bottom: 12px;">
+                                    <label class="field-label" style="font-weight: 700; color: #1E293B;">📋 Phương thức chỉ định nhóm:</label>
+                                    <div style="display: flex; gap: 16px; margin-top: 6px;">
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                                            <input type="radio" name="join-mode" id="join-mode-kw" value="keywords" checked>
+                                            🔍 Tìm kiếm theo từ khóa (Keywords)
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">
+                                            <input type="radio" name="join-mode" id="join-mode-urls" value="urls">
+                                            🔗 Dán link trực tiếp (Group URLs)
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Nhập từ khóa -->
+                                <div class="field-group" id="join-kw-group">
+                                    <label class="field-label">Từ khóa tìm kiếm nhóm (phân cách bằng dấu phẩy hoặc xuống dòng)</label>
+                                    <textarea id="join-group-keywords" class="field-textarea" rows="3" placeholder="Homestay Huế, Du lịch Huế, Thuê phòng Huế, Cố Đô Huế"></textarea>
+                                    <p class="field-hint">Hệ thống sẽ tìm kiếm trên Facebook theo từng từ khóa và bấm xin gia nhập các nhóm chưa tham gia.</p>
+                                </div>
+
+                                <!-- Nhập danh sách URL trực tiếp -->
+                                <div class="field-group hidden" id="join-urls-group">
+                                    <label class="field-label">Danh sách đường dẫn nhóm Facebook (mỗi dòng 1 link)</label>
+                                    <textarea id="join-group-urls" class="field-textarea" rows="4" placeholder="https://www.facebook.com/groups/timhomestaytaihue/&#10;https://www.facebook.com/groups/648990015540886/"></textarea>
+                                    <p class="field-hint">Mở trực tiếp từng nhóm để kiểm tra trạng thái và bấm 'Tham gia nhóm' nếu chưa vào.</p>
+                                </div>
+
+                                <!-- Cấu hình số lượng, chống spam & tự động tương tác -->
+                                <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1E40AF; line-height: 1.5;">
+                                    🛡️ <b>Cơ chế An toàn & Nuôi Nick Chống Checkpoint:</b><br>
+                                    • Giãn cách an toàn ngẫu nhiên <b>1 - 3 phút</b> (60 - 180s) giữa các nhóm và giữa các lượt đổi profile.<br>
+                                    • Mỗi profile chỉ vào <b>tối đa 2 nhóm</b> mỗi lần mở trình duyệt rồi tự động xoay sang profile tiếp theo.<br>
+                                    • Trong khi mở nhóm, tự động lướt và <b>Like / Bình luận AI</b> vào bài viết để mô phỏng người dùng thật.
+                                </div>
+
+                                <div class="grid2" style="margin-bottom: 12px;">
+                                    <div class="field-group">
+                                        <label class="field-label">Số nhóm tối đa mỗi profile</label>
+                                        <select id="join-group-limit" class="field-input">
+                                            <option value="1">1 nhóm (Siêu an toàn)</option>
+                                            <option value="2" selected>2 nhóm (Tối đa 2 nhóm / profile)</option>
+                                        </select>
+                                    </div>
+                                    <div class="field-group" style="display: flex; flex-direction: column; justify-content: center; gap: 8px;">
+                                        <label class="checkbox-label" style="font-weight: 600; color: #1E293B; margin-top: 6px;">
+                                            <input type="checkbox" id="join-group-auto-rules" checked> Tự động đồng ý quy tắc nhóm & gửi câu hỏi
+                                        </label>
+                                        <label class="checkbox-label" style="font-weight: 600; color: #1E293B;">
+                                            <input type="checkbox" id="join-group-interact-feed" checked> 🤖 Lướt bảng tin & Like/Bình luận AI bài viết
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <button id="submit-join-group-btn" class="btn btn-primary btn-full" style="padding: 12px; font-weight: 700; font-size: 15px; border-radius: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.25);">
+                                    🤝 BẮT ĐẦU TỰ ĐỘNG GIA NHẬP NHÓM NGAY
+                                </button>
+                            </div>
+                        </section>
+
                         <section id="settings-section" class="settings-section hidden" aria-labelledby="settings-title">
                             <div class="settings-hero" style="margin-bottom: 16px;">
                                 <div>
@@ -1065,6 +1152,34 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         </div>
                     </div>
 
+                    <!-- Khối bên phải cho Tab Gia nhập nhóm (Lịch sử nhóm đã tham gia) -->
+                    <div class="card hidden" id="join-group-panel-right">
+                        <div class="card-header">
+                            <div class="card-title-group"><span>🤝</span><h3>Lịch sử nhóm đã xin gia nhập</h3></div>
+                            <div style="display: flex; gap: 6px;">
+                                <button id="refresh-joined-groups-btn" class="btn-ghost btn-xs" type="button">🔄 Làm mới</button>
+                                <button id="clear-joined-groups-btn" class="btn-ghost btn-xs" type="button">🗑️ Xóa</button>
+                            </div>
+                        </div>
+                        <div style="padding: 14px;">
+                            <div style="max-height: 320px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 6px;">
+                                <table class="sched-table" style="width: 100%; font-size: 12px;">
+                                    <thead>
+                                        <tr style="background: #F8FAFC;">
+                                            <th style="padding: 6px 8px; text-align: left;">Tên Nhóm / Link</th>
+                                            <th style="padding: 6px 8px; text-align: left;">Từ khóa</th>
+                                            <th style="padding: 6px 8px; text-align: left;">Thời gian</th>
+                                            <th style="padding: 6px 8px; text-align: center;">Profile</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="joined-groups-table-body">
+                                        <tr><td colspan="4" style="text-align: center; color: #94A3B8; padding: 16px;">Chưa có nhóm nào được gia nhập.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Khối bên phải cho Tab Quản lý Profiles & GPM -->
                     <div class="profiles-panel-right hidden" id="profiles-panel-right">
                         <!-- GPM Connection Status Card -->
@@ -1165,6 +1280,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <h3>💻 Nhật ký hoạt động chi tiết</h3>
                             </div>
                             <div style="display: flex; gap: 8px; align-items: center;">
+                                <button id="cancel-log-btn" class="btn btn-xs" type="button" style="display: none; background: #DC2626; color: #ffffff; border: none; font-weight: 700; border-radius: 6px; padding: 4px 12px; cursor: pointer; align-items: center; gap: 6px; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);" title="Dừng tiến trình đang chạy ngay lập tức">🛑 Dừng lại</button>
                                 <button id="copy-log-btn" class="btn btn-secondary btn-xs" type="button" style="background: #2563EB; color: #ffffff; border: none; font-weight: 700; border-radius: 6px; padding: 4px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.15);" title="Sao chép toàn bộ nhật ký">📋 Copy Full Log</button>
                                 <button id="clear-log" class="btn-ghost btn-xs" style="color: #94A3B8;">Xóa</button>
                             </div>
@@ -1238,6 +1354,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <!-- Toast message overlay -->
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app.js?v=5.6.0"></script>
+    <script type="module" src="js/main.js"></script>
+    <script src="app.js?v=5.8.0"></script>
 </body>
 </html>

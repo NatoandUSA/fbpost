@@ -2,7 +2,7 @@
 """
 ai_spinner.py - Module Xào Bài Viết Tự Động (AI Content Spinner)
 Hỗ trợ:
-1. Gemini AI Online: Tận dụng Gemini 1.5 Flash / 2.5 Flash API để tạo bài viết độc nhất 100%.
+1. Gemini AI Online: Tận dụng Gemini Flash API (model cấu hình được, mặc định Gemini 3.8 Flash) để tạo bài viết độc nhất 100%.
 2. Local Smart Spinner Offline: Tự động phân tích và sinh biến thể thông minh chuyên ngành Homestay Huế / Du lịch
    ngay cả khi không có mạng hoặc không có API Key.
 """
@@ -13,6 +13,34 @@ import random
 import json
 import urllib.request
 import urllib.error
+import time as _time
+
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+
+def _preserves_core_info(original: str, generated: str) -> bool:
+    """Reject AI output that drops phone/price/link/address invariants from the source."""
+    src = extract_core_info(original)
+    dst = generated or ""
+    required = src["phones"] + src["prices"] + src["links"]
+    if any(value not in dst for value in required):
+        return False
+    for address in src["addresses"]:
+        key = address.split(":", 1)[-1].strip()
+        if key and key not in dst:
+            return False
+    return True
+
+def _urlopen_json(req, timeout=20, attempts=3):
+    last = None
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last = exc
+            if attempt + 1 < attempts:
+                _time.sleep(1.5 * (attempt + 1))
+    raise last or RuntimeError("Gemini request failed")
 
 # Kho ngữ liệu thông minh Local Spinner cho Homestay Huế & Du lịch
 HOOKS_HOMESTAY = [
@@ -148,7 +176,7 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") 
         f"NỘI DUNG BÀI GỐC:\n{content}"
     )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     payload = {
         "contents": [
             {
@@ -158,26 +186,25 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") 
             }
         ],
         "generationConfig": {
-            "temperature": 0.85,
-            "topP": 0.95,
-            "maxOutputTokens": 1024
+            "maxOutputTokens": 2048
         }
     }
 
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json", "x-goog-api-key": api_key.strip()}
     )
 
-    with urllib.request.urlopen(req, timeout=20) as response:
-        res_data = json.loads(response.read().decode("utf-8"))
+    res_data = _urlopen_json(req, timeout=20, attempts=3)
         
     candidates = res_data.get("candidates", [])
     if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
         spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
-        if spun_text:
+        if spun_text and _preserves_core_info(content, spun_text):
             return spun_text
+        if spun_text:
+            raise ValueError("Gemini output làm mất dữ liệu bắt buộc từ bài gốc")
             
     raise Exception("Gemini không trả về nội dung hợp lệ.")
 
@@ -238,19 +265,20 @@ def spin_comment(content: str, api_key: str = None) -> str:
                 "Chỉ trả về nội dung bình luận, không thêm lời dẫn giải.\n\n"
                 f"NỘI DUNG BÌNH LUẬN GỐC:\n{content}"
             )
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key.strip()}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.85, "maxOutputTokens": 300}
+                "generationConfig": {"maxOutputTokens": 512}
             }
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "x-goog-api-key": api_key.strip()})
+            data = _urlopen_json(req, timeout=15, attempts=3)
             candidates = data.get("candidates", [])
             if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
                 spun = candidates[0]["content"]["parts"][0].get("text", "").strip()
-                if spun:
+                if spun and _preserves_core_info(content, spun):
                     return spun
+                if spun:
+                    raise ValueError("Gemini output làm mất dữ liệu bắt buộc từ bình luận gốc")
         except Exception as e:
             print(f"⚠️ [AI Comment Spinner] Gemini API gặp lỗi ({e}), chuyển sang Local Comment Spinner.")
 

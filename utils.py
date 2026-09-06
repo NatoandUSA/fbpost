@@ -5,6 +5,10 @@ import os
 import sys
 import json
 import tempfile
+import urllib.parse
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional
+from datetime import datetime
 
 if sys.platform == "win32":
     try:
@@ -14,6 +18,43 @@ if sys.platform == "win32":
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+@dataclass
+class ActionResult:
+    success: bool
+    code: str
+    message: str = ""
+    state: str = ""  # "published", "pending", "joined", "requested", "failed", "cancelled", etc.
+    target_url: str = ""
+    result_url: str = ""
+    url_type: str = "unknown"  # "post", "group", "page", "unknown"
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    data: Dict[str, Any] = None
+
+    def __post_init__(self):
+        if self.data is not None and not self.metadata:
+            self.metadata = self.data
+        elif self.metadata and self.data is None:
+            self.data = self.metadata
+        elif self.data is None and not self.metadata:
+            self.data = {}
+            self.metadata = self.data
+
+    def __bool__(self) -> bool:
+        return bool(self.success)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "success": self.success,
+            "code": self.code,
+            "message": self.message,
+            "state": self.state,
+            "target_url": self.target_url,
+            "result_url": self.result_url,
+            "url_type": self.url_type,
+            "metadata": self.metadata,
+            "data": self.metadata,
+        }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ACCOUNTS_FILE = os.path.join(BASE_DIR, "accounts.json")
@@ -59,31 +100,36 @@ def process_spintax(text, anti_hash=False):
 
     return text
 
-def human_type(page, locator, text):
-    """
-    Types text character by character with random delays and occasional simulated typos.
-    """
-    print("Typing with human-like behavior (including possible typos)...")
+def _ensure_focus(locator):
     try:
-        locator.focus()
-    except Exception:
-        pass
-    
-    keyboard = page.keyboard
-    
-    # Facebook composer inputs often need an initial click - dùng force=True để tránh bị backdrop che
-    try:
-        locator.click(force=True, timeout=5000)
+        locator.focus(timeout=2000)
+        return True
     except Exception:
         try:
-            locator.focus()
+            locator.click(force=True, timeout=2000)
+            return True
         except Exception:
-            pass
+            return False
+
+def human_type(page, locator, text, multiline_key="Enter"):
+    """
+    Types text character by character with random delays and occasional simulated typos.
+    Nếu multiline_key='Shift+Enter': Xuống dòng bằng Shift+Enter để tránh bị gửi bình luận sớm trong khung comment Facebook.
+    """
+    print("Typing with human-like behavior (including possible typos)...")
+    _ensure_focus(locator)
     time.sleep(random.uniform(0.5, 1.0))
+    keyboard = page.keyboard
     
-    for char in text:
+    for idx, char in enumerate(text):
+        if idx > 0 and idx % 40 == 0:
+            _ensure_focus(locator)
+
         if char == '\n':
-            keyboard.press('Enter')
+            if multiline_key == "Shift+Enter":
+                keyboard.press('Shift+Enter')
+            else:
+                keyboard.press('Enter')
             time.sleep(random.uniform(0.15, 0.35))
             continue
 
@@ -109,9 +155,30 @@ def human_type(page, locator, text):
         if char in ['.', ',', '!', '?', ' '] and random.random() < 0.08:
             time.sleep(random.uniform(0.2, 0.6))
 
+def safe_mouse_wheel(page, dx, dy):
+    """
+    Safely scroll using mouse wheel without crashing on TargetClosedError or disconnected CDP.
+    """
+    if not page:
+        return False
+    try:
+        if hasattr(page, "is_closed") and page.is_closed():
+            return False
+        page.mouse.wheel(dx, dy)
+        return True
+    except Exception:
+        return False
+
 # ---- Multi-Account Handling ----
 
 def load_accounts():
+    try:
+        from repositories.account_repo import AccountRepository
+        accs = AccountRepository().list_accounts()
+        if accs:
+            return accs
+    except Exception:
+        pass
     if not os.path.exists(ACCOUNTS_FILE):
         return []
     try:
@@ -121,6 +188,11 @@ def load_accounts():
         return []
 
 def save_accounts(accounts):
+    try:
+        from repositories.account_repo import AccountRepository
+        AccountRepository().save_accounts(accounts)
+    except Exception:
+        pass
     temporary_path = None
     try:
         fd, temporary_path = tempfile.mkstemp(prefix="accounts-", suffix=".json", dir=".")
@@ -253,8 +325,28 @@ def launch_browser(account, p, api_url=None):
                 if payload.get("success") and ws_endpoint:
                     browser = connect_over_cdp_when_ready(p, ws_endpoint)
                 elif isinstance(payload, dict):
-                    gpm_error = f"GPM Local API: {payload.get('message', 'no connection data returned')}"
-                    print(f"GPM Local API did not start the profile: {payload.get('message', 'no connection data returned')}")
+                    msg = str(payload.get('message', ''))
+                    if "ALREADY_OPEN" in msg.upper() or "ALREADY OPEN" in msg.upper():
+                        print(f"⚠️ Profile GPM Local API đang mở (ALREADY_OPEN). Tự động đóng và khởi động lại...")
+                        try:
+                            requests.get(f"{api_url.rstrip('/')}/profiles/stop/{profile_id}", timeout=6)
+                        except Exception:
+                            pass
+                        time.sleep(2.5)
+                        print(f"Khởi động lại Profile GPM Local API: {url}")
+                        try:
+                            retry_payload = requests.get(url, timeout=25).json()
+                            retry_data = retry_payload.get("data") if isinstance(retry_payload, dict) else None
+                            ws_endpoint = retry_data.get("websocket_debugging_url") if isinstance(retry_data, dict) else None
+                            if retry_payload.get("success") and ws_endpoint:
+                                browser = connect_over_cdp_when_ready(p, ws_endpoint)
+                            else:
+                                gpm_error = f"GPM Local API retry: {retry_payload.get('message', 'no connection data returned')}"
+                        except Exception as re_err:
+                            gpm_error = f"GPM Local API retry failed: {re_err}"
+                    else:
+                        gpm_error = f"GPM Local API: {payload.get('message', 'no connection data returned')}"
+                        print(f"GPM Local API did not start the profile: {payload.get('message', 'no connection data returned')}")
             except Exception as e:
                 gpm_error = f"GPM Local API connection failed: {e}"
                 print(f"GPM Local API attempt failed: {e}")
@@ -272,8 +364,33 @@ def launch_browser(account, p, api_url=None):
                     cdp_url = cdp_address if cdp_address.startswith("http") else f"http://{cdp_address}"
                     browser = connect_over_cdp_when_ready(p, cdp_url)
                 elif isinstance(payload, dict):
-                    gpm_error = f"GPM Login v4: {payload.get('message', 'no CDP address returned')}"
-                    print(f"GPM Login v4 did not start the profile: {payload.get('message', 'no CDP address returned')}")
+                    msg = str(payload.get('message', ''))
+                    if "ALREADY_OPEN" in msg.upper() or "ALREADY OPEN" in msg.upper():
+                        print(f"⚠️ Profile GPM đang mở (ALREADY_OPEN). Đang tự động đóng và khởi động lại...")
+                        try:
+                            requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=6)
+                        except Exception:
+                            pass
+                        try:
+                            requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=6)
+                        except Exception:
+                            pass
+                        time.sleep(2.5)
+                        print(f"Khởi động lại Profile GPM: {url}")
+                        try:
+                            retry_payload = requests.get(url, params={"win_scale": 0.8}, timeout=25).json()
+                            retry_data = retry_payload.get("data") if isinstance(retry_payload, dict) else None
+                            retry_cdp = retry_data.get("remote_debugging_address") if isinstance(retry_data, dict) else None
+                            if retry_cdp:
+                                cdp_url = retry_cdp if retry_cdp.startswith("http") else f"http://{retry_cdp}"
+                                browser = connect_over_cdp_when_ready(p, cdp_url)
+                            else:
+                                gpm_error = f"GPM Login v4 retry failed: {retry_payload.get('message', 'no CDP address returned')}"
+                        except Exception as re_err:
+                            gpm_error = f"GPM Login v4 retry connection failed: {re_err}"
+                    else:
+                        gpm_error = f"GPM Login v4: {payload.get('message', 'no CDP address returned')}"
+                        print(f"GPM Login v4 did not start the profile: {payload.get('message', 'no CDP address returned')}")
             except Exception as e:
                 gpm_error = f"GPM Login v4 CDP connection failed: {e}"
                 print(f"GPM Login v4 API attempt failed: {e}")
@@ -296,7 +413,16 @@ def launch_browser(account, p, api_url=None):
             raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
             
         context = browser.contexts[0]
-        page = context.pages[0] if context.pages else context.new_page()
+        page = None
+        for p_item in context.pages:
+            try:
+                if not p_item.is_closed():
+                    page = p_item
+                    break
+            except Exception:
+                pass
+        if not page:
+            page = context.new_page()
         
         # Bỏ qua lỗi SSL / Certificate từ Proxy (ERR_CERT_COMMON_NAME_INVALID)
         try:
@@ -315,6 +441,19 @@ def launch_browser(account, p, api_url=None):
         try:
             page.on("dialog", _auto_accept_dialog)
             context.on("page", lambda p_new: p_new.on("dialog", _auto_accept_dialog))
+            context.add_init_script("""
+                try {
+                    window.onbeforeunload = null;
+                    window.addEventListener('beforeunload', (e) => {
+                        delete e['returnValue'];
+                        e.stopImmediatePropagation();
+                    }, true);
+                    Object.defineProperty(window, 'onbeforeunload', {
+                        get: () => null,
+                        set: () => {}
+                    });
+                } catch(e) {}
+            """)
         except Exception:
             pass
             
@@ -354,7 +493,16 @@ def launch_browser(account, p, api_url=None):
                 "--start-maximized"
             ]
         )
-        page = context.pages[0] if context.pages else context.new_page()
+        page = None
+        for p_item in context.pages:
+            try:
+                if not p_item.is_closed():
+                    page = p_item
+                    break
+            except Exception:
+                pass
+        if not page:
+            page = context.new_page()
 
         def _auto_accept_local_dialog(d):
             try:
@@ -366,6 +514,19 @@ def launch_browser(account, p, api_url=None):
         try:
             page.on("dialog", _auto_accept_local_dialog)
             context.on("page", lambda p_new: p_new.on("dialog", _auto_accept_local_dialog))
+            context.add_init_script("""
+                try {
+                    window.onbeforeunload = null;
+                    window.addEventListener('beforeunload', (e) => {
+                        delete e['returnValue'];
+                        e.stopImmediatePropagation();
+                    }, true);
+                    Object.defineProperty(window, 'onbeforeunload', {
+                        get: () => null,
+                        set: () => {}
+                    });
+                } catch(e) {}
+            """)
         except Exception:
             pass
 
@@ -378,9 +539,28 @@ def close_browser(browser_or_context, account=None, api_url=None):
         account = api_url
         api_url = None
 
-    if not isinstance(account, dict):
-        account = {}
+    if browser_or_context:
+        try:
+            pages = []
+            if hasattr(browser_or_context, "pages"):
+                pages = browser_or_context.pages
+            elif hasattr(browser_or_context, "contexts"):
+                for ctx in browser_or_context.contexts:
+                    pages.extend(getattr(ctx, "pages", []))
+            for pg in pages:
+                try:
+                    if not pg.is_closed():
+                        pg.evaluate("window.onbeforeunload = null;")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            browser_or_context.close()
+        except Exception:
+            pass
 
+    account = account or {}
     acc_type = account.get("type", "local")
     profile_id = account.get("profile_path_or_id", "")
     
@@ -406,12 +586,8 @@ def close_browser(browser_or_context, account=None, api_url=None):
             requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=5)
         except Exception:
             pass
-
-    if browser_or_context:
-        try:
-            browser_or_context.close()
-        except Exception:
-            pass
+        # Cho phép Chrome và GPM giải phóng port/file lock
+        time.sleep(1.0)
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 
@@ -438,7 +614,11 @@ def clean_and_randomize_image(image_path: str, output_dir: str = None) -> str:
         import uuid
         
         if not output_dir:
-            output_dir = os.path.join("runtime", "processed_media")
+            try:
+                import paths
+                output_dir = str(paths.DATA_DIR / "processed_media")
+            except Exception:
+                output_dir = os.path.join("runtime", "processed_media")
         os.makedirs(output_dir, exist_ok=True)
         
         ext = os.path.splitext(image_path)[1].lower()
@@ -671,118 +851,213 @@ def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
 
 def click_post_publish_button(page, dialog=None):
     """
-    Tìm và bấm chính xác nút Đăng / Post / Chia sẻ ở dưới cùng của dialog Facebook:
-    - Loại trừ triệt để nút 'Đăng ẩn danh' (Anonymous posting switch) và các nút điều hướng khác.
-    - Tự động thoát các màn hình phụ (Cảm xúc/Check-in) nếu bị kẹt.
-    - Tự động chờ ảnh xử lý xong nếu nút đang bị aria-disabled='true'.
-    - Tự động re-evaluate dialog và quét toàn trang (full-page fallback) nếu locator cũ bị stale.
-    - Bấm Đăng bằng cả Playwright click lẫn Native DOM dispatch event để chắc chắn gửi thành công.
-    - Xác nhận dialog đóng lại sau khi xuất bản.
+    Tìm và bấm chính xác nút Đăng / Post ở dưới cùng của dialog Facebook:
+    - Vô hiệu hóa beforeunload để ngăn chặn triệt để popup 'Rời khỏi trang web?'.
+    - Kích hoạt cơ chế 3 tầng:
+        1. Native JavaScript DOM Engine: Tìm phần tử có text 'Đăng'/'Post' hoặc aria-label 'Đăng'/'Post',
+           loại bỏ 'Đăng ẩn danh', cuộn vào giữa màn hình, dispatch toàn bộ Pointer/Mouse events và click().
+        2. Shortcut phím tắt Ctrl+Enter / Cmd+Enter trên ô soạn thảo.
+        3. Playwright Locator fallback: Quét từ đáy lên trên, Accessible Name và Text regex.
+    - Chờ đợi theo vòng lặp (polling up to 15s) cho đến khi ảnh tải xong và nút Đăng sẵn sàng.
+    - Xác nhận dialog đóng hoặc bài viết được tiếp nhận.
     """
-    # Hàm phụ trợ tìm dialog đang hiển thị trên trang
-    def find_active_dialog():
-        try:
-            dlgs = page.locator("div[role='dialog']")
-            for idx in range(dlgs.count() - 1, -1, -1):
-                d = dlgs.nth(idx)
-                if d.is_visible():
-                    return d
-        except Exception:
-            pass
-        return None
+    FORBIDDEN_WORDS = [
+        "ẩn danh", "anonym", "quy tắc", "rule", "chỉnh sửa", "cài đặt",
+        "setting", "lên lịch", "schedule", "bản nháp", "draft", "hủy", "cancel", "đóng", "close",
+        "chia sẻ lên", "chia sẻ vào", "share to", "thêm vào"
+    ]
+    PUBLISH_LABELS = ["đăng", "post", "chia sẻ ngay", "share now"]
 
-    active_dialog = dialog if (dialog and dialog.is_visible()) else find_active_dialog()
-
-    # 0. Nếu đang bị kẹt ở màn hình phụ (Cảm xúc, Vị trí...), bấm Quay lại để về màn hình soạn thảo chính
+    # 0. Vô hiệu hóa beforeunload ngay lập tức trên page
     try:
-        back_selectors = [
-            "div[role='dialog'] div[aria-label*='Quay lại' i]",
-            "div[role='dialog'] div[aria-label*='Back' i]",
-            "div[role='dialog'] div[role='button']:has-text('Quay lại')",
-            "div[role='dialog'] div[role='button']:has-text('Back')",
-            "div[aria-label*='Quay lại' i]",
-            "div[aria-label*='Back' i]"
-        ]
-        for b_sel in back_selectors:
-            b_btn = page.locator(b_sel).first
-            if b_btn.is_visible(timeout=800):
-                print("👈 Phát hiện màn hình phụ, đang bấm Quay lại để về màn hình đăng bài chính...")
-                b_btn.click(force=True)
-                time.sleep(1.5)
-                active_dialog = find_active_dialog()
-                break
+        page.evaluate("""
+            try {
+                window.onbeforeunload = null;
+                window.addEventListener('beforeunload', (e) => {
+                    delete e['returnValue'];
+                    e.stopImmediatePropagation();
+                }, true);
+            } catch(e) {}
+        """)
     except Exception:
         pass
 
-    # 1. Kiểm tra bước xác nhận 'Tiếp' / 'Next' trước khi đăng (khi có nhiều ảnh hoặc giao diện phân bước)
-    next_selectors = [
-        "div[role='dialog'] div[aria-label*='Tiếp' i]",
-        "div[role='dialog'] div[aria-label*='Next' i]",
-        "div[role='dialog'] div[role='button']:has-text('Tiếp')",
-        "div[role='dialog'] div[role='button']:has-text('Next')",
-        "div[role='button']:has-text('Tiếp')",
-        "div[role='button']:has-text('Next')"
-    ]
-    for n_sel in next_selectors:
+    def is_composer_dialog(d):
         try:
-            n_btn = page.locator(n_sel).first
-            if n_btn.is_visible(timeout=800) and n_btn.is_enabled():
-                print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), đang bấm để chuyển sang màn hình xuất bản...")
-                n_btn.click(force=True, timeout=4000)
-                time.sleep(2.0)
-                active_dialog = find_active_dialog()
-                break
+            if not d.is_visible():
+                return False
+            # Dialog soạn bài phải chứa ô nhập bài viết (không phải ô bình luận)
+            tb = d.locator("div[role='textbox']")
+            if tb.count() > 0:
+                for idx in range(tb.count()):
+                    lbl = ((tb.nth(idx).get_attribute("aria-label") or "") + " " + (tb.nth(idx).get_attribute("aria-placeholder") or "")).lower()
+                    if "bình luận" not in lbl and "comment" not in lbl:
+                        return True
+            # Hoặc chứa nút Đăng/Post
+            has_post_btn = d.locator("div[role='button'], button").filter(has_text=re.compile(r"^\s*(Đăng|Post)\s*$", re.IGNORECASE)).count() > 0
+            if has_post_btn:
+                return True
         except Exception:
-            continue
+            pass
+        return False
 
-    FORBIDDEN_WORDS = [
-        "ẩn danh", "anonym", "quy tắc", "rule", "chỉnh sửa", "cài đặt",
-        "setting", "lên lịch", "schedule", "bản nháp", "draft", "hủy", "cancel", "đóng", "close"
-    ]
-    PUBLISH_LABELS = ["đăng", "post", "chia sẻ ngay", "chia sẻ", "share now", "share"]
-
-    # Danh sách các scope cần quét: ưu tiên bên trong dialog, nếu không thấy thì quét toàn trang
-    search_scopes = []
-    if active_dialog and active_dialog.is_visible():
-        search_scopes.append(("dialog", active_dialog))
-    search_scopes.append(("page", page))
-
-    target_btn = None
-
-    for scope_name, container in search_scopes:
-        # Cách A: Selector aria-label case-insensitive (chuẩn xác và nhanh nhất)
-        for label in PUBLISH_LABELS:
+    def get_search_containers():
+        containers = []
+        if dialog:
             try:
-                btn = container.locator(f"div[role='button'][aria-label='{label}' i], div[aria-label='{label}' i]").first
-                if btn.is_visible(timeout=800):
-                    btn_text = (btn.inner_text() or "").lower()
-                    aria = (btn.get_attribute("aria-label") or "").lower()
-                    if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
-                        target_btn = btn
-                        print(f"🎯 Đã tìm thấy nút Đăng qua aria-label='{label}' ({scope_name})")
-                        break
+                if dialog.is_visible():
+                    containers.append(dialog)
             except Exception:
-                continue
-        if target_btn:
-            break
+                pass
+        try:
+            dlgs = page.locator("div[role='dialog']").all()
+            for d in dlgs:
+                try:
+                    if is_composer_dialog(d) and d not in containers:
+                        containers.append(d)
+                except Exception:
+                    pass
+            # Nếu chưa có container nào, thêm tất cả dialog visible
+            if not containers:
+                for d in dlgs:
+                    try:
+                        if d.is_visible() and d not in containers:
+                            containers.append(d)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        containers.append(page)
+        return containers
 
-        # Cách B: Dùng Playwright get_by_role (chuẩn accessible name của W3C)
-        if not target_btn:
+    JS_DISPATCH_PUBLISH = """
+    (() => {
+        try {
+            const allDialogs = Array.from(document.querySelectorAll('div[role="dialog"]')).filter(d => {
+                try {
+                    const s = window.getComputedStyle(d);
+                    if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+                    const r = d.getBoundingClientRect();
+                    return r.width > 50 && r.height > 50;
+                } catch(e) { return false; }
+            });
+
+            let composerDialog = null;
+            for (const d of allDialogs) {
+                const tbs = Array.from(d.querySelectorAll('div[role="textbox"]'));
+                const isPostTb = tbs.some(tb => {
+                    const a = ((tb.getAttribute('aria-label') || '') + ' ' + (tb.getAttribute('aria-placeholder') || '')).toLowerCase();
+                    return !a.includes('bình luận') && !a.includes('comment');
+                });
+                if (isPostTb) {
+                    composerDialog = d;
+                    break;
+                }
+            }
+
+            const scopes = [];
+            if (composerDialog) scopes.push(composerDialog);
+            for (const d of allDialogs) {
+                if (d !== composerDialog) scopes.push(d);
+            }
+            scopes.push(document.body);
+
+            const FORBIDDEN = [
+                'ẩn danh', 'anonym', 'quy tắc', 'rule', 'chỉnh sửa', 'cài đặt',
+                'setting', 'lên lịch', 'schedule', 'bản nháp', 'draft', 'hủy',
+                'cancel', 'đóng', 'close', 'chia sẻ lên', 'chia sẻ vào', 'thêm vào'
+            ];
+
+            for (const scope of scopes) {
+                const candidates = Array.from(scope.querySelectorAll('div[role="button"], button, span[role="button"], div[aria-label], div[tabindex="0"]'));
+
+                for (let i = candidates.length - 1; i >= 0; i--) {
+                    const el = candidates[i];
+                    const r = el.getBoundingClientRect();
+                    if (r.width === 0 || r.height === 0) continue;
+                    if (el.closest('div[role="textbox"]')) continue;
+
+                    const text = (el.innerText || el.textContent || '').trim();
+                    const aria = (el.getAttribute('aria-label') || '').trim();
+                    const combined = (text + ' ' + aria).toLowerCase();
+
+                    if (FORBIDDEN.some(fw => combined.includes(fw))) continue;
+
+                    const isMatch = 
+                        /^(Đăng|Post|Chia sẻ ngay|Share now)$/i.test(text) ||
+                        /^(Đăng|Post|Chia sẻ ngay|Share now)$/i.test(aria) ||
+                        text === 'Đăng' || text === 'Post';
+
+                    if (isMatch) {
+                        const isDisabled = el.getAttribute('aria-disabled') === 'true' || el.disabled;
+                        if (isDisabled) {
+                            return { found: true, disabled: true, text: text || aria };
+                        }
+
+                        el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                        ['pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach(evt => {
+                            el.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+                        });
+                        if (typeof el.click === 'function') {
+                            el.click();
+                        }
+                        return { found: true, clicked: true, text: text || aria };
+                    }
+                }
+            }
+        } catch (e) {
+            return { error: e.toString() };
+        }
+        return { found: false };
+    })()
+    """
+
+    def locate_publish_button():
+        containers = get_search_containers()
+        for c in containers:
+            # Cách 1: Selector aria-label chuẩn xác
+            for label in PUBLISH_LABELS:
+                try:
+                    btn = c.locator(f"div[role='button'][aria-label='{label}' i], div[aria-label='{label}' i], button[aria-label='{label}' i]").first
+                    if btn.is_visible(timeout=300):
+                        btn_text = (btn.inner_text() or "").lower()
+                        aria = (btn.get_attribute("aria-label") or "").lower()
+                        if not any(fw in btn_text or fw in aria for fw in FORBIDDEN_WORDS):
+                            return btn
+                except Exception:
+                    continue
+
+            # Cách 2: Playwright get_by_role (Accessible name W3C)
             try:
-                role_btn = container.get_by_role("button", name=re.compile(r"^(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)$", re.IGNORECASE)).first
-                if role_btn.is_visible(timeout=1000):
-                    text_content = (role_btn.inner_text() or "").lower()
-                    if not any(fw in text_content for fw in FORBIDDEN_WORDS):
-                        target_btn = role_btn
-                        print(f"🎯 Đã tìm thấy nút Đăng qua Accessible Name ({scope_name})")
-                        break
+                for pat in [r"^\s*Đăng\s*$", r"^\s*Post\s*$", r"^(Đăng|Post|Chia sẻ ngay|Share now)$"]:
+                    btns = c.get_by_role("button", name=re.compile(pat, re.IGNORECASE))
+                    for idx in range(btns.count()):
+                        role_btn = btns.nth(idx)
+                        if role_btn.is_visible(timeout=300):
+                            text_content = (role_btn.inner_text() or "").lower()
+                            aria_content = (role_btn.get_attribute("aria-label") or "").lower()
+                            if not any(fw in text_content or fw in aria_content for fw in FORBIDDEN_WORDS):
+                                return role_btn
             except Exception:
                 pass
 
-        # Cách C: Quét tất cả button trong container TỪ DƯỚI LÊN TRÊN (nút Đăng luôn nằm ở đáy)
-        if not target_btn:
+            # Cách 3: Regex text trên div[role='button'] / button
             try:
-                buttons = container.locator("div[role='button'], button")
+                regex_post = re.compile(r"^\s*(Đăng|Post)\s*$", re.IGNORECASE)
+                candidates = c.locator("div[role='button'], button").filter(has_text=regex_post)
+                for idx in range(candidates.count() - 1, -1, -1):
+                    cand = candidates.nth(idx)
+                    if cand.is_visible(timeout=300):
+                        cand_text = (cand.inner_text() or "").lower()
+                        aria = (cand.get_attribute("aria-label") or "").lower()
+                        if not any(fw in cand_text or fw in aria for fw in FORBIDDEN_WORDS):
+                            return cand
+            except Exception:
+                pass
+
+            # Cách 4: Quét ngược từ đáy dialog lên trên (nút Đăng luôn ở dưới cùng)
+            try:
+                buttons = c.locator("div[role='button'], button")
                 count = buttons.count()
                 for idx in range(count - 1, -1, -1):
                     b = buttons.nth(idx)
@@ -798,104 +1073,174 @@ def click_post_publish_button(page, dialog=None):
 
                         first_line = text.split("\n")[0].strip().lower() if text else ""
                         if first_line in PUBLISH_LABELS or aria.lower() in PUBLISH_LABELS:
-                            target_btn = b
-                            print(f"🎯 Đã tìm thấy nút Đăng qua quét DOM từ dưới lên: '{text or aria}' ({scope_name})")
-                            break
+                            return b
                     except Exception:
                         continue
             except Exception:
                 pass
-            if target_btn:
-                break
 
-        # Cách D: Regex text trên div[role='button']
-        if not target_btn:
+        return None
+
+    target_btn = None
+    clicked_via_js = False
+
+    # Polling chờ nút Đăng sẵn sàng trong tối đa 15 giây (mỗi lần 0.5s)
+    for attempt in range(30):
+        # 1. Thử qua Native DOM Engine trước
+        try:
+            js_res = page.evaluate(JS_DISPATCH_PUBLISH)
+            if isinstance(js_res, dict):
+                if js_res.get("clicked"):
+                    print(f"🎯 Đã kích hoạt nút Đăng qua Native DOM Engine: '{js_res.get('text')}'!")
+                    clicked_via_js = True
+                    break
+                elif js_res.get("disabled"):
+                    print(f"⏳ Nút Đăng đang xử lý ảnh/phương tiện (aria-disabled=true), chờ 1s... ({attempt + 1}/30)")
+                    time.sleep(1.0)
+                    continue
+        except Exception:
+            pass
+
+        # 2. Thử qua Playwright locator
+        target_btn = locate_publish_button()
+        if target_btn:
+            break
+
+        # Nếu sau 2s chưa thấy, kiểm tra xem có kẹt ở màn hình phụ không (Quay lại / Tiếp)
+        if attempt in (4, 8):
             try:
-                regex_post = re.compile(r"^\s*(Đăng|Post|Chia sẻ ngay|Chia sẻ|Share now|Share)\s*$", re.IGNORECASE)
-                candidates = container.locator("div[role='button'], button").filter(has_text=regex_post)
-                if candidates.count() > 0:
-                    cand = candidates.last
-                    cand_text = (cand.inner_text() or "").lower()
-                    if not any(fw in cand_text for fw in FORBIDDEN_WORDS):
-                        target_btn = cand
-                        print(f"🎯 Đã tìm thấy nút Đăng qua regex text filter ({scope_name})")
+                back_selectors = [
+                    "div[role='dialog'] div[aria-label*='Quay lại' i]",
+                    "div[role='dialog'] div[aria-label*='Back' i]",
+                    "div[role='dialog'] div[role='button']:has-text('Quay lại')",
+                ]
+                for b_sel in back_selectors:
+                    b_btn = page.locator(b_sel).first
+                    if b_btn.is_visible(timeout=300):
+                        print("👈 Phát hiện màn hình phụ trong dialog, bấm Quay lại...")
+                        b_btn.click(force=True)
+                        time.sleep(1.0)
+                        break
+
+                next_selectors = [
+                    "div[role='dialog'] div[aria-label*='Tiếp' i]",
+                    "div[role='dialog'] div[aria-label*='Next' i]",
+                    "div[role='dialog'] div[role='button']:has-text('Tiếp')",
+                ]
+                for n_sel in next_selectors:
+                    n_btn = page.locator(n_sel).first
+                    if n_btn.is_visible(timeout=300) and n_btn.is_enabled():
+                        print("👉 Phát hiện bước xác nhận 'Tiếp' (Next), bấm chuyển sang xuất bản...")
+                        n_btn.click(force=True)
+                        time.sleep(1.0)
                         break
             except Exception:
                 pass
-            if target_btn:
-                break
 
-    if not target_btn:
-        # Nếu vẫn không thấy nút bằng mọi cách, báo lỗi chi tiết thay vì phím tắt không hiệu lực
-        raise Exception("Không tìm thấy nút 'Đăng' hợp lệ trên giao diện Facebook. Hãy đảm bảo tài khoản đã tham gia nhóm.")
+        time.sleep(0.5)
 
-    # Đảm bảo nút được cuộn vào màn hình
-    try:
-        target_btn.scroll_into_view_if_needed(timeout=2000)
-    except Exception:
-        pass
+    # Nếu chưa click qua JS:
+    if not clicked_via_js:
+        if not target_btn:
+            # Fallback cuối cùng: Thử gửi phím tắt Ctrl+Enter trên ô soạn bài
+            try:
+                tb = page.locator("div[role='dialog'] div[role='textbox']").first
+                if tb.is_visible(timeout=500):
+                    tb.focus()
+                    page.keyboard.press("Control+Enter")
+                    print("⌨️ Đã bấm tổ hợp phím Ctrl+Enter để xuất bản bài viết!")
+                    clicked_via_js = True
+            except Exception:
+                pass
 
-    # Chờ nếu nút đang bị aria-disabled (ảnh/video đang render hoặc tải lên)
-    for _ in range(25):
-        try:
-            if target_btn.get_attribute("aria-disabled") == "true":
-                print("⏳ Nút Đăng đang xử lý phương tiện/ảnh (aria-disabled=true), chờ 1s...")
-                time.sleep(1.0)
-            else:
-                break
-        except Exception:
-            break
+        if not clicked_via_js and not target_btn:
+            raise Exception("Không tìm thấy nút 'Đăng' hợp lệ trên giao diện Facebook. Hãy đảm bảo tài khoản đã tham gia nhóm.")
 
-    # Tiến hành bấm Đăng (kết hợp cả Playwright Click và Native Click để đảm bảo 100%)
-    clicked = False
-    try:
-        target_btn.click(force=True, timeout=5000)
-        clicked = True
-        print("✅ Đã click nút Đăng bài viết!")
-    except Exception as e:
-        print(f"⚠️ Playwright click lỗi nhẹ ({e}), chuyển sang Native DOM click...")
-        try:
-            target_btn.evaluate("(el) => el.click()")
-            clicked = True
-            print("✅ Đã kích hoạt Native DOM click cho nút Đăng!")
-        except Exception as e2:
-            print(f"❌ Không thể click nút Đăng: {e2}")
+        if target_btn:
+            try:
+                btn_name = target_btn.inner_text().strip() or target_btn.get_attribute('aria-label')
+            except Exception:
+                btn_name = "Đăng"
+            print(f"🎯 Đã xác định chính xác nút Đăng: '{btn_name}'")
 
-    # Chờ và xác nhận dialog đóng lại sau khi bấm đăng (Xác nhận bài viết đã thực sự gửi lên FB)
+            # Đảm bảo nút được cuộn vào viewport
+            try:
+                target_btn.scroll_into_view_if_needed(timeout=2000)
+            except Exception:
+                pass
+
+            # Chờ ảnh/video upload xong nếu nút đang bị aria-disabled='true'
+            for _ in range(25):
+                try:
+                    if target_btn.get_attribute("aria-disabled") == "true":
+                        print("⏳ Nút Đăng đang chờ xử lý phương tiện/ảnh (aria-disabled=true), chờ 1s...")
+                        time.sleep(1.0)
+                    else:
+                        break
+                except Exception:
+                    break
+
+            # Click nút Đăng (kết hợp cả Playwright Click lẫn Native DOM Click)
+            clicked = False
+            try:
+                target_btn.click(force=True, timeout=5000)
+                print("✅ Đã click nút Đăng bài viết qua Playwright!")
+                clicked = True
+            except Exception as e:
+                print(f"⚠️ Playwright click: {e}, chuyển sang Native DOM click...")
+                try:
+                    target_btn.evaluate("(el) => el.click()")
+                    print("✅ Đã kích hoạt Native DOM click cho nút Đăng!")
+                    clicked = True
+                except Exception as e2:
+                    print(f"❌ Lỗi click nút Đăng: {e2}")
+
+            if not clicked:
+                print("❌ Không thể click nút Đăng bài viết (cả Playwright lẫn Native DOM đều thất bại).")
+                return False
+
+    # Chờ Facebook xử lý và đóng khung bài viết
     print("⏳ Đang chờ Facebook xử lý và đóng khung bài viết...")
     dialog_closed = False
-    for _ in range(15):
+    for i in range(15):
         time.sleep(1.0)
         try:
-            # Kiểm tra xem dialog còn hiển thị không
-            cur_dlg = find_active_dialog()
-            if not cur_dlg or not cur_dlg.is_visible():
+            # Kiểm tra xem còn composer dialog nào hiển thị không
+            open_composer = None
+            dialogs = page.locator("div[role='dialog']").all()
+            for d in dialogs:
+                if is_composer_dialog(d):
+                    open_composer = d
+                    break
+
+            if not open_composer or not open_composer.is_visible():
                 dialog_closed = True
                 print("🎉 Khung soạn thảo đã đóng — Bài đăng đã được Facebook tiếp nhận thành công!")
                 break
             else:
-                # Nếu sau 4s dialog vẫn chưa đóng, kích hoạt thêm 1 lần native click hỗ trợ
-                if _ == 4 and target_btn:
-                    try:
-                        target_btn.evaluate("(el) => el.click()")
-                    except Exception:
-                        pass
-        except Exception:
-            dialog_closed = True
-            break
+                dlg_text = (open_composer.inner_text() or "").lower()
+                # Phát hiện lỗi chặn bài hoặc vi phạm tiêu chuẩn
+                if any(err_kw in dlg_text for err_kw in ["không thể đăng", "bị hạn chế", "bị chặn", "something went wrong", "tạm thời bị chặn", "vi phạm tiêu chuẩn"]):
+                    print(f"❌ Facebook thông báo lỗi bài viết: {dlg_text[:150]}")
+                    return False
+
+                # Kiểm tra xem có thông báo chờ admin duyệt xuất hiện không
+                if re.search(r"(bài viết.*chờ.*duyệt|post.*pending.*approval|submitted.*approval|đang chờ.*phê duyệt)", dlg_text, re.I):
+                    print("📋 Phát hiện thông báo: Bài viết đã được gửi và đang chờ Quản trị viên duyệt!")
+                    dialog_closed = True
+                    break
+
+                # v6: Sau khi submit đã được kích hoạt, chỉ quan sát trạng thái terminal.
+                # Không tự gửi lại Ctrl+Enter/click vì Facebook có thể vẫn đang xử lý request đầu tiên.
+                if i in (3, 6):
+                    print("⏳ Facebook vẫn đang xử lý bài đăng; tiếp tục chờ xác nhận, không gửi lại thao tác.")
+        except Exception as exc:
+            print(f"⚠️ Đang chờ xử lý đóng khung soạn thảo: {exc}")
+            continue
 
     if not dialog_closed:
-        # Kiểm tra xem có thông báo từ chối / cảnh báo nào từ Facebook bên trong dialog không
-        try:
-            if active_dialog:
-                alert = active_dialog.locator("[role='alert'], div[aria-live='assertive']").first
-                if alert.is_visible():
-                    alert_text = alert.inner_text().strip()
-                    if alert_text:
-                        print(f"⚠️ Cảnh báo từ Facebook: {alert_text}")
-        except Exception:
-            pass
-        print("⚠️ Khung soạn thảo chưa đóng hoàn toàn sau 15s. Có thể bài viết đang gửi phê duyệt hoặc cần quản trị viên duyệt.")
+        print("❌ Không xác minh được Facebook đã tiếp nhận bài viết (Khung soạn bài vẫn chưa đóng sau 15 giây).")
+        return False
 
     return True
 
@@ -1091,63 +1436,157 @@ def add_checkin(page):
 
 POSTED_LINKS_FILE = "posted_links.json"
 
-def record_posted_link(target, post_url, content=""):
+def _resolve_posted_links_file():
+    global POSTED_LINKS_FILE
+    if POSTED_LINKS_FILE and POSTED_LINKS_FILE != "posted_links.json" and os.path.isabs(POSTED_LINKS_FILE):
+        return POSTED_LINKS_FILE
+    try:
+        import paths
+        p = str(paths.DATA_DIR / "posted_links.json")
+        if os.path.exists(p) or not os.path.exists(POSTED_LINKS_FILE):
+            POSTED_LINKS_FILE = p
+            return p
+    except Exception:
+        pass
+    return POSTED_LINKS_FILE or "posted_links.json"
+
+def record_posted_link(target, post_url, content="", note="", account_id="", status="", url_type=None, publish_state=None):
     """
-    Lưu link bài viết đã đăng thành công vào posted_links.json để phục vụ comment seeding.
+    Lưu link bài viết đã đăng thành công vào SQLite và posted_links.json để phục vụ quản lý và comment seeding.
     """
     if not post_url or not post_url.startswith("http"):
         return
+
+    is_post = any(kw in post_url for kw in ["/posts/", "/permalink/", "permalink.php", "/videos/"])
+    derived_url_type = url_type or ("post" if is_post else ("group" if "/groups/" in post_url else "page"))
+    derived_state = publish_state or ("published" if is_post else "pending")
+    final_status = status or note or ("Đã xuất bản" if is_post else "Chờ duyệt")
+
+    # 1. Ghi nhận vào SQLite qua ActivityRepository
     try:
+        from repositories.activity_repo import ActivityRepository
+        ActivityRepository().record_posted_link(
+            target=target,
+            post_url=post_url,
+            content=content,
+            note=final_status,
+            account_id=account_id or "default",
+            status=final_status,
+            url_type=derived_url_type,
+            publish_state=derived_state,
+        )
+    except Exception:
+        pass
+
+    # 2. Ghi nhận vào JSON file (đồng bộ kép)
+    try:
+        target_file = _resolve_posted_links_file()
         items = []
-        if os.path.exists(POSTED_LINKS_FILE):
+        if os.path.exists(target_file):
             try:
-                with open(POSTED_LINKS_FILE, "r", encoding="utf-8") as f:
+                with open(target_file, "r", encoding="utf-8") as f:
                     items = json.load(f)
                     if not isinstance(items, list):
                         items = []
             except Exception:
                 items = []
         
-        # Tránh trùng lặp
-        if not any(item.get("url") == post_url for item in items):
-            now_ts = time.time()
+        now_ts = time.time()
+        # Tránh ghi đúp cùng 1 bài trong vòng 60 giây
+        is_recent_dup = False
+        for item in items:
+            item_ts = float(item.get("timestamp", 0))
+            if item.get("target") == target and item.get("url") == post_url and (now_ts - item_ts) < 60.0:
+                is_recent_dup = True
+                break
+
+        if not is_recent_dup:
             item = {
                 "id": str(int(now_ts * 1000)),
                 "timestamp": now_ts,
                 "target": target,
                 "url": post_url,
+                "url_type": derived_url_type,
+                "publish_state": derived_state,
+                "account_id": account_id or "default",
+                "status": final_status,
                 "content_preview": (content[:120] + "...") if len(content) > 120 else content,
                 "posted_at": time.strftime("%Y-%m-%d %H:%M:%S")
             }
             items.insert(0, item)
             # Giữ tối đa 200 link gần nhất
             items = items[:200]
-            with open(POSTED_LINKS_FILE, "w", encoding="utf-8") as f:
+            with open(target_file, "w", encoding="utf-8") as f:
                 json.dump(items, f, indent=2, ensure_ascii=False)
-            print(f"💾 Đã lưu bài viết vào Lịch sử đăng: {post_url}")
+            print(f"💾 Đã lưu bài viết vào Lịch sử đăng: {post_url} [{item['status']}] (Loại: {derived_url_type})")
     except Exception as e:
         print(f"⚠️ Lỗi khi lưu link bài đăng: {e}")
 
 def normalize_target_url(url: str) -> str:
     """
-    Chuẩn hóa URL nhóm/trang để so sánh trùng lặp chính xác (bỏ query parameters, trailing slashes, lowercase).
+    Chuẩn hóa URL nhóm/trang để so sánh trùng lặp chính xác (bỏ query parameters, trailing slashes, scheme đồng nhất, www/m subdomain đồng nhất).
     """
     if not url:
         return ""
-    clean = url.strip().lower().split("?")[0].rstrip("/")
-    return clean
+    u = url.strip()
+    if not u.startswith(("http://", "https://")):
+        u = "https://" + u.lstrip("/")
+    try:
+        parsed = urllib.parse.urlparse(u)
+        netloc = (parsed.netloc or "").lower()
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
+        elif netloc.startswith("m."):
+            netloc = netloc[2:]
+        path = (parsed.path or "").rstrip("/")
+        return f"https://{netloc}{path}"
+    except Exception:
+        return u.lower().split("?")[0].rstrip("/")
 
 def is_recently_posted(target_url: str, hours: float = 24.0):
     """
     Kiểm tra xem target_url (Group hoặc Page) đã từng đăng bài thành công trong vòng `hours` giờ qua chưa.
+    Chỉ chặn nếu bài trước đó ở trạng thái 'published' hoặc 'pending'.
+    KHÔNG chặn retry nếu lần trước thất bại hoặc unverified.
     Trả về (True, hours_ago, posted_at_str) nếu trùng lặp gần đây, ngược lại trả về (False, 0, None).
     """
-    if not target_url or not os.path.exists(POSTED_LINKS_FILE):
+    if not target_url:
         return False, 0, None
 
     norm_target = normalize_target_url(target_url)
+    cutoff_ts = time.time() - (hours * 3600.0)
+
+    # 1. Thử kiểm tra từ ActivityRepository SQLite
     try:
-        with open(POSTED_LINKS_FILE, "r", encoding="utf-8") as f:
+        from repositories.activity_repo import ActivityRepository
+        db_links = ActivityRepository().list_posted_links(limit=300)
+        for row in db_links:
+            pub_state = (row.get("publish_state") or "").lower()
+            # Nếu có publish_state, chỉ chặn published hoặc pending
+            if pub_state and pub_state not in ("published", "pending"):
+                continue
+            item_target = normalize_target_url(row.get("target") or "")
+            # So sánh chính xác tuyệt đối (exact match)
+            if item_target and item_target == norm_target:
+                posted_at_str = row.get("created_at") or ""
+                try:
+                    dt = datetime.strptime(posted_at_str, "%Y-%m-%d %H:%M:%S")
+                    item_ts = dt.timestamp()
+                    if item_ts >= cutoff_ts:
+                        hours_ago = round((time.time() - item_ts) / 3600.0, 1)
+                        return True, hours_ago, posted_at_str
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # 2. Kiểm tra từ JSON file (fallback)
+    target_file = _resolve_posted_links_file()
+    if not os.path.exists(target_file):
+        return False, 0, None
+
+    try:
+        with open(target_file, "r", encoding="utf-8") as f:
             items = json.load(f)
             if not isinstance(items, list):
                 return False, 0, None
@@ -1156,9 +1595,12 @@ def is_recently_posted(target_url: str, hours: float = 24.0):
         max_age_seconds = hours * 3600.0
 
         for item in items:
+            pub_state = (item.get("publish_state") or "").lower()
+            if pub_state and pub_state not in ("published", "pending"):
+                continue
             recorded_target = normalize_target_url(item.get("target", ""))
-            # So sánh target hoặc kiểm tra target có nằm trong url bài đăng
-            if recorded_target and (recorded_target == norm_target or norm_target in recorded_target or recorded_target in norm_target):
+            # So sánh chính xác tuyệt đối (exact match)
+            if recorded_target and recorded_target == norm_target:
                 ts = item.get("timestamp")
                 if ts:
                     diff = now - float(ts)
@@ -1166,7 +1608,6 @@ def is_recently_posted(target_url: str, hours: float = 24.0):
                         hours_ago = round(diff / 3600.0, 1)
                         return True, hours_ago, item.get("posted_at", "gần đây")
                 else:
-                    # Fallback parse posted_at nếu bản ghi cũ chưa có trường timestamp
                     posted_at = item.get("posted_at")
                     if posted_at:
                         try:
@@ -1182,56 +1623,192 @@ def is_recently_posted(target_url: str, hours: float = 24.0):
 
     return False, 0, None
 
-def scrape_post_link(page, target="", content=""):
+def clean_facebook_post_url(href: str) -> str:
     """
-    Trích xuất permalink của bài viết vừa đăng từ thông báo toast hoặc đầu Newsfeed.
+    Chuẩn hóa và làm sạch liên kết bài viết Facebook.
+    - Giữ nguyên query params thiết yếu cho permalink.php / story.php (story_fbid, id, fbid, post_id).
+    - Loại bỏ tracking params (__cft__, __tn__, ref, notif_id, etc.).
+    - Đảm bảo đầy đủ scheme và domain https://www.facebook.com.
+    """
+    if not href:
+        return ""
+    href = href.strip()
+    if not href.startswith("http"):
+        href = f"https://www.facebook.com{href if href.startswith('/') else '/' + href}"
+
+    parsed = urllib.parse.urlparse(href)
+    # Nếu là permalink.php hoặc link dạng query params
+    if "permalink.php" in parsed.path or "story.php" in parsed.path:
+        qs = urllib.parse.parse_qs(parsed.query)
+        keep_keys = {"story_fbid", "id", "fbid", "post_id"}
+        filtered_qs = {k: v for k, v in qs.items() if k in keep_keys}
+        new_query = urllib.parse.urlencode(filtered_qs, doseq=True)
+        return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", new_query, ""))
+
+    # Đối với các URL dạng /posts/123, /permalink/123, /videos/123, /groups/xyz/permalink/123
+    return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+def text_similarity_match(needle: str, haystack: str) -> bool:
+    """
+    Kiểm tra xem một đoạn văn bản needle có xuất hiện trong haystack hay không
+    sử dụng cơ chế multi-checkpoint (prefix, middle, suffix) để tránh false-positives
+    từ các câu mở đầu phổ biến.
+    """
+    def norm(s):
+        return re.sub(r"[\s\u200b\u200c\u200d]+", " ", s or "").strip().lower()
+
+    a = norm(needle)
+    b = norm(haystack)
+
+    if not a or not b:
+        return False
+
+    if len(a) <= 40:
+        return a in b
+
+    checkpoints = [
+        a[:60],
+        a[len(a)//2:len(a)//2 + 60],
+        a[-60:],
+    ]
+
+    matches = sum(1 for part in checkpoints if len(part) >= 15 and part in b)
+    return matches >= 2
+
+TOAST_CONFIRM_RE = re.compile(r"(đã đăng|đã chia sẻ|bài viết của bạn đã|bài viết đã được chia sẻ|posted|published|shared|your post has been)", re.I)
+
+def scrape_post_link(page, target="", content="", account_id="") -> ActionResult:
+    """
+    Trích xuất permalink của bài viết vừa đăng:
+    - Ưu tiên 1: Chỉ quét link từ Toast/Alert/Notification container xác nhận xuất bản.
+    - Ưu tiên 2: Quét feed article nhưng chỉ chọn article khớp nội dung bài viết vừa đăng (multi-checkpoint).
+    - Fallback: Nếu không tìm thấy link trực tiếp, kiểm tra modal duyệt pending (scoped vào dialog/alert container).
+      Nếu unverified -> success=False. Chỉ POST_PENDING với dialog xác nhận mới success=True.
     """
     print("Đang quét tìm liên kết của bài đăng vừa tạo...")
     clean_href = None
     try:
-        # Chờ modal soạn thảo đóng hoàn toàn
-        page.wait_for_selector("div[role='dialog']", state="hidden", timeout=15000)
-        time.sleep(3.0)
+        time.sleep(2.0)
         
-        # Cách 1: Tìm thông báo Toast nổi lên của Facebook ("Xem bài viết", "View post", "Xem bài đăng")
+        # Cách 1: Tìm thông báo Toast/Alert nổi lên của Facebook xác nhận xuất bản
         try:
-            toast_links = page.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php']").all()
-            for link in toast_links:
-                href = link.get_attribute("href")
-                if href and ("view" in (link.inner_text() or "").lower() or "xem" in (link.inner_text() or "").lower()):
-                    clean = href.split("?")[0]
-                    if not clean.startswith("http"):
-                        clean = f"https://www.facebook.com{clean}"
-                    clean_href = clean
-                    break
+            toast_containers = page.locator("div[role='alert'], div[role='status']").all()
+            for container in toast_containers:
+                try:
+                    c_text = container.inner_text(timeout=500) or ""
+                    if TOAST_CONFIRM_RE.search(c_text):
+                        toast_links = container.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php']").all()
+                        for link in toast_links:
+                            href = link.get_attribute("href")
+                            if href:
+                                clean = clean_facebook_post_url(href)
+                                if clean:
+                                    clean_href = clean
+                                    break
+                        if clean_href:
+                            break
+                except Exception:
+                    continue
         except Exception:
             pass
 
-        # Cách 2: Quét thẻ bài viết đầu tiên trên tường (Top feed article)
+        # Cách 2: Quét các article trên feed nhưng BẮT BUỘC phải khớp nội dung vừa đăng (multi-checkpoint)
         if not clean_href:
             try:
-                first_article = page.locator("div[role='article'], div[role='feed'] > div").first
-                if first_article.is_visible(timeout=3000):
-                    # Tìm link thời gian đăng (timestamp link) hoặc link permalink
-                    article_links = first_article.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']").all()
-                    for link in article_links:
-                        href = link.get_attribute("href")
-                        if href and not any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
-                            clean = href.split("?")[0]
-                            if not clean.startswith("http"):
-                                clean = f"https://www.facebook.com{clean}"
-                            clean_href = clean
+                articles = page.locator("div[role='article']").all()[:5]
+                for art in articles:
+                    try:
+                        if not art.is_visible(timeout=1000):
+                            continue
+                        art_text = art.inner_text() or ""
+                        # Nếu có content truyền vào, chỉ nhận article khớp nội dung
+                        if content and not text_similarity_match(content, art_text):
+                            continue
+                        article_links = art.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']").all()
+                        for link in article_links:
+                            href = link.get_attribute("href")
+                            if href and not any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
+                                clean = clean_facebook_post_url(href)
+                                if clean:
+                                    clean_href = clean
+                                    break
+                        if clean_href:
                             break
+                    except Exception:
+                        continue
             except Exception:
                 pass
 
         if clean_href:
             print(f"POSTED_LINK:{clean_href}")
-            record_posted_link(target, clean_href, content)
-            return clean_href
+            record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
+            return ActionResult(
+                success=True,
+                code="POST_PUBLISHED",
+                state="published",
+                target_url=target,
+                result_url=clean_href,
+                url_type="post",
+                message="Đã đăng bài và trích xuất thành công liên kết bài viết."
+            )
             
-        print("⚠️ Không thể trích xuất liên kết bài viết tự động (sẽ lưu link mục tiêu).")
-        return None
+        # Fallback: Kiểm tra xem có dialog/alert thông báo chờ admin duyệt hay không (chỉ scope vào dialog/alert)
+        fallback_url = target or (page.url if hasattr(page, 'url') else "")
+        target_type = "group" if "/groups/" in fallback_url else ("page" if "/pages/" in fallback_url else "unknown")
+        is_pending = False
+        try:
+            pending_notice = page.locator(
+                "div[role='alert'], div[role='status'], div[role='dialog']"
+            ).filter(
+                has_text=re.compile(
+                    r"(bài viết.*chờ.*duyệt|post.*pending.*approval|submitted.*approval)",
+                    re.I,
+                )
+            )
+            is_pending = pending_notice.count() > 0
+        except Exception:
+            pass
+
+        if is_pending:
+            note_status = "Đang chờ admin duyệt"
+            publish_state = "pending"
+            record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state=publish_state)
+            print(f"💾 Đã ghi nhận bài đăng vào Lịch sử: {fallback_url} [{note_status}]")
+            return ActionResult(
+                success=True,
+                code="POST_PENDING",
+                state=publish_state,
+                target_url=target,
+                result_url="",
+                url_type=target_type,
+                message=f"Bài đăng đã được tiếp nhận [{note_status}]"
+            )
+
+        # Nếu không có permalink và cũng không có thông báo pending xác nhận -> unverified (success=False)
+        note_status = "Đã gửi đăng (Chưa trích xuất được link bài)"
+        publish_state = "submitted_unverified"
+        record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state=publish_state)
+        print(f"⚠️ Bài đăng chưa được xác thực permalink: {fallback_url} [{note_status}]")
+        return ActionResult(
+            success=False,
+            code="POST_SUBMITTED_UNVERIFIED",
+            state=publish_state,
+            target_url=target,
+            result_url="",
+            url_type=target_type,
+            message="Bài đăng đã gửi nhưng chưa trích xuất được permalink xác thực."
+        )
     except Exception as e:
         print(f"⚠️ Cảnh báo: Lỗi khi quét liên kết bài đăng: {e}")
-        return None
+        fallback_url = target or (page.url if hasattr(page, 'url') else "")
+        target_type = "group" if "/groups/" in fallback_url else "page"
+        record_posted_link(target, fallback_url, content, note="Đã gửi đăng (lỗi quét)", account_id=account_id, url_type=target_type, publish_state="submitted_unverified")
+        return ActionResult(
+            success=False,
+            code="POST_SUBMITTED_UNVERIFIED",
+            state="submitted_unverified",
+            target_url=target,
+            result_url="",
+            url_type=target_type,
+            message=f"Đã gửi đăng (gặp lỗi khi quét link: {e})"
+        )

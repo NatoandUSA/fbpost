@@ -114,9 +114,11 @@ def scrape_comments(post_url, max_comments=50, account_id=None, gpm_api_url=None
                 
             print(f"✅ Đã quét được {len(scraped_data)} bình luận.")
             print("JSON_DATA:" + json.dumps(scraped_data, ensure_ascii=False))
+            return scraped_data
             
         except Exception as e:
             print(f"❌ Có lỗi xảy ra khi quét bình luận: {e}")
+            return None
         finally:
             if account:
                 close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
@@ -126,6 +128,7 @@ def scrape_comments(post_url, max_comments=50, account_id=None, gpm_api_url=None
 
 if __name__ == "__main__":
     import argparse
+    import sys
     parser = argparse.ArgumentParser()
     parser.add_argument("url")
     parser.add_argument("--limit", type=int, default=50)
@@ -133,4 +136,5 @@ if __name__ == "__main__":
     parser.add_argument("--gpm-api", default=None)
     args = parser.parse_args()
     
-    scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
+    res = scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
+    sys.exit(0 if res is not None else 1)

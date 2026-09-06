@@ -8,30 +8,77 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+import re
+import hmac
+import hashlib
+import base64
+import struct
+import random
+import time
+import traceback
 import requests
 from flask import Flask, request, jsonify, Response, send_from_directory
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
+from utils import (
+    load_accounts,
+    save_accounts,
+    resolve_account,
+    fetch_gpm_profiles,
+    pick_random_photos,
+)
+from paths import (
+    BASE_DIR,
+    DATA_DIR,
+    UPLOAD_DIR,
+    LOG_DIR,
+    BACKUP_DIR,
+    DB_FILE,
+    get_version,
+)
+from repositories.account_repo import AccountRepository
+from repositories.settings_repo import SettingsRepository
+from repositories.group_repo import GroupRepository
+from repositories.campaign_repo import CampaignRepository
+from repositories.activity_repo import ActivityRepository
+from repositories.vault_repo import VaultRepository
+from services.migration_service import run_migration_if_needed
+from db import backup_db
+
+# Auto-migrate legacy state to SQLite if needed
+try:
+    run_migration_if_needed()
+except Exception as _mig_err:
+    print(f"Warning: Database migration initialization error: {_mig_err}")
 
 app = Flask(__name__, static_folder='static')
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_FILE = str(BASE_DIR / "config.json")
-QUEUE_FILE = str(BASE_DIR / "publication_queue.json")
-CAMPAIGNS_FILE = str(BASE_DIR / "campaigns.json")
-ACTIVITY_LOG_FILE = str(BASE_DIR / "profile_activity.json")
-GROUPS_FILE = str(BASE_DIR / "group_registry.json")
-MANUAL_GROUP_QUEUE_FILE = str(BASE_DIR / "manual_group_queue.json")
-VAULT_FILE = str(BASE_DIR / "account_vault.json")
-ACCOUNTS_FILE = str(BASE_DIR / "accounts.json")
-STATE_FILE = str(BASE_DIR / "state.json")
-AUTH_STATUS_FILE = str(BASE_DIR / "auth_status.json")
-UPLOAD_DIR = (BASE_DIR / "uploads").resolve()
+from api.jobs import jobs_bp
+app.register_blueprint(jobs_bp)
+
+try:
+    from services.job_manager import JobManager
+    _reconciled = JobManager().reconcile_on_startup()
+    if _reconciled:
+        print(f"[JobManager] Đã khôi phục {_reconciled} tiến trình dở dang.")
+except Exception as _jm_err:
+    print(f"Warning: JobManager init error: {_jm_err}")
+
+CONFIG_FILE = str(DATA_DIR / "config.json")
+QUEUE_FILE = str(DATA_DIR / "publication_queue.json")
+CAMPAIGNS_FILE = str(DATA_DIR / "campaigns.json")
+ACTIVITY_LOG_FILE = str(DATA_DIR / "profile_activity.json")
+GROUPS_FILE = str(DATA_DIR / "group_registry.json")
+MANUAL_GROUP_QUEUE_FILE = str(DATA_DIR / "manual_group_queue.json")
+VAULT_FILE = str(DATA_DIR / "account_vault.json")
+ACCOUNTS_FILE = str(DATA_DIR / "accounts.json")
+STATE_FILE = str(DATA_DIR / "state.json")
+AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page"}
-APP_VERSION = "5.7.0"
-BUILD_TIME = "2026-09-04 17:00"
+APP_VERSION = get_version()
+BUILD_TIME = "2026-09-06 v6.0.1"
 
 
 def app_build_info():
@@ -45,16 +92,27 @@ def app_build_info():
     }
 
 def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        return {}
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+        cfg = SettingsRepository().get_config()
+        if cfg:
+            return cfg
+    except Exception:
+        pass
+    return {}
 
 def save_config(data):
+    try:
+        SettingsRepository().save_config(data)
+    except Exception:
+        pass
     config_directory = str(Path(CONFIG_FILE).resolve().parent)
     fd, temp_path = tempfile.mkstemp(prefix="config-", suffix=".json", dir=config_directory)
     try:
@@ -66,16 +124,27 @@ def save_config(data):
             os.unlink(temp_path)
 
 def load_queue():
-    if not os.path.exists(QUEUE_FILE):
-        return []
+    if os.path.exists(QUEUE_FILE):
+        try:
+            with open(QUEUE_FILE, "r", encoding="utf-8") as f:
+                queue = json.load(f)
+            if isinstance(queue, list):
+                return queue
+        except (OSError, json.JSONDecodeError):
+            pass
     try:
-        with open(QUEUE_FILE, "r", encoding="utf-8") as f:
-            queue = json.load(f)
-        return queue if isinstance(queue, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
+        q = CampaignRepository().list_queue()
+        if q:
+            return q
+    except Exception:
+        pass
+    return []
 
 def save_queue(queue):
+    try:
+        CampaignRepository().save_queue(queue)
+    except Exception:
+        pass
     queue_directory = str(Path(QUEUE_FILE).resolve().parent)
     fd, temp_path = tempfile.mkstemp(prefix="publication-queue-", suffix=".json", dir=queue_directory)
     try:
@@ -87,16 +156,27 @@ def save_queue(queue):
             os.unlink(temp_path)
 
 def load_campaigns():
-    if not os.path.exists(CAMPAIGNS_FILE):
-        return []
+    if os.path.exists(CAMPAIGNS_FILE):
+        try:
+            with open(CAMPAIGNS_FILE, "r", encoding="utf-8") as f:
+                campaigns = json.load(f)
+            if isinstance(campaigns, list):
+                return campaigns
+        except (OSError, json.JSONDecodeError):
+            pass
     try:
-        with open(CAMPAIGNS_FILE, "r", encoding="utf-8") as f:
-            campaigns = json.load(f)
-        return campaigns if isinstance(campaigns, list) else []
-    except (OSError, json.JSONDecodeError):
-        return []
+        c = CampaignRepository().list_campaigns()
+        if c:
+            return c
+    except Exception:
+        pass
+    return []
 
 def save_campaigns(campaigns):
+    try:
+        CampaignRepository().save_campaigns(campaigns)
+    except Exception:
+        pass
     campaign_directory = str(Path(CAMPAIGNS_FILE).resolve().parent)
     fd, temp_path = tempfile.mkstemp(prefix="campaigns-", suffix=".json", dir=campaign_directory)
     try:
@@ -131,6 +211,10 @@ def save_json_list(filename, value, prefix):
 
 def record_profile_activity(profile_id, action, target="", content="", outcome="finished"):
     """Persist an operational audit trail; it never asserts Facebook publication."""
+    try:
+        ActivityRepository().record_activity(profile_id, action, target, content, outcome)
+    except Exception:
+        pass
     activities = load_json_list(ACTIVITY_LOG_FILE)
     activities.insert(0, {
         "id": uuid.uuid4().hex[:12],
@@ -709,6 +793,12 @@ def vault_payload(data, existing=None):
     }, None
 
 
+def sanitize_vault_entry(entry: dict) -> dict:
+    safe = dict(entry)
+    safe["has_password"] = bool(entry.get("password"))
+    safe.pop("password", None)
+    return safe
+
 @app.route('/api/vault', methods=['GET'])
 def get_vault_accounts():
     query = request.args.get("q", "").strip().casefold()
@@ -718,7 +808,7 @@ def get_vault_accounts():
         entries = [entry for entry in entries if entry.get("platform", "").casefold() == platform]
     if query:
         entries = [entry for entry in entries if query in " ".join(str(entry.get(key, "")) for key in ("platform", "account_name", "email", "notes")).casefold()]
-    return jsonify(entries)
+    return jsonify([sanitize_vault_entry(e) for e in entries])
 
 
 @app.route('/api/vault', methods=['POST'])
@@ -733,7 +823,7 @@ def create_vault_account():
     entries = load_json_list(VAULT_FILE)
     entries.insert(0, entry)
     save_json_list(VAULT_FILE, entries, "account-vault-")
-    return jsonify(entry), 201
+    return jsonify(sanitize_vault_entry(entry)), 201
 
 
 @app.route('/api/vault/<entry_id>', methods=['PATCH'])
@@ -752,7 +842,7 @@ def update_vault_account(entry_id):
         entry["password_changed_at"] = fields["password_changed_at"] or datetime.now().date().isoformat()
         entry.setdefault("password_history", []).insert(0, {"at": now_iso(), "event": "Đã cập nhật mật khẩu"})
     save_json_list(VAULT_FILE, entries, "account-vault-")
-    return jsonify(entry)
+    return jsonify(sanitize_vault_entry(entry))
 
 
 @app.route('/api/vault/<entry_id>', methods=['DELETE'])
@@ -980,18 +1070,49 @@ def generate_2fa():
     except Exception as e:
         return jsonify({"error": f"Lỗi tính toán mã 2FA: {str(e)}"}), 400
 
-POSTED_LINKS_FILE = "posted_links.json"
+POSTED_LINKS_FILE = str(DATA_DIR / "posted_links.json")
 
 @app.route('/api/posted-links', methods=['GET', 'DELETE'])
 def api_posted_links():
     if request.method == 'DELETE':
         try:
+            try:
+                from repositories.activity_repo import ActivityRepository
+                ActivityRepository().clear_posted_links()
+            except Exception:
+                pass
             with open(POSTED_LINKS_FILE, "w", encoding="utf-8") as f:
                 json.dump([], f)
             return jsonify({"status": "cleared", "count": 0})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
-            
+
+    # Ưu tiên 1: Đọc từ SQLite ActivityRepository (nguồn chuẩn của hệ thống)
+    try:
+        from repositories.activity_repo import ActivityRepository
+        db_items = ActivityRepository().list_posted_links(limit=200)
+        formatted = []
+        for r in db_items:
+            content_str = r.get("content") or ""
+            preview = (content_str[:120] + "...") if len(content_str) > 120 else content_str
+            formatted.append({
+                "id": str(r.get("id", "")),
+                "url": r.get("url", ""),
+                "target": r.get("target", ""),
+                "content": content_str,
+                "content_preview": preview,
+                "note": r.get("note", ""),
+                "status": r.get("status") or r.get("note") or "Đã xuất bản",
+                "account_id": r.get("account_id", ""),
+                "url_type": r.get("url_type", "unknown"),
+                "publish_state": r.get("publish_state", "unknown"),
+                "posted_at": r.get("created_at", ""),
+            })
+        return jsonify(formatted)
+    except Exception as dbe:
+        print(f"⚠️ Không thể đọc posted_links từ DB: {dbe}")
+
+    # Fallback 2: Đọc từ JSON file nếu DB chưa có
     if not os.path.exists(POSTED_LINKS_FILE):
         return jsonify([])
     try:
@@ -1000,6 +1121,46 @@ def api_posted_links():
             return jsonify(data if isinstance(data, list) else [])
     except Exception:
         return jsonify([])
+
+JOINED_GROUPS_FILE = str(DATA_DIR / "joined_groups.json")
+
+@app.route('/api/joined-groups', methods=['GET', 'DELETE'])
+def api_joined_groups():
+    if request.method == 'DELETE':
+        try:
+            try:
+                from repositories.group_repo import GroupRepository
+                GroupRepository().clear_joined_groups()
+            except Exception:
+                pass
+            with open(JOINED_GROUPS_FILE, "w", encoding="utf-8") as f:
+                json.dump([], f)
+            return jsonify({"status": "cleared", "count": 0})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    if os.path.exists(JOINED_GROUPS_FILE):
+        try:
+            with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return jsonify(data if isinstance(data, list) else [])
+        except Exception:
+            return jsonify([])
+
+    default_file = str(BASE_DIR / "joined_groups.json")
+    if os.path.abspath(JOINED_GROUPS_FILE) != os.path.abspath(default_file):
+        return jsonify([])
+
+    # Ưu tiên 1: Đọc từ SQLite GroupRepository
+    try:
+        from repositories.group_repo import GroupRepository
+        db_groups = GroupRepository().list_joined_groups()
+        if db_groups:
+            return jsonify(db_groups)
+    except Exception as ge:
+        print(f"⚠️ Không thể đọc joined_groups từ DB: {ge}")
+
+    return jsonify([])
 
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
@@ -1023,8 +1184,32 @@ def api_ai_spin():
 
 @app.route('/api/photos/list', methods=['GET'])
 def api_photos_list():
+    import tempfile
     folder = request.args.get("folder", "uploads").strip()
     target_dir = Path(folder).resolve()
+
+    # Kiểm tra allowlist chống path traversal
+    cfg = load_config()
+    allowed_dirs = [
+        UPLOAD_DIR.resolve(),
+        (BASE_DIR / "photos").resolve(),
+        (BASE_DIR / "uploads").resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+    ]
+    cfg_photo = cfg.get("photo_folder", "").strip()
+    if cfg_photo:
+        try:
+            allowed_dirs.append(Path(cfg_photo).resolve())
+        except Exception:
+            pass
+
+    is_allowed = any(
+        target_dir == allowed or target_dir.is_relative_to(allowed)
+        for allowed in allowed_dirs
+    )
+    if not is_allowed:
+        return jsonify({"exists": False, "count": 0, "photos": [], "error": "Thư mục không được phép truy cập."}), 403
+
     if not target_dir.exists() or not target_dir.is_dir():
         return jsonify({"exists": False, "count": 0, "photos": []})
     valid_exts = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -1039,430 +1224,19 @@ def api_photos_list():
         "photos": photos[:50]
     })
 
-@app.route('/api/run', methods=['POST'])
-def run_script():
-    import random
-    import time
-    
-    data = json_body()
-    cmd = data.get('command')
-    account_id = data.get('accountId')
-    cfg = load_config()
-    gpm_api = data.get('gpmApiUrl') or cfg.get('gpm_api_url', 'http://127.0.0.1:19995')
-    
-    # Rotate accounts and delay settings
-    rotate_accounts = data.get('rotateAccounts', False)
-    if account_id == '__rotate__':
-        rotate_accounts = True
-        account_id = None
-    delay_min = max(5, int(data.get('delayMin') or cfg.get('delay_min', 300)))
-    delay_max = max(delay_min, int(data.get('delayMax') or cfg.get('delay_max', 600)))
-
-    # Feeling and checkin settings
-    feeling = data.get('feeling', False)
-    checkin = data.get('checkin', False)
-
-    # NCL FB Pro Inspirations: AI Content Spinner, Random Photo Picker, Anti-Duplicate 24h
-    auto_spin = data.get('autoSpin', False)
-    gemini_api_key = data.get('geminiApiKey') or cfg.get('gemini_api_key', '')
-    photo_folder = data.get('photoFolder', '').strip()
-    photo_count_mode = data.get('photoCountMode', '2-4')
-    skip_duplicate = data.get('skipDuplicate24h', True)
-    clean_exif = data.get('cleanExif', True)
-    anti_hash_text = data.get('antiHashText', True)
-
-    # Tự tìm & gia nhập Group theo keyword trong lúc chờ giãn cách
-    auto_join_groups = data.get('autoJoinGroups', cfg.get('auto_join_groups', False))
-    group_keywords = str(data.get('groupKeywords') or cfg.get('group_keywords', 'Homestay Huế, Du lịch Huế')).strip()
-    
-    def generate():
-        process_environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-
-        def start_cli_process(command):
-            return subprocess.Popen(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                env=process_environment,
-            )
-
-        def build_cmd_for_account(acc_id):
-            cmd_list = [sys.executable, "main.py"]
-            if acc_id:
-                cmd_list.extend(["--account-id", acc_id])
-            if gpm_api:
-                cmd_list.extend(["--gpm-api", gpm_api])
-            return cmd_list
-
-        # Load accounts for round-robin rotation (CHỈ xoay tua trên các tài khoản đã lưu trong accounts.json)
-        accounts_pool = []
-        if rotate_accounts and cmd != 'auth':
-            try:
-                all_accs = load_accounts()
-                accounts_pool = [a for a in all_accs if a.get("id")]
-            except Exception:
-                accounts_pool = []
-
-            # Fallback nếu frontend gửi kèm accountIds hoặc accounts
-            if not accounts_pool and (data.get('accountIds') or data.get('accounts')):
-                if data.get('accounts'):
-                    accounts_pool = data.get('accounts')
-                elif data.get('accountIds'):
-                    accounts_pool = [{'id': aid, 'name': aid} for aid in data.get('accountIds')]
-
-            if not accounts_pool:
-                yield "⚠️ [Cảnh báo Anti-Spam] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n"
-                yield "💡 Vui lòng nhấn nút '📥 Nhập Nick FB từ GPM' để chọn lọc các nick Facebook mong muốn trước khi bật luân phiên.\n"
-                yield "RUN_RESULT:failed\n"
-                return
-
-        if cmd == 'auth':
-            target_auth_id = account_id
-            if target_auth_id == '__rotate__' or not target_auth_id:
-                all_accs = load_accounts()
-                target_auth_id = all_accs[0].get("id") if all_accs else None
-            full_cmd = build_cmd_for_account(target_auth_id) + ["auth"]
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            if outcome == "failed":
-                try:
-                    os.unlink(AUTH_STATUS_FILE)
-                except FileNotFoundError:
-                    pass
-            yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(target_auth_id, "auth", outcome=outcome)
-            return
-
-        if cmd == 'interact':
-            limit = max(1, min(int(data.get('limit', 5)), 50))
-            comments = data.get('comments', '')
-
-            target_accs = accounts_pool if (rotate_accounts and accounts_pool) else ([{'id': account_id}] if account_id else [{'id': None}])
-            total_accs = len(target_accs)
-            interact_failed = False
-
-            for acc_idx, acc_item in enumerate(target_accs):
-                cur_id = acc_item.get("id") if isinstance(acc_item, dict) else acc_item
-                acc_name = acc_item.get("name", cur_id) if isinstance(acc_item, dict) else cur_id
-
-                if total_accs > 1:
-                    yield f"\n🔄 [Luân phiên Nuôi nick] Khởi chạy Profile {acc_idx+1}/{total_accs}: {acc_name}\n"
-
-                cur_comments = comments
-                if auto_spin and comments:
-                    from ai_spinner import generate_interact_comments
-                    cur_comments = generate_interact_comments(comments, gemini_api_key)
-                    yield f"🤖 [AI Spin] Đã tạo danh sách bình luận nuôi nick mới cho {acc_name}!\n"
-
-                full_cmd = build_cmd_for_account(cur_id) + ["interact", "--limit", str(limit)]
-                if cur_comments:
-                    full_cmd.extend(["--comments", cur_comments])
-
-                process = start_cli_process(full_cmd)
-                for line in iter(process.stdout.readline, ''):
-                    yield line
-                outcome = "finished" if process.wait() == 0 else "failed"
-                if outcome == "failed":
-                    interact_failed = True
-                record_profile_activity(cur_id, "interact", target="newsfeed", content=cur_comments, outcome=outcome)
-
-                if acc_idx < total_accs - 1:
-                    delay = random.randint(delay_min, delay_max)
-                    mins = delay // 60
-                    secs = delay % 60
-                    yield f"\n⏳ [Anti-Spam] Nghỉ {delay}s ({mins}p {secs}s) trước khi đổi sang Profile tiếp theo...\n"
-                    time.sleep(min(delay, 5))
-
-            yield f"RUN_RESULT:{'failed' if interact_failed else 'finished'}\n"
-            return
-
-        if cmd == 'scrape':
-            target_url = data.get('target', '').strip()
-            limit = max(1, min(int(data.get('limit', 50)), 200))
-            if not target_url:
-                yield "Error: No target URL provided for scraping.\n"
-                return
-            full_cmd = build_cmd_for_account(account_id) + ["scrape", target_url, "--limit", str(limit)]
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(account_id, "scrape", target=target_url, outcome=outcome)
-            return
-
-        if cmd == 'join-group':
-            keywords = data.get('keywords') or data.get('groupKeywords') or group_keywords
-            limit = max(1, min(int(data.get('limit', 1)), 5))
-            target_id = account_id
-            if target_id == '__rotate__' or not target_id:
-                all_accs = load_accounts()
-                target_id = all_accs[0].get("id") if all_accs else None
-
-            yield f"🔍 Bắt đầu tìm kiếm & tự động xin gia nhập nhóm Facebook theo từ khóa: '{keywords}'...\n"
-            full_cmd = build_cmd_for_account(target_id) + ["join-group", "--keywords", str(keywords), "--limit", str(limit)]
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(target_id, "join-group", target=keywords, outcome=outcome)
-            return
-
-        if cmd == 'create-page':
-            page_name = data.get('name') or data.get('pageName') or data.get('page_name')
-            category = data.get('category') or 'Blogger'
-            bio = data.get('bio') or ''
-            avatar = data.get('avatar') or None
-            cover = data.get('cover') or None
-
-            if not page_name:
-                yield "Error: Chưa cung cấp tên Fanpage cần tạo.\n"
-                yield "RUN_RESULT:failed\n"
-                return
-
-            target_id = account_id
-            if target_id == '__rotate__' or not target_id:
-                all_accs = load_accounts()
-                target_id = all_accs[0].get("id") if all_accs else None
-
-            yield f"🚩 Bắt đầu tự động tạo Fanpage cá nhân: '{page_name}' (Hạng mục: {category})...\n"
-            full_cmd = build_cmd_for_account(target_id) + ["create-page", "--name", str(page_name), "--category", str(category)]
-            if bio:
-                full_cmd.extend(["--bio", str(bio)])
-            if avatar:
-                full_cmd.extend(["--avatar", str(avatar)])
-            if cover:
-                full_cmd.extend(["--cover", str(cover)])
-
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            yield f"RUN_RESULT:{outcome}\n"
-            record_profile_activity(target_id, "create-page", target=page_name, outcome=outcome)
-            return
-
-        if cmd == 'comment':
-            like_post = data.get('likePost', True)
-            comment_tasks = data.get('tasks', [])
-            if not comment_tasks:
-                targets = data.get('targets', [])
-                content = data.get('content', '')
-                comment_tasks = [{'target': t, 'content': content} for t in targets]
-
-            if not comment_tasks:
-                yield "Error: Chưa có danh sách link bài viết hoặc nội dung comment.\n"
-                return
-
-            total = len(comment_tasks)
-            batch_failed = False
-            for i, task in enumerate(comment_tasks):
-                target_url = task.get('target', '').strip()
-                comment_text = task.get('content', '').strip()
-                if not target_url or not comment_text:
-                    continue
-
-                # Xoay tua Profile GPM nếu bật rotate_accounts
-                if rotate_accounts and accounts_pool:
-                    curr_acc = accounts_pool[i % len(accounts_pool)]
-                    curr_acc_id = curr_acc.get("id")
-                    yield f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bình luận {i+1}/{total}\n"
-                else:
-                    curr_acc_id = account_id
-
-                # AI Content Spinner cho từng comment nếu bật autoSpin
-                task_comment = comment_text
-                if auto_spin:
-                    from ai_spinner import spin_comment
-                    try:
-                        task_comment = spin_comment(comment_text, gemini_api_key)
-                        yield f"🤖 [AI Comment Spinner] Đã tạo câu bình luận mới cho bài viết {i+1}/{total}!\n"
-                    except Exception:
-                        task_comment = comment_text
-
-                yield f"\n========== [Bài viết {i+1}/{total}] ==========\n"
-                yield f"Đang mở bài viết: {target_url}\n"
-
-                full_cmd = build_cmd_for_account(curr_acc_id) + ["comment", target_url, task_comment]
-                if like_post:
-                    full_cmd.append("--like")
-                if not anti_hash_text:
-                    full_cmd.append("--no-anti-hash-text")
-
-                process = start_cli_process(full_cmd)
-                for line in iter(process.stdout.readline, ''):
-                    yield line
-                outcome = "finished" if process.wait() == 0 else "failed"
-                if outcome == "failed":
-                    batch_failed = True
-                record_profile_activity(curr_acc_id, "comment", target=target_url, content=task_comment, outcome=outcome)
-
-
-                if i < total - 1:
-                    delay = random.randint(delay_min, delay_max)
-                    mins = delay // 60
-                    secs = delay % 60
-                    yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n"
-                    if auto_join_groups and group_keywords:
-                        yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
-                        time.sleep(3.0)
-                        jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
-                        jg_process = start_cli_process(jg_cmd)
-                        for line in iter(jg_process.stdout.readline, ''):
-                            yield line
-                        jg_process.wait()
-                        time.sleep(2.0)
-                        yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
-                    for sec in range(delay, 0, -1):
-                        if sec % 5 == 0 or sec <= 10:
-                            s_m = sec // 60
-                            s_s = sec % 60
-                            yield f"... còn {s_m}p {s_s}s ({sec}s)\n"
-                        time.sleep(1)
-
-            yield f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n"
-            yield "\n[Hoàn thành bình luận danh sách bài viết!]\n" if not batch_failed else "\n[Hoàn thành với một số lỗi!]\n"
-            return
-
-        # Support both old format (targets array + single content) and new format (tasks array of dicts)
-        tasks = data.get('tasks', [])
-        if not tasks:
-            targets = data.get('targets', [])
-            content = data.get('content', '')
-            tasks = [{'target': t, 'content': content, 'image': None} for t in targets]
-            
-        if not tasks:
-            yield "Error: No tasks or targets provided.\n"
-            return
-            
-        if not isinstance(tasks, list) or len(tasks) > 100:
-            yield "Error: Batch must contain between 1 and 100 tasks.\n"
-            return
-        total = len(tasks)
-        batch_failed = False
-        for i, task in enumerate(tasks):
-            if not isinstance(task, dict):
-                continue
-            target = task.get('target', '').strip()
-            content = task.get('content', '').strip()
-            image = task.get('image', None)
-            
-            # Extract task-specific parameters, falling back to global ones
-            task_feeling = task.get('feeling', feeling)
-            task_checkin = task.get('checkin', checkin)
-            
-            if not target:
-                continue
-            if len(target) > 2_000 or len(content) > 60_000:
-                yield f"Error: Target {i+1} exceeds the allowed size.\n"
-                continue
-            if image and not is_uploaded_image(image):
-                yield f"Error: Target {i+1} has an invalid image path.\n"
-                continue
-
-            # 1. Kiểm tra lọc trùng lặp 24h
-            if skip_duplicate and cmd in ("group", "page"):
-                from utils import is_recently_posted
-                is_dup, hours_ago, posted_at = is_recently_posted(target, hours=24.0)
-                if is_dup:
-                    yield f"\n========== [Mục tiêu {i+1}/{total}] ==========\n"
-                    yield f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm/Trang {target} đã được đăng lúc {posted_at} ({hours_ago}h trước). Tự động bỏ qua để bảo vệ tài khoản.\n"
-                    continue
-
-            # 2. Xào bài viết độc nhất qua AI Content Spinner nếu bật
-            task_content = content
-            if auto_spin and cmd in ("group", "page"):
-                from ai_spinner import generate_unique_variant
-                try:
-                    task_content = generate_unique_variant(content, gemini_api_key)
-                    yield f"🤖 [AI Content Spinner] Đã tạo biến thể bài viết mới cho mục tiêu {i+1}/{total}!\n"
-                except Exception as spin_err:
-                    yield f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n"
-                    task_content = content
-
-            # 3. Bốc ảnh ngẫu nhiên từ thư mục nếu có chỉ định và task chưa có ảnh
-            task_images = []
-            if photo_folder and not image:
-                from utils import pick_random_photos
-                task_images = pick_random_photos(photo_folder, photo_count_mode, clean_exif=clean_exif)
-                if task_images:
-                    yield f"📁 [Thư mục ảnh] Đã bốc ngẫu nhiên {len(task_images)} ảnh cho mục tiêu {i+1}/{total}.\n"
-
-            # Xoay tua Profile GPM nếu bật rotate_accounts
-            if rotate_accounts and accounts_pool:
-                curr_acc = accounts_pool[i % len(accounts_pool)]
-                curr_acc_id = curr_acc.get("id")
-                yield f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bài đăng {i+1}/{total}\n"
-            else:
-                curr_acc_id = account_id
-                
-            yield f"\n========== [Target {i+1}/{total}] ==========\n"
-            yield f"Posting to: {target}\n"
-            
-            full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]
-            if image:
-                full_cmd.extend(["--image", image])
-            elif task_images:
-                full_cmd.extend(["--images"] + task_images)
-            if task_feeling:
-                full_cmd.append("--feeling")
-            if task_checkin:
-                full_cmd.append("--checkin")
-            if not clean_exif:
-                full_cmd.append("--no-clean-exif")
-            if not anti_hash_text:
-                full_cmd.append("--no-anti-hash-text")
-                
-            process = start_cli_process(full_cmd)
-            for line in iter(process.stdout.readline, ''):
-                yield line
-            outcome = "finished" if process.wait() == 0 else "failed"
-            if outcome == "failed":
-                batch_failed = True
-            record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
-            
-            if i < total - 1:
-                delay = random.randint(delay_min, delay_max)
-                mins = delay // 60
-                secs = delay % 60
-                yield f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n"
-                if auto_join_groups and group_keywords:
-                    yield f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n"
-                    time.sleep(3.0)
-                    jg_cmd = build_cmd_for_account(curr_acc_id) + ["join-group", "--keywords", group_keywords, "--limit", "1"]
-                    jg_process = start_cli_process(jg_cmd)
-                    for line in iter(jg_process.stdout.readline, ''):
-                        yield line
-                    jg_process.wait()
-                    time.sleep(2.0)
-                    yield "⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n"
-                for sec in range(delay, 0, -1):
-                    if sec % 5 == 0 or sec <= 10:
-                        s_m = sec // 60
-                        s_s = sec % 60
-                        yield f"... còn {s_m}p {s_s}s ({sec}s)\n"
-                    time.sleep(1)
-                    
-        yield f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n"
-        yield "\n[Batch processing completed successfully!]\n" if not batch_failed else "\n[Batch processing completed with errors.]\n"
-        
-    return Response(generate(), mimetype='text/plain')
+# /api/run and /api/jobs routes are handled by api.jobs.jobs_bp
 
 # ===================== PAGE SCHEDULER API =====================
 
 @app.route('/api/page/config', methods=['GET'])
 def get_page_config():
     config = load_config()
-    # Never expose full token to frontend — mask it
+    # Mask token safely (never leak short token)
     token = config.get("page_access_token", "")
-    masked = f"...{token[-8:]}" if len(token) > 8 else ("(chưa cấu hình)" if not token else token)
+    if token:
+        masked = f"...{token[-4:]}" if len(token) >= 4 else "(đã cấu hình)"
+    else:
+        masked = "(chưa cấu hình)"
     return jsonify({
         "page_id": config.get("page_id", ""),
         "page_name": config.get("page_name", ""),
@@ -1599,6 +1373,14 @@ def post_now_api():
         return jsonify({"success": True, "post_id": result.get("post_id")})
     else:
         return jsonify({"error": result}), 400
+
+@app.route('/api/backup', methods=['POST'])
+def api_backup_database():
+    try:
+        backup_file = backup_db()
+        return jsonify({"success": True, "backup_file": str(backup_file), "message": "Sao lưu cơ sở dữ liệu SQLite thành công!"})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == '__main__':
     # All routes are registered before the development server starts.

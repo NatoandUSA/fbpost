@@ -70,14 +70,14 @@ def login_account(account_id=None, gpm_api_url=None):
     """
     if not account_id:
         login()
-        return
+        return True
         
     from utils import load_accounts, launch_browser, close_browser
     accounts = load_accounts()
     account = next((a for a in accounts if a["id"] == account_id), None)
     if not account:
         print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
-        return
+        return False
         
     print(f"Bắt đầu đăng nhập cho tài khoản: {account.get('name')} ({account.get('type')})")
     
@@ -119,6 +119,7 @@ def login_account(account_id=None, gpm_api_url=None):
                 context.storage_state(path=STATE_FILE)
                 save_auth_status(account_id, "local")
                 print("Đã lưu phiên đăng nhập thành công!")
+            return True
             
         except Exception as e:
             print(f"❌ Đã xảy ra lỗi đăng nhập: {e}")
@@ -129,9 +130,14 @@ def login_account(account_id=None, gpm_api_url=None):
 
 if __name__ == "__main__":
     import argparse
+    import sys
     parser = argparse.ArgumentParser()
     parser.add_argument("--account-id", default=None)
     parser.add_argument("--gpm-api", default=None)
     args = parser.parse_args()
     
-    login_account(args.account_id, args.gpm_api)
+    try:
+        ok = login_account(args.account_id, args.gpm_api)
+        sys.exit(0 if ok is not False else 1)
+    except Exception:
+        sys.exit(1)

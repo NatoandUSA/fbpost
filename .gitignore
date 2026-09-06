@@ -27,3 +27,7 @@ uploads/
 posted_links.json
 accounts.json
 auth_status.json
+
+data/
+_audit_*.py
+_v6_patch.py

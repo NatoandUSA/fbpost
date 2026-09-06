@@ -4,11 +4,11 @@ import time
 import random
 import re
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser
+from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult
 
 STATE_FILE = "state.json"
 
-def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=True, anti_hash_text=True):
+def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=True, anti_hash_text=False):
     """
     Tự động mở một bài viết Facebook (trong Group public hoặc Fanpage public) và để lại bình luận.
     Hỗ trợ Spintax, human typing, like trước khi comment, và xử lý các loại giao diện Facebook.
@@ -21,7 +21,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
         account = resolve_account(account_id, gpm_api_url)
         if not account:
             print(f"❌ Lỗi: Không thể khởi tạo cấu hình cho Account ID '{account_id}'.")
-            return False
+            return ActionResult(success=False, code="ACCOUNT_NOT_FOUND", message=f"Không thể khởi tạo cấu hình cho Account ID '{account_id}'.", target_url=post_url)
         print(f"👤 Khởi chạy profile: {account.get('name', account_id)} ({account.get('type', 'local')})")
 
     browser_obj = None
@@ -45,9 +45,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             time.sleep(random.uniform(3.0, 5.0))
 
             # Cuộn trang nhẹ nhàng mô phỏng hành vi đọc bài viết
-            page.mouse.wheel(0, random.randint(250, 550))
+            safe_mouse_wheel(page, 0, random.randint(250, 550))
             time.sleep(random.uniform(1.5, 3.0))
-            page.mouse.wheel(0, -random.randint(100, 250))
+            safe_mouse_wheel(page, 0, -random.randint(100, 250))
             time.sleep(random.uniform(1.0, 2.0))
 
             # 1. Tương tác Thích / Thả Tim nếu được yêu cầu
@@ -136,16 +136,16 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
 
             if not comment_input or not comment_input.is_visible():
                 print("❌ Không tìm thấy ô bình luận trên bài viết này (Bài viết có thể bị tắt tính năng bình luận hoặc yêu cầu phê duyệt).")
-                return False
+                return ActionResult(success=False, code="COMMENT_INPUT_NOT_FOUND", message="Không tìm thấy ô bình luận trên bài viết này.", target_url=post_url)
 
-            # 3. Focus và gõ nội dung bình luận
+            # 3. Focus và gõ nội dung bình luận (dùng Shift+Enter cho newline để không submit sớm)
             print(f"💬 Đang gõ nội dung bình luận: \"{parsed_comment}\"")
             comment_input.scroll_into_view_if_needed()
             time.sleep(random.uniform(0.8, 1.5))
             comment_input.click()
             time.sleep(random.uniform(0.5, 1.0))
             
-            human_type(page, comment_input, parsed_comment)
+            human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
             time.sleep(random.uniform(1.0, 2.0))
 
             # 4. Nhấn Enter để gửi bình luận
@@ -154,17 +154,72 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             time.sleep(random.uniform(3.0, 5.0))
 
             # Kiểm tra nhanh lỗi spam cảnh báo từ Facebook
-            spam_warning = page.locator("text='Bạn tạm thời bị chặn'").first
+            spam_warning = page.locator("text='Bạn tạm thời bị chặn', text='không thể bình luận', text='bị hạn chế', text='something went wrong'").first
             if spam_warning.is_visible():
                 print("⚠️ Cảnh báo Facebook: Bạn tạm thời bị hạn chế tính năng bình luận.")
-                return False
+                return ActionResult(success=False, code="ACTION_BLOCKED", message="Cảnh báo Facebook: Bạn tạm thời bị hạn chế tính năng bình luận.", target_url=post_url)
 
-            print("✅ Đã bình luận bài viết thành công!")
-            return True
+            # Xác thực ô bình luận đã được dọn sạch (comment đã submit)
+            try:
+                remaining_text = comment_input.inner_text().strip()
+                if remaining_text:
+                    time.sleep(2.0)
+                    remaining_text = comment_input.inner_text().strip()
+                    if remaining_text:
+                        print("⚠️ Ô bình luận vẫn còn chứa nội dung sau khi gửi, có thể chưa gửi thành công.")
+                        return ActionResult(success=False, code="SUBMIT_UNVERIFIED", message="Ô bình luận vẫn còn chữ sau khi nhấn gửi.", target_url=post_url)
+            except Exception:
+                pass
+
+            # Xác thực comment xuất hiện trên page (trong comment thread hoặc article)
+            comment_verified = False
+            check_snippet = re.sub(r'[\s\u200b\u200c\u200d]+', ' ', parsed_comment).strip()[:30]
+            if check_snippet:
+                try:
+                    # Chờ tối đa 8s để comment xuất hiện trong DOM
+                    page.wait_for_function(
+                        """(snippet) => {
+                            const articles = document.querySelectorAll('div[role="article"], ul, div[data-visualcompletion="ignore-dynamic-snippet"]');
+                            for (const el of articles) {
+                                if (el.innerText && el.innerText.includes(snippet)) return true;
+                            }
+                            return false;
+                        }""",
+                        arg=check_snippet,
+                        timeout=8000
+                    )
+                    comment_verified = True
+                except Exception:
+                    try:
+                        found = page.locator("div[role='article']").filter(has_text=check_snippet).first
+                        if found.is_visible(timeout=2000):
+                            comment_verified = True
+                    except Exception:
+                        pass
+
+            if not comment_verified:
+                print(f"⚠️ Bình luận đã nhấn gửi nhưng không thể xác thực hiển thị trên bài viết: {post_url}")
+                return ActionResult(
+                    success=False,
+                    code="COMMENT_UNVERIFIED",
+                    state="unverified",
+                    message="Bình luận đã gửi nhưng không tìm thấy hiển thị trên bài viết.",
+                    target_url=post_url
+                )
+
+            print("✅ Đã bình luận bài viết thành công và xác thực hiển thị!")
+            return ActionResult(
+                success=True,
+                code="SUCCESS",
+                state="commented",
+                message="Đã bình luận bài viết thành công!",
+                target_url=post_url,
+                result_url=post_url
+            )
 
     except Exception as e:
         print(f"❌ Xảy ra lỗi khi bình luận vào bài viết: {e}")
-        return False
+        return ActionResult(success=False, code="ERROR", message=str(e), target_url=post_url)
     finally:
         if account:
             close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
@@ -175,7 +230,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 except Exception:
                     pass
 
-def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=True, min_delay=25, max_delay=45, anti_hash_text=True):
+def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=True, min_delay=25, max_delay=45, anti_hash_text=False):
     """
     Duyệt qua danh sách link bài viết và bình luận lần lượt.
     """
@@ -193,7 +248,7 @@ def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, li
             continue
 
         print(f"\n[{idx}/{total}] Đang xử lý: {url}")
-        ok = comment_on_post(
+        res = comment_on_post(
             post_url=url,
             comment_content=comment_content,
             account_id=account_id,
@@ -202,7 +257,7 @@ def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, li
             anti_hash_text=anti_hash_text
         )
 
-        if ok:
+        if res and (getattr(res, 'success', False) or res is True):
             success_count += 1
         else:
             fail_count += 1
@@ -215,7 +270,16 @@ def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, li
                     print(f"... còn {sec}s")
                 time.sleep(1)
 
-    print(f"\n🎉 HOÀN THÀNH TẤT CẢ! Thành công: {success_count} | Thất bại: {fail_count}")
+    print(f"\n🎉 HOÀN THÀNH TẤT CẢ! Tổng: {total} | Thành công: {success_count} | Thất bại: {fail_count}")
+    all_success = (fail_count == 0 and success_count > 0) or (total == 0)
+    stats = {"total": total, "success": success_count, "failed": fail_count}
+    return ActionResult(
+        success=all_success,
+        code="COMMENT_LIST_COMPLETE" if all_success else "COMMENT_LIST_PARTIAL_FAIL",
+        message=f"Bình luận danh sách: {success_count}/{total} thành công, {fail_count} thất bại.",
+        metadata=stats,
+        data=stats
+    )
 
 if __name__ == "__main__":
     import argparse
@@ -236,8 +300,13 @@ if __name__ == "__main__":
         with open(args.urls_file, "r", encoding="utf-8") as f:
             target_urls = [line.strip() for line in f if line.strip()]
         content = args.content or "Bài viết rất hữu ích!"
-        comment_on_list(target_urls, content, args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text)
+        res = comment_on_list(target_urls, content, args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text)
+        is_ok = getattr(res, "success", False) if hasattr(res, "success") else bool(res)
+        sys.exit(0 if is_ok else 1)
     elif args.url and args.content:
-        comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
+        res = comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
+        is_ok = getattr(res, "success", False) if hasattr(res, "success") else bool(res)
+        sys.exit(0 if is_ok else 1)
     else:
         parser.print_help()
+        sys.exit(1)

@@ -1,51 +1,35 @@
 $ErrorActionPreference = 'Stop'
-$root    = Split-Path -Parent $MyInvocation.MyCommand.Path
-$release = Join-Path $root 'release'
-$bundleName = 'FB-Automation-Portable-v5.5.1'
-$bundle  = Join-Path $release $bundleName
-$zip     = Join-Path $release "$bundleName-Windows-x64.zip"
-$installer = Join-Path $bundle 'runtime\python-3.12.10-amd64.exe'
-
-# Clean old bundle
-if (Test-Path $bundle) { Remove-Item -LiteralPath $bundle -Recurse -Force }
-New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime') -Force | Out-Null
-
-# Excluded top-level names
-$excluded = @('.git', 'venv', '__pycache__', 'profiles', 'uploads', 'release', '.codex', '.gitignore', '.env')
-
-# Copy source files (top-level)
-Get-ChildItem -LiteralPath $root -Force | Where-Object { $_.Name -notin $excluded } | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination $bundle -Recurse -Force
-}
-
-# Remove runtime data files that should NOT ship
-$runtimeFiles = @(
-    '.env', 'state.json', 'scheduler_state.json', 'config.json',
-    'publication_queue.json', 'campaigns.json', 'profile_activity.json', 'auth_status.json',
-    'group_registry.json', 'manual_group_queue.json', 'accounts.json'
-)
-Get-ChildItem -LiteralPath $bundle -Recurse -File -Force |
-    Where-Object { $_.Name -in $runtimeFiles -or $_.Extension -in @('.pyc', '.pyo', '.log') } |
-    Remove-Item -Force
-# Ship empty accounts.json (required by app on first run)
-Set-Content -LiteralPath (Join-Path $bundle 'accounts.json') -Value '[]' -Encoding UTF8
-
-# Remove all *.log files recursively
-Get-ChildItem -LiteralPath $bundle -Filter '*.log' -Recurse -Force | Remove-Item -Force
-
-# Remove all __pycache__ directories recursively
-Get-ChildItem -LiteralPath $bundle -Filter '__pycache__' -Recurse -Directory -Force | Remove-Item -Recurse -Force
-
-# Remove .pytest_cache if present
-Get-ChildItem -LiteralPath $bundle -Filter '.pytest_cache' -Recurse -Directory -Force | Remove-Item -Recurse -Force
-
-# Download bundled Python installer
-Write-Host "Dang tai Python 3.12.10 installer..."
-Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe' -OutFile $installer
-
-# Create zip
-if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
-Compress-Archive -Path $bundle -DestinationPath $zip -CompressionLevel Optimal
-
-$sizeMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-Write-Host "Da tao: $zip ($sizeMB MB)"
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$version = (Get-Content (Join-Path $root 'VERSION') -Raw).Trim()
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid VERSION: $version" }
+$releaseRoot = Join-Path $root 'release'
+$stagingRoot = Join-Path $releaseRoot 'staging'
+$artifactRoot = Join-Path $releaseRoot 'artifacts'
+$bundleName = "FB-Automation-Portable-v$version"
+$bundle = Join-Path $stagingRoot $bundleName
+$zip = Join-Path $artifactRoot "$bundleName-Windows-x64.zip"
+New-Item -ItemType Directory -Path $stagingRoot,$artifactRoot -Force | Out-Null
+if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
+New-Item -ItemType Directory -Path $bundle -Force | Out-Null
+$dirs = @('api','migrations','repositories','services','static')
+foreach ($d in $dirs) { Copy-Item (Join-Path $root $d) $bundle -Recurse -Force }
+$files = @('ai_spinner.py','db.py','fb_auth.py','fb_comment.py','fb_create_page.py','fb_group.py','fb_interact.py','fb_join_group.py','fb_page.py','fb_page_api.py','fb_scraper.py','fb_thread.py','main.py','paths.py','scheduler.py','server.py','utils.py','README.md','HUONG_DAN_SU_DUNG.html','requirements.txt','RUN_FB_AUTOMATION.bat','START_LINUX.sh','START_MAC.command','start_portable.bat','VERSION')
+foreach ($f in $files) { if (Test-Path (Join-Path $root $f)) { Copy-Item (Join-Path $root $f) $bundle -Force } }
+# Runtime dependencies are copied, but never runtime state.
+if (Test-Path (Join-Path $root 'runtime')) { Copy-Item (Join-Path $root 'runtime') $bundle -Recurse -Force }
+$data = Join-Path $bundle 'data'
+New-Item -ItemType Directory -Path $data,(Join-Path $data 'uploads'),(Join-Path $data 'logs\jobs'),(Join-Path $data 'backups'),(Join-Path $data 'processed_media') -Force | Out-Null
+Get-ChildItem $bundle -Recurse -Directory -Force | Where-Object Name -eq '__pycache__' | Remove-Item -Recurse -Force
+Get-ChildItem $bundle -Recurse -File -Force | Where-Object { $_.Extension -in @('.pyc','.pyo','.log') } | Remove-Item -Force
+$tmpZip = $zip + '.tmp.zip'
+$tmpHash = $zip + '.sha256.tmp'
+if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
+if (Test-Path $tmpHash) { Remove-Item $tmpHash -Force }
+Compress-Archive -Path $bundle -DestinationPath $tmpZip -CompressionLevel Optimal
+if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -lt 1MB) { throw 'Build produced an invalid ZIP artifact.' }
+$hash = (Get-FileHash $tmpZip -Algorithm SHA256).Hash
+Set-Content -LiteralPath $tmpHash -Value "$hash  $(Split-Path $zip -Leaf)" -Encoding ASCII
+Move-Item -LiteralPath $tmpZip -Destination $zip -Force
+Move-Item -LiteralPath $tmpHash -Destination ($zip + '.sha256') -Force
+Write-Host "Built $zip"
+Write-Host "SHA256 $hash"

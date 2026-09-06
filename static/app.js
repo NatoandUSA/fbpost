@@ -164,6 +164,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const contentHubSection = document.getElementById('content-hub-section');
     const schedSection = document.getElementById('page-scheduler-section');
 
+    // Join Group Section Elements
+    const joinGroupSection = document.getElementById('join-group-section');
+    const joinGroupPanelRight = document.getElementById('join-group-panel-right');
+    const joinGroupProfileSelect = document.getElementById('join-group-profile-select');
+    const joinModeKw = document.getElementById('join-mode-kw');
+    const joinModeUrls = document.getElementById('join-mode-urls');
+    const joinKwGroup = document.getElementById('join-kw-group');
+    const joinUrlsGroup = document.getElementById('join-urls-group');
+    const joinGroupKeywords = document.getElementById('join-group-keywords');
+    const joinGroupUrls = document.getElementById('join-group-urls');
+    const joinGroupLimit = document.getElementById('join-group-limit');
+    const joinGroupAutoRules = document.getElementById('join-group-auto-rules');
+    const joinGroupInteractFeed = document.getElementById('join-group-interact-feed');
+    const submitJoinGroupBtn = document.getElementById('submit-join-group-btn');
+    const refreshJoinedGroupsBtn = document.getElementById('refresh-joined-groups-btn');
+    const clearJoinedGroupsBtn = document.getElementById('clear-joined-groups-btn');
+    const joinedGroupsTableBody = document.getElementById('joined-groups-table-body');
+
     // Visual Progress Dashboard Elements
     const visualProgressDashboard = document.getElementById('visual-progress-dashboard');
     const activeTaskName = document.getElementById('active-task-name');
@@ -584,53 +602,158 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function saveLink(url) {
-        if (!savedPostLinks.includes(url)) {
-            savedPostLinks.unshift(url);
-            localStorage.setItem('fb_posted_links', JSON.stringify(savedPostLinks));
-            renderSavedLinks();
+    async function loadPostedLinks() {
+        try {
+            const res = await fetch('/api/posted-links');
+            if (res.ok) {
+                const links = await res.json();
+                if (Array.isArray(links)) {
+                    savedPostLinks = links;
+                    renderPostedLinks(links);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Không thể tải danh sách bài đã đăng từ server:', e);
+        }
+
+        // Fallback localStorage
+        const stored = localStorage.getItem('fb_posted_links');
+        if (stored) {
+            try {
+                savedPostLinks = JSON.parse(stored);
+                renderPostedLinks(savedPostLinks);
+            } catch (_) {}
         }
     }
 
-    function renderSavedLinks() {
+    function saveLink(url) {
+        if (!url) return;
+        const exists = savedPostLinks.some(item => {
+            const u = typeof item === 'string' ? item : (item.url || item.target || '');
+            return u === url;
+        });
+        if (!exists) {
+            savedPostLinks.unshift({
+                url: url,
+                target: url,
+                status: 'Đã xuất bản',
+                posted_at: new Date().toLocaleTimeString('vi-VN')
+            });
+            localStorage.setItem('fb_posted_links', JSON.stringify(savedPostLinks));
+            renderPostedLinks(savedPostLinks);
+        }
+    }
+
+    function renderPostedLinks(links) {
+        if (!postedLinksList) return;
         postedLinksList.innerHTML = '';
-        if (savedPostLinks.length === 0) {
-            postedLinksCard.classList.add('hidden');
+        if (!links || links.length === 0) {
+            postedLinksList.innerHTML = '<span class="empty" style="display:block; padding:16px; text-align:center; color:#64748B;">Chưa có link bài đăng nào được ghi nhận.</span>';
             return;
         }
-        
-        savedPostLinks.forEach(link => {
-            let url;
-            try {
-                url = new URL(link, window.location.origin);
-            } catch (_) {
-                return;
+
+        links.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'posted-link-item';
+            row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid #E2E8F0; gap:8px; font-size:13px;';
+
+            const targetUrl = item.url || item.target || (typeof item === 'string' ? item : '');
+            const status = item.status || 'Đã xuất bản';
+            const postedAt = item.posted_at || '';
+            const isPending = status.toLowerCase().includes('duyệt') || status.toLowerCase().includes('pending') || status.toLowerCase().includes('chờ');
+
+            const statusBadge = isPending
+                ? `<span style="background:#FEF3C7; color:#92400E; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px;">⏳ ${status}</span>`
+                : `<span style="background:#DCFCE7; color:#166534; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px;">✅ ${status}</span>`;
+
+            const infoCol = document.createElement('div');
+            infoCol.style.cssText = 'display:flex; flex-direction:column; gap:3px; overflow:hidden; flex:1;';
+            infoCol.innerHTML = `
+                <div style="display:flex; align-items:center; gap:6px;">
+                    ${statusBadge}
+                    ${postedAt ? `<span style="font-size:11px; color:#64748B;">${postedAt}</span>` : ''}
+                </div>
+                <div style="font-weight:600; color:#1E293B; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${targetUrl}">
+                    ${targetUrl}
+                </div>
+            `;
+
+            const btnCol = document.createElement('div');
+            btnCol.style.cssText = 'flex-shrink:0;';
+            if (targetUrl && (targetUrl.startsWith('http://') || targetUrl.startsWith('https://'))) {
+                const a = document.createElement('a');
+                a.href = targetUrl;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.className = 'btn btn-secondary btn-xs';
+                a.style.cssText = 'padding:4px 8px; font-size:12px; text-decoration:none; display:inline-flex; align-items:center; gap:4px;';
+                a.innerHTML = '🔗 Mở';
+                btnCol.appendChild(a);
             }
-            const item = document.createElement('div');
-            item.className = 'posted-link-item';
-            if (!['http:', 'https:'].includes(url.protocol)) return;
-            const label = document.createElement('span');
-            label.className = 'posted-link-url';
-            label.title = link;
-            label.textContent = link;
-            const anchor = document.createElement('a');
-            anchor.href = url.href;
-            anchor.target = '_blank';
-            anchor.rel = 'noopener noreferrer';
-            anchor.className = 'btn btn-secondary btn-sm';
-            anchor.textContent = '🔗 Mở link';
-            item.append(label, anchor);
-            postedLinksList.appendChild(item);
+
+            row.append(infoCol, btnCol);
+            postedLinksList.appendChild(row);
         });
-        postedLinksCard.classList.remove('hidden');
+
+        if (postedLinksCard) postedLinksCard.classList.remove('hidden');
     }
 
-    clearLinksBtn.addEventListener('click', () => {
-        savedPostLinks = [];
-        localStorage.setItem('fb_posted_links', JSON.stringify(savedPostLinks));
-        renderSavedLinks();
-        showToast('Đã xóa danh sách liên kết!');
-    });
+    // Nút Xóa toàn bộ lịch sử link bài đăng
+    if (clearLinksBtn) {
+        clearLinksBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/api/posted-links', { method: 'DELETE' });
+            } catch (_) {}
+            localStorage.removeItem('fb_posted_links');
+            savedPostLinks = [];
+            renderPostedLinks([]);
+            showToast('Đã xóa toàn bộ lịch sử link bài đăng!');
+        });
+    }
+
+    // Nút Làm mới lịch sử link bài đăng
+    const refreshLinksBtn = document.getElementById('refresh-links-btn');
+    if (refreshLinksBtn) {
+        refreshLinksBtn.addEventListener('click', () => {
+            loadPostedLinks();
+            showToast('Đã làm mới danh sách link bài đăng.');
+        });
+    }
+
+    // Nút Đưa danh sách link sang tab Comment
+    const sendToCommentBtn = document.getElementById('send-to-comment-btn');
+    if (sendToCommentBtn) {
+        sendToCommentBtn.addEventListener('click', () => {
+            if (!savedPostLinks || savedPostLinks.length === 0) {
+                showToast('Chưa có link bài đăng nào để đưa sang Comment!', 'error');
+                return;
+            }
+            const publishedLinks = savedPostLinks.filter(item => {
+                if (typeof item === 'string') {
+                    return item.includes('/posts/') || item.includes('/permalink/') || item.includes('permalink.php') || item.includes('/videos/');
+                }
+                const url = item.url || '';
+                const isPostUrl = url.includes('/posts/') || url.includes('/permalink/') || url.includes('permalink.php') || url.includes('/videos/');
+                const urlType = item.url_type || (isPostUrl ? 'post' : 'unknown');
+                const pubState = item.publish_state || ((item.status && item.status.toLowerCase().includes('đã xuất bản')) ? 'published' : 'unknown');
+                return (urlType === 'post' || isPostUrl) && pubState === 'published';
+            });
+            const urls = publishedLinks.map(item => typeof item === 'string' ? item : (item.url || '')).filter(u => u && u.startsWith('http'));
+            if (urls.length === 0) {
+                showToast('Chưa có link bài viết đã xuất bản hợp lệ để bình luận!', 'warning');
+                return;
+            }
+            const commentTargetInput = document.getElementById('comment-target-input');
+            if (commentTargetInput) {
+                commentTargetInput.value = urls.join('\n');
+            }
+            // Switch to comment tab
+            const tabComment = document.getElementById('tab-comment');
+            if (tabComment) tabComment.click();
+            showToast(`Đã chuyển ${urls.length} link bài viết sang tab Comment!`);
+        });
+    }
 
     // ---- Image Upload Handling ----
     addImageBtn.addEventListener('click', () => {
@@ -1427,6 +1550,168 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function populateJoinGroupProfiles() {
+        if (!joinGroupProfileSelect) return;
+        joinGroupProfileSelect.innerHTML = '';
+
+        if (accountsList && accountsList.length > 1) {
+            const rotateOpt = document.createElement('option');
+            rotateOpt.value = '__rotate__';
+            rotateOpt.textContent = `🔄 Luân phiên ${accountsList.length} tài khoản Facebook đã lưu (Khuyến nghị)`;
+            joinGroupProfileSelect.appendChild(rotateOpt);
+        }
+
+        let added = 0;
+        if (accountsList && accountsList.length > 0) {
+            const grpSaved = document.createElement('optgroup');
+            grpSaved.label = `📂 Tài khoản Facebook đã lưu (${accountsList.length})`;
+            accountsList.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id;
+                opt.textContent = `👤 ${acc.name} (${acc.type === 'gpm' ? 'GPM' : 'Local'})`;
+                grpSaved.appendChild(opt);
+                added++;
+            });
+            joinGroupProfileSelect.appendChild(grpSaved);
+        }
+
+        if (cachedGpmProfiles && cachedGpmProfiles.length > 0) {
+            const grpGpm = document.createElement('optgroup');
+            grpGpm.label = `🌐 Profile GPMLogin (${cachedGpmProfiles.length})`;
+            cachedGpmProfiles.forEach(p => {
+                if (!accountsList.some(a => a.id === p.id)) {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `📱 ${p.name}`;
+                    grpGpm.appendChild(opt);
+                    added++;
+                }
+            });
+            if (grpGpm.children.length > 0) {
+                joinGroupProfileSelect.appendChild(grpGpm);
+            }
+        }
+
+        if (added === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Chưa có Profile nào (Mở GPMLogin hoặc Nhập Nick)';
+            joinGroupProfileSelect.appendChild(opt);
+        }
+    }
+
+    async function loadJoinedGroups() {
+        if (!joinedGroupsTableBody) return;
+        try {
+            const res = await fetch('/api/joined-groups');
+            if (res.ok) {
+                const groups = await res.json();
+                renderJoinedGroups(groups);
+            }
+        } catch (err) {
+            console.warn('Lỗi tải danh sách nhóm đã tham gia:', err);
+        }
+    }
+
+    function renderJoinedGroups(groups) {
+        if (!joinedGroupsTableBody) return;
+        joinedGroupsTableBody.innerHTML = '';
+        if (!groups || groups.length === 0) {
+            joinedGroupsTableBody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #94A3B8; padding: 16px;">Chưa có nhóm nào được gia nhập.</td></tr>';
+            return;
+        }
+
+        groups.forEach(g => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #E2E8F0';
+
+            const gName = g.group_name || g.group_url || g.keyword || 'Nhóm Facebook';
+            const gKw = g.keyword || '-';
+            const gTime = g.joined_at || '';
+            const gAcc = g.account_id || 'default';
+
+            tr.innerHTML = `
+                <td style="padding: 8px 10px; font-weight: 600; color: #1E293B; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${gName}">
+                    ${gName}
+                </td>
+                <td style="padding: 8px 10px; color: #64748B; font-size: 11px;">${gKw}</td>
+                <td style="padding: 8px 10px; color: #64748B; font-size: 11px;">${gTime}</td>
+                <td style="padding: 8px 10px; text-align: center;">
+                    <span style="background: #EFF6FF; color: #1D4ED8; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px;">${gAcc}</span>
+                </td>
+            `;
+            joinedGroupsTableBody.appendChild(tr);
+        });
+    }
+
+    if (refreshJoinedGroupsBtn) {
+        refreshJoinedGroupsBtn.addEventListener('click', () => {
+            loadJoinedGroups();
+            showToast('Đã làm mới danh sách nhóm đã gia nhập.');
+        });
+    }
+
+    if (clearJoinedGroupsBtn) {
+        clearJoinedGroupsBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/api/joined-groups', { method: 'DELETE' });
+                loadJoinedGroups();
+                showToast('Đã xóa lịch sử nhóm đã gia nhập!');
+            } catch (e) {
+                showToast(`Lỗi xóa: ${e.message}`, 'error');
+            }
+        });
+    }
+
+    if (joinModeKw && joinModeUrls) {
+        joinModeKw.addEventListener('change', () => {
+            if (joinModeKw.checked) {
+                if (joinKwGroup) joinKwGroup.classList.remove('hidden');
+                if (joinUrlsGroup) joinUrlsGroup.classList.add('hidden');
+            }
+        });
+        joinModeUrls.addEventListener('change', () => {
+            if (joinModeUrls.checked) {
+                if (joinUrlsGroup) joinUrlsGroup.classList.remove('hidden');
+                if (joinKwGroup) joinKwGroup.classList.add('hidden');
+            }
+        });
+    }
+
+    if (submitJoinGroupBtn) {
+        submitJoinGroupBtn.addEventListener('click', async () => {
+            const accId = joinGroupProfileSelect ? joinGroupProfileSelect.value : '';
+            const isUrlMode = joinModeUrls && joinModeUrls.checked;
+            const kwVal = joinGroupKeywords ? joinGroupKeywords.value.trim() : '';
+            const urlVal = joinGroupUrls ? joinGroupUrls.value.trim() : '';
+            const limitVal = joinGroupLimit ? parseInt(joinGroupLimit.value) || 2 : 2;
+            const autoRulesVal = joinGroupAutoRules ? joinGroupAutoRules.checked : true;
+            const interactFeedVal = joinGroupInteractFeed ? joinGroupInteractFeed.checked : true;
+
+            if (isUrlMode && !urlVal) {
+                showToast('Vui lòng nhập ít nhất một đường dẫn nhóm Facebook!', 'error');
+                if (joinGroupUrls) joinGroupUrls.focus();
+                return;
+            } else if (!isUrlMode && !kwVal) {
+                showToast('Vui lòng nhập từ khóa tìm kiếm nhóm Facebook!', 'error');
+                if (joinGroupKeywords) joinGroupKeywords.focus();
+                return;
+            }
+
+            appendLog(`🤝 Bắt đầu lệnh tự động gia nhập Nhóm Facebook (${isUrlMode ? 'Theo danh sách URL' : 'Theo từ khóa'})...`);
+            await runCommand('join-group', {
+                accountId: accId,
+                mode: isUrlMode ? 'urls' : 'keywords',
+                keywords: kwVal,
+                urls: urlVal,
+                limit: limitVal,
+                autoRules: autoRulesVal,
+                interactFeed: interactFeedVal
+            });
+            loadJoinedGroups();
+        });
+    }
+
     async function loadSecurityHealth() {
         const grid = document.getElementById('security-health-grid');
         if (!grid) return;
@@ -1526,6 +1811,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const autoJoinGroupsOpt = document.getElementById('auto-join-groups-opt');
             if (autoJoinGroupsOpt !== null && data.auto_join_groups !== undefined) {
                 autoJoinGroupsOpt.checked = !!data.auto_join_groups;
+            }
+            if (autoJoinKwContainer && autoJoinGroupsOpt) {
+                autoJoinKwContainer.classList.toggle('hidden', !autoJoinGroupsOpt.checked);
             }
 
             const settingsGroupKeywords = document.getElementById('settings-group-keywords');
@@ -1934,6 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'page-scheduler': '📅 Page Scheduler — Lên Lịch Tự Động Bằng Google Sheets',
         profiles: '📁 Quản Lý Profiles & Tài Khoản GPM',
         'create-page': '🚩 Tự Tạo Fanpage Cá Nhân (Chuẩn Người Thật, Max 2/Ngày)',
+        'join-group': '🤝 Tự Động Gia Nhập Nhóm (Join Group)',
         settings: '🛡️ Bảo Mật & Cấu Hình Hệ Thống'
     };
 
@@ -1995,7 +2284,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 7. Log Card: Show on operational tabs, hide on profiles and settings
+        // 7. Join Group Right Panel: ONLY on Join Group
+        if (joinGroupPanelRight) {
+            if (mode === 'join-group') {
+                joinGroupPanelRight.classList.remove('hidden');
+            } else {
+                joinGroupPanelRight.classList.add('hidden');
+            }
+        }
+
+        // 8. Log Card: Show on operational tabs, hide on profiles and settings
         if (logCard) {
             if (mode === 'profiles' || mode === 'settings') {
                 logCard.classList.add('hidden');
@@ -2004,16 +2302,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 8. Visual Progress Dashboard: Hide on profiles, settings, and create-page
+        // 9. Visual Progress Dashboard: Hide on profiles, settings, create-page, and join-group
         if (visualProgressDashboard) {
-            if (mode === 'profiles' || mode === 'settings' || mode === 'create-page') {
+            if (mode === 'profiles' || mode === 'settings' || mode === 'create-page' || mode === 'join-group') {
                 visualProgressDashboard.classList.add('hidden');
             } else {
                 visualProgressDashboard.classList.remove('hidden');
             }
         }
 
-        // 8. Composer action bar & bottom actions: ONLY on Group and Page
+        // 10. Composer action bar & bottom actions: ONLY on Group and Page
         if (composerActionBar) {
             if (mode === 'group' || mode === 'page') {
                 composerActionBar.classList.remove('hidden');
@@ -2051,6 +2349,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (commentSection) commentSection.classList.add('hidden');
             if (threadSection) threadSection.classList.add('hidden');
             if (createPageSection) createPageSection.classList.add('hidden');
+            if (joinGroupSection) joinGroupSection.classList.add('hidden');
             if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
             if (addToPostBar) addToPostBar.classList.add('hidden');
             if (composerDividerBar) composerDividerBar.classList.remove('hidden');
@@ -2128,6 +2427,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (postBtn) postBtn.classList.add('hidden');
                 populateCreatePageProfiles();
                 loadCreatedPages();
+            } else if (currentMode === 'join-group') {
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
+                if (joinGroupSection) joinGroupSection.classList.remove('hidden');
+                if (postBtn) postBtn.classList.add('hidden');
+                populateJoinGroupProfiles();
+                loadJoinedGroups();
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -2273,6 +2581,11 @@ document.addEventListener('DOMContentLoaded', () => {
         authBtn.disabled = running;
         logDot.className = running ? 'log-dot running' : 'log-dot idle';
         
+        const cancelBtn = document.getElementById('cancel-log-btn');
+        if (cancelBtn) {
+            cancelBtn.style.display = running ? 'inline-flex' : 'none';
+        }
+
         if (running) {
             postBtn.textContent = '⏳ Đang xử lý...';
         } else {
@@ -2284,6 +2597,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 postBtn.textContent = 'Đăng bài ngay';
             }
         }
+    }
+
+    const cancelLogBtn = document.getElementById('cancel-log-btn');
+    if (cancelLogBtn) {
+        cancelLogBtn.addEventListener('click', async () => {
+            cancelLogBtn.disabled = true;
+            cancelLogBtn.textContent = '⏳ Đang dừng...';
+            appendLog('🛑 Đang gửi yêu cầu dừng tiến trình và đóng trình duyệt...');
+            try {
+                const res = await fetch('/api/cancel', { method: 'POST' });
+                const d = await res.json();
+                appendLog(d.message || 'Đã gửi lệnh dừng tiến trình.');
+                showToast(d.message || 'Đã yêu cầu dừng', d.success ? 'success' : 'error');
+            } catch (err) {
+                appendLog('❌ Lỗi khi gửi lệnh dừng: ' + err.message);
+            } finally {
+                cancelLogBtn.disabled = false;
+                cancelLogBtn.textContent = '🛑 Dừng lại';
+            }
+        });
     }
 
     // ---- Scrape Table Render ----
@@ -2500,6 +2833,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (cleanLine.startsWith('POSTED_LINK:')) {
                         const postUrl = cleanLine.substring('POSTED_LINK:'.length).trim();
                         if (postUrl && postUrl.startsWith('http')) {
+                            saveLink(postUrl);
                             loadPostedLinks();
                             appendLog(`🔗 Đã ghi nhận bài đăng vào Lịch sử: ${postUrl}`);
                         }
@@ -2637,6 +2971,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             setRunning(false);
             checkStatus();
+            loadPostedLinks();
+            loadJoinedGroups();
             setTimeout(() => {
                 progressContainer.classList.add('hidden');
             }, 1000);
@@ -4358,95 +4694,7 @@ document.addEventListener('DOMContentLoaded', () => {
             logDiv.scrollTop = logDiv.scrollHeight;
         } catch (e) {}
     }
-    // ====== POSTED LINKS HISTORY & SAFE DELAY LOGIC ======
-    const postedLinksHistoryCard = document.getElementById('posted-links-card');
-    const postedLinksHistoryList = document.getElementById('posted-links-list');
-    const refreshLinksBtn = document.getElementById('refresh-links-btn');
-    const sendToCommentBtn = document.getElementById('send-to-comment-btn');
-    const loadPostedLinksBtn = document.getElementById('load-posted-links-btn');
-
-    async function loadPostedLinks() {
-        if (!postedLinksHistoryList) return;
-        try {
-            const res = await fetch('/api/posted-links');
-            const links = await res.json();
-            renderPostedLinks(links);
-        } catch (e) {
-            console.error('Lỗi nạp lịch sử link bài:', e);
-        }
-    }
-
-    function renderPostedLinks(links) {
-        if (!postedLinksHistoryList) return;
-        postedLinksHistoryList.innerHTML = '';
-        if (!links || links.length === 0) {
-            postedLinksHistoryList.innerHTML = '<span class="empty">Chưa có link bài đăng nào. Các bài đăng thành công sẽ tự động xuất hiện ở đây.</span>';
-            return;
-        }
-        links.forEach(item => {
-            const row = document.createElement('div');
-            row.className = 'posted-link-item';
-            row.style.cssText = 'padding: 6px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 3px; background: #fff; margin-bottom: 4px; border-radius: 6px;';
-            
-            const linkLine = document.createElement('div');
-            linkLine.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 6px;';
-            
-            const a = document.createElement('a');
-            a.href = item.url;
-            a.target = '_blank';
-            a.style.cssText = 'font-size: 12px; color: var(--blue); word-break: break-all; font-weight: 600; text-decoration: none;';
-            a.textContent = item.url;
-            
-            const timeSpan = document.createElement('span');
-            timeSpan.style.cssText = 'font-size: 10px; color: #94a3b8; white-space: nowrap;';
-            timeSpan.textContent = item.posted_at ? item.posted_at.split(' ')[1] : '';
-
-            linkLine.append(a, timeSpan);
-            
-            const sub = document.createElement('div');
-            sub.style.cssText = 'font-size: 11px; color: #64748b; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;';
-            sub.textContent = `${item.target} · ${item.content_preview || ''}`;
-
-            row.append(linkLine, sub);
-            postedLinksHistoryList.appendChild(row);
-        });
-    }
-
-    if (refreshLinksBtn) {
-        refreshLinksBtn.addEventListener('click', loadPostedLinks);
-    }
-
-    // Nút nạp link vừa đăng vào ô Comment
-    function sendPostedLinksToComment() {
-        fetch('/api/posted-links')
-            .then(res => res.json())
-            .then(links => {
-                if (!links || links.length === 0) {
-                    showToast('Chưa có bài nào trong Lịch sử bài đã đăng!', 'error');
-                    return;
-                }
-                const urls = links.map(l => l.url).filter(u => u && u.startsWith('http'));
-                if (urls.length === 0) {
-                    showToast('Không tìm thấy link bài viết hợp lệ!', 'error');
-                    return;
-                }
-                // Chuyển sang tab comment
-                const tabComment = document.getElementById('tab-comment');
-                if (tabComment) tabComment.click();
-                
-                const commentTargets = document.getElementById('comment-targets');
-                if (commentTargets) {
-                    commentTargets.value = urls.join('\n');
-                    showToast(`✅ Đã nạp ${urls.length} link bài viết vào danh sách bình luận!`);
-                }
-            })
-            .catch(err => showToast(`Lỗi: ${err.message}`, 'error'));
-    }
-
-    if (sendToCommentBtn) sendToCommentBtn.addEventListener('click', sendPostedLinksToComment);
-    if (loadPostedLinksBtn) loadPostedLinksBtn.addEventListener('click', sendPostedLinksToComment);
-
-    // Tùy chọn Preset Giãn Cách An Toàn
+    // ====== PRESET GIÃN CÁCH AN TOÀN ======
     const delayPresetSelect = document.getElementById('delay-preset-select');
     const customDelayInputs = document.getElementById('custom-delay-inputs');
     const delayPreviewBadge = document.getElementById('delay-preview-badge');

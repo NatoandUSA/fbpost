@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import unittest
@@ -279,13 +280,15 @@ class ReleasePackagingTests(unittest.TestCase):
         self.assertIn('set "VENV_DIR=%CD%\\runtime\\venv"', launcher)
         self.assertIn('set "PYTHON_INSTALLER=%CD%\\runtime\\python-3.12.10-amd64.exe"', launcher)
 
-    def test_build_excludes_local_secrets_and_runtime_artifacts(self):
+    def test_build_uses_allowlist_and_excludes_runtime_artifacts(self):
         build_script = Path("BUILD_PORTABLE.ps1").read_text(encoding="utf-8")
-        for filename in ("config.json", "accounts.json", "publication_queue.json"):
-            self.assertIn(filename, build_script)
+        self.assertIn("$dirs = @(", build_script)
+        self.assertIn("$files = @(", build_script)
         self.assertIn("__pycache__", build_script)
         self.assertIn(".pyc", build_script)
         self.assertIn("'.log'", build_script)
+        for runtime_name in ("app.db", "config.json", "accounts.json", "publication_queue.json"):
+            self.assertNotIn(runtime_name, build_script)
 
 
 class NclProInspiredFeatureTests(unittest.TestCase):
@@ -585,43 +588,56 @@ class NclProInspiredFeatureTests(unittest.TestCase):
 
     def test_settings_api(self):
         client = server.app.test_client()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_config = Path(temp_dir) / "config.json"
-            with patch("server.CONFIG_FILE", temp_config):
-                # Test GET default settings
-                res = client.get("/api/settings")
-                self.assertEqual(res.status_code, 200)
-                data = json.loads(res.data)
-                self.assertIn("gpm_api_url", data)
-                self.assertIn("delay_preset", data)
-                self.assertIn("gemini_api_key_configured", data)
+        orig_config = server.SettingsRepository().get_config()
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_config = Path(temp_dir) / "config.json"
+                with patch("server.CONFIG_FILE", temp_config):
+                    # Test GET default settings
+                    res = client.get("/api/settings")
+                    self.assertEqual(res.status_code, 200)
+                    data = json.loads(res.data)
+                    self.assertIn("gpm_api_url", data)
+                    self.assertIn("delay_preset", data)
+                    self.assertIn("gemini_api_key_configured", data)
 
-                # Test POST update settings
-                post_payload = {
-                    "gpm_api_url": "http://127.0.0.1:20000",
-                    "gemini_api_key": "AIzaSyTestKey1234567890",
-                    "delay_preset": "test",
-                    "delay_min": 10,
-                    "delay_max": 20,
-                    "auto_join_groups": True,
-                    "group_keywords": "Test Group 1, Test Group 2"
-                }
-                res = client.post("/api/settings", json=post_payload)
-                self.assertEqual(res.status_code, 200)
-                resp_data = json.loads(res.data)
-                self.assertTrue(resp_data["success"])
-                self.assertEqual(resp_data["settings"]["gpm_api_url"], "http://127.0.0.1:20000")
-                self.assertEqual(resp_data["settings"]["delay_preset"], "test")
+                    # Test POST update settings
+                    post_payload = {
+                        "gpm_api_url": "http://127.0.0.1:20000",
+                        "gemini_api_key": "AIzaSyTestKey1234567890",
+                        "delay_preset": "test",
+                        "delay_min": 10,
+                        "delay_max": 20,
+                        "auto_join_groups": True,
+                        "group_keywords": "Test Group 1, Test Group 2"
+                    }
+                    res = client.post("/api/settings", json=post_payload)
+                    self.assertEqual(res.status_code, 200)
+                    resp_data = json.loads(res.data)
+                    self.assertTrue(resp_data["success"])
+                    self.assertEqual(resp_data["settings"]["gpm_api_url"], "http://127.0.0.1:20000")
+                    self.assertEqual(resp_data["settings"]["delay_preset"], "test")
 
-                # Verify GET returns updated masked key
-                res = client.get("/api/settings")
-                data = json.loads(res.data)
-                self.assertEqual(data["gpm_api_url"], "http://127.0.0.1:20000")
-                self.assertTrue(data["gemini_api_key_configured"])
-                self.assertTrue(data["gemini_api_key_masked"].startswith("..."))
-                self.assertTrue(data["gemini_api_key_masked"].endswith("7890"))
-                self.assertTrue(data["auto_join_groups"])
-                self.assertEqual(data["group_keywords"], "Test Group 1, Test Group 2")
+                    # Verify GET returns updated masked key
+                    res = client.get("/api/settings")
+                    data = json.loads(res.data)
+                    self.assertEqual(data["gpm_api_url"], "http://127.0.0.1:20000")
+                    self.assertTrue(data["gemini_api_key_configured"])
+                    self.assertTrue(data["gemini_api_key_masked"].startswith("..."))
+                    self.assertTrue(data["gemini_api_key_masked"].endswith("7890"))
+                    self.assertTrue(data["auto_join_groups"])
+                    self.assertEqual(data["group_keywords"], "Test Group 1, Test Group 2")
+        finally:
+            safe_restore = orig_config if "Test Group" not in orig_config.get("group_keywords", "") else {
+                "gpm_api_url": "http://127.0.0.1:19995",
+                "gemini_api_key": "",
+                "delay_preset": "safe",
+                "delay_min": 300,
+                "delay_max": 600,
+                "auto_join_groups": False,
+                "group_keywords": "Homestay Huế, Du lịch Huế",
+            }
+            server.SettingsRepository().save_config(safe_restore)
 
     def test_click_post_publish_button_ignores_anonymous_toggle(self):
         from unittest.mock import MagicMock
@@ -669,8 +685,770 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         anon_btn.click.assert_not_called()
         real_post_btn.click.assert_called_once()
 
+    def test_joined_groups_api_lifecycle(self):
+        client = server.app.test_client()
+        with tempfile.TemporaryDirectory() as directory:
+            test_file = str(Path(directory) / "joined_groups.json")
+            with patch.object(server, "JOINED_GROUPS_FILE", test_file):
+                # Empty initially
+                res = client.get("/api/joined-groups")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.get_json(), [])
+
+                # Save sample groups
+                sample_data = [{"group_name": "Homestay Huế", "keyword": "Huế", "account_id": "M14"}]
+                with open(test_file, "w", encoding="utf-8") as f:
+                    json.dump(sample_data, f)
+
+                res = client.get("/api/joined-groups")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(len(res.get_json()), 1)
+                self.assertEqual(res.get_json()[0]["group_name"], "Homestay Huế")
+
+                # Delete clears file
+                res_del = client.delete("/api/joined-groups")
+                self.assertEqual(res_del.status_code, 200)
+                self.assertEqual(res_del.get_json()["status"], "cleared")
+
+                res_after = client.get("/api/joined-groups")
+                self.assertEqual(res_after.get_json(), [])
+
+    def test_record_posted_link_records_status_and_target(self):
+        from utils import record_posted_link, POSTED_LINKS_FILE
+        with tempfile.TemporaryDirectory() as directory:
+            test_links_file = str(Path(directory) / "posted_links.json")
+            with patch("utils.POSTED_LINKS_FILE", test_links_file):
+                record_posted_link(
+                    target="https://www.facebook.com/groups/hue/",
+                    post_url="https://www.facebook.com/groups/hue/",
+                    content="Bài viết chờ duyệt",
+                    account_id="M14",
+                    status="Đang chờ admin duyệt"
+                )
+                with open(test_links_file, "r", encoding="utf-8") as f:
+                    records = json.load(f)
+                self.assertEqual(len(records), 1)
+                self.assertEqual(records[0]["status"], "Đang chờ admin duyệt")
+                self.assertEqual(records[0]["account_id"], "M14")
+
+    def test_api_run_join_group_with_rotate_and_single_account(self):
+        client = server.app.test_client()
+        mock_accounts = [
+            {"id": "acc-1", "name": "Nick 1", "type": "gpm"},
+            {"id": "acc-2", "name": "Nick 2", "type": "gpm"}
+        ]
+
+        class DummyProcess:
+            def __init__(self):
+                self.stdout = io.StringIO("Mock join group output\n")
+            def wait(self):
+                return 0
+
+        with patch("server.load_accounts", return_value=mock_accounts), \
+             patch("server.record_profile_activity") as mock_record, \
+             patch("time.sleep", return_value=None):
+            
+            with patch("subprocess.Popen", return_value=DummyProcess()):
+                # Test 1: rotate accounts
+                res_rotate = client.post("/api/run", json={
+                    "command": "join-group",
+                    "accountId": "__rotate__",
+                    "mode": "keywords",
+                    "keywords": "Homestay Huế, Review Huế",
+                    "limit": 1
+                })
+                self.assertEqual(res_rotate.status_code, 200)
+                text_rotate = res_rotate.get_data(as_text=True)
+                self.assertNotIn("500 Internal Server Error", text_rotate)
+                self.assertIn("RUN_RESULT:finished", text_rotate)
+
+                # Test 2: URLs mode with direct account
+                res_url = client.post("/api/run", json={
+                    "command": "join-group",
+                    "accountId": "acc-1",
+                    "mode": "urls",
+                    "urls": "https://www.facebook.com/groups/hue1\nhttps://www.facebook.com/groups/hue2",
+                    "limit": 2
+                })
+                self.assertEqual(res_url.status_code, 200)
+                text_url = res_url.get_data(as_text=True)
+                self.assertNotIn("500 Internal Server Error", text_url)
+                self.assertIn("RUN_RESULT:finished", text_url)
+
+
+class Phase1ArchitectureTests(unittest.TestCase):
+    def test_paths_and_version(self):
+        from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
+        self.assertEqual(get_version(), "6.0.1")
+        self.assertTrue(DATA_DIR.exists())
+        self.assertTrue(UPLOAD_DIR.exists())
+        self.assertTrue(BACKUP_DIR.exists())
+        self.assertTrue(LOG_DIR.exists())
+
+    def test_sqlite_wal_mode_and_foreign_keys(self):
+        from db import connect_db, init_db
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_db = Path(temp_dir) / "test.db"
+            init_db(temp_db)
+            conn = connect_db(temp_db)
+            try:
+                journal = conn.execute("PRAGMA journal_mode").fetchone()[0]
+                fk = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+                self.assertEqual(journal.lower(), "wal")
+                self.assertEqual(fk, 1)
+            finally:
+                conn.close()
+
+    def test_repositories_crud(self):
+        from db import init_db
+        from repositories.account_repo import AccountRepository
+        from repositories.settings_repo import SettingsRepository
+        from repositories.group_repo import GroupRepository
+        from repositories.campaign_repo import CampaignRepository
+        from repositories.activity_repo import ActivityRepository
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_db = Path(temp_dir) / "test.db"
+            init_db(temp_db)
+
+            # Account repo
+            acc_repo = AccountRepository(db_file=str(temp_db))
+            acc_repo.save_account({"id": "acc-test", "name": "Test Acc", "type": "gpm"})
+            self.assertEqual(len(acc_repo.list_accounts()), 1)
+            self.assertEqual(acc_repo.get_account("acc-test")["name"], "Test Acc")
+
+            # Settings repo
+            settings_repo = SettingsRepository(db_file=str(temp_db))
+            settings_repo.save_config({"gemini_api_key": "secret-123"})
+            self.assertEqual(settings_repo.get_config().get("gemini_api_key"), "secret-123")
+
+            # Group repo
+            group_repo = GroupRepository(db_file=str(temp_db))
+            group_repo.save_groups([{"id": "g-1", "name": "Hue Group", "url": "https://fb.com/g/1"}])
+            self.assertEqual(len(group_repo.list_groups()), 1)
+            group_repo.save_joined_groups([{"group_name": "Hue 1", "keyword": "Homestay", "url": "https://fb.com/g/1"}])
+            self.assertEqual(len(group_repo.list_joined_groups()), 1)
+
+            # Campaign repo
+            campaign_repo = CampaignRepository(db_file=str(temp_db))
+            campaign_repo.save_campaigns([{"id": "camp-1", "name": "Campaign 1", "status": "active"}])
+            self.assertEqual(len(campaign_repo.list_campaigns()), 1)
+
+            # Activity repo
+            act_repo = ActivityRepository(db_file=str(temp_db))
+            act_repo.record_activity("acc-test", "join-group", target="Hue Group")
+            self.assertEqual(len(act_repo.list_activities()), 1)
+            act_repo.record_posted_link("https://fb.com/g/1", "https://fb.com/p/1", "Post Content")
+            self.assertEqual(len(act_repo.list_posted_links()), 1)
+
+    def test_api_backup_database_endpoint(self):
+        client = server.app.test_client()
+        res = client.post("/api/backup")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data.get("success"))
+        self.assertTrue(Path(data.get("backup_file")).exists())
+
+
+class Phase2JobManagerTests(unittest.TestCase):
+    def setUp(self):
+        self.client = server.app.test_client()
+
+    def test_job_submission_and_query_endpoints(self):
+        # 1. Submit job
+        res = self.client.post("/api/jobs", json={
+            "command": "test-command",
+            "accountId": "test-acc-1",
+            "payload": {"demo": True},
+        })
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()
+        self.assertTrue(data.get("success"))
+        job_id = data.get("job_id")
+        self.assertTrue(job_id)
+
+        # 2. Get job
+        res_get = self.client.get(f"/api/jobs/{job_id}")
+        self.assertEqual(res_get.status_code, 200)
+        job_data = res_get.get_json().get("job")
+        self.assertEqual(job_data["id"], job_id)
+        self.assertEqual(job_data["command"], "test-command")
+
+        # 3. List jobs
+        res_list = self.client.get("/api/jobs")
+        self.assertEqual(res_list.status_code, 200)
+        jobs_list = res_list.get_json().get("jobs")
+        self.assertGreaterEqual(len(jobs_list), 1)
+
+        # 4. Get logs
+        res_logs = self.client.get(f"/api/jobs/{job_id}/logs")
+        self.assertEqual(res_logs.status_code, 200)
+        self.assertIn("logs", res_logs.get_json())
+
+        # 5. Cancel job
+        res_cancel = self.client.post(f"/api/jobs/{job_id}/cancel")
+        self.assertEqual(res_cancel.status_code, 200)
+        res_after = self.client.get(f"/api/jobs/{job_id}")
+        self.assertEqual(res_after.get_json()["job"]["state"], "cancelled")
+
+    def test_cancel_active_endpoint_when_no_active_job(self):
+        res = self.client.post("/api/cancel")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("success", data)
+
+
+class FacebookPostUrlAndExitCodeTests(unittest.TestCase):
+    def test_clean_facebook_post_url_permalink_preserves_id(self):
+        from utils import clean_facebook_post_url
+        raw_url = "https://www.facebook.com/permalink.php?story_fbid=123456789&id=987654321&__cft__[0]=AZX&__tn__=%2CO%2CP-R"
+        cleaned = clean_facebook_post_url(raw_url)
+        self.assertIn("story_fbid=123456789", cleaned)
+        self.assertIn("id=987654321", cleaned)
+        self.assertNotIn("__cft__", cleaned)
+        self.assertNotIn("__tn__", cleaned)
+
+    def test_clean_facebook_post_url_standard_posts_strips_query(self):
+        from utils import clean_facebook_post_url
+        raw_url = "https://www.facebook.com/groups/homestayhue/posts/101010101/?mibextid=6aamW6"
+        cleaned = clean_facebook_post_url(raw_url)
+        self.assertEqual(cleaned, "https://www.facebook.com/groups/homestayhue/posts/101010101/")
+
+    def test_clean_facebook_post_url_relative_link_prepends_domain(self):
+        from utils import clean_facebook_post_url
+        raw_url = "/groups/homestayhue/posts/101010101/"
+        cleaned = clean_facebook_post_url(raw_url)
+        self.assertTrue(cleaned.startswith("https://www.facebook.com/"))
+
+
+class AuditReliabilityV581Tests(unittest.TestCase):
+    def test_action_result_contract_and_bool_behavior(self):
+        from utils import ActionResult
+        res_ok = ActionResult(success=True, code="SUCCESS", state="published", target_url="https://fb.com/1", result_url="https://fb.com/posts/1", url_type="post")
+        res_fail = ActionResult(success=False, code="PUBLISH_FAILED", message="Blocked", target_url="https://fb.com/1")
+
+        self.assertTrue(bool(res_ok))
+        self.assertFalse(bool(res_fail))
+        self.assertTrue(res_ok)
+        self.assertFalse(res_fail)
+
+        d = res_ok.to_dict()
+        self.assertEqual(d["code"], "SUCCESS")
+        self.assertEqual(d["state"], "published")
+        self.assertEqual(d["url_type"], "post")
+        self.assertEqual(d["result_url"], "https://fb.com/posts/1")
+
+    def test_text_similarity_match(self):
+        from utils import text_similarity_match
+        draft = "Homestay Huế siêu đẹp view sông Hương giá chỉ 350k/đêm phòng đầy đủ tiện nghi"
+        feed_text = "Homestay Huế siêu đẹp view sông Hương giá chỉ 350k/đêm phòng đầy đủ tiện nghi\nĐăng bởi Nguyễn Văn A 5 phút trước"
+        unrelated = "Bán đất mặt tiền đường Nguyễn Huệ diện tích 100m2 sổ đỏ chính chủ"
+
+        self.assertTrue(text_similarity_match(draft, feed_text))
+        self.assertFalse(text_similarity_match(draft, unrelated))
+
+    def test_job_repo_mark_running_race_condition(self):
+        from repositories.job_repo import JobRepository
+        repo = JobRepository()
+        job_id = "test-race-job-1"
+        repo.create_job({
+            "id": job_id,
+            "command": "group",
+            "state": "queued",
+            "payload": {"target": "hue"},
+            "created_at": "2026-09-05T12:00:00Z"
+        })
+
+        # When queued, mark_running must succeed
+        self.assertTrue(repo.mark_running(job_id, pid=1234))
+        job = repo.get_job(job_id)
+        self.assertEqual(job["state"], "running")
+
+        # When job is cancelled, mark_finished marks it cancelled
+        repo.mark_finished(job_id, state="cancelled", error_message="User stopped")
+        job = repo.get_job(job_id)
+        self.assertEqual(job["state"], "cancelled")
+
+        # Calling mark_running on cancelled job must return False and stay cancelled
+        self.assertFalse(repo.mark_running(job_id, pid=5678))
+        job = repo.get_job(job_id)
+        self.assertEqual(job["state"], "cancelled")
+
+    def test_page_repository_and_rate_limit(self):
+        from repositories.page_repo import PageRepository
+        repo = PageRepository()
+        acc = "test-page-acc-audit"
+
+        repo.add_created_page("Homestay Test 1", category="Blogger", page_url="https://fb.com/page1", account_id=acc)
+        self.assertGreaterEqual(repo.count_recent_pages(acc, hours=24), 1)
+
+        pages = repo.list_created_pages(acc)
+        self.assertGreaterEqual(len(pages), 1)
+        self.assertEqual(pages[0]["page_name"], "Homestay Test 1")
+        self.assertEqual(pages[0]["account_id"], acc)
+
+    def test_record_posted_link_updates_within_60s(self):
+        from utils import record_posted_link
+        import tempfile
+        import json
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file = Path(temp_dir) / "posted_links.json"
+            with patch("utils.POSTED_LINKS_FILE", str(temp_file)):
+                record_posted_link(target="https://fb.com/groups/hue-test", post_url="https://fb.com/groups/hue-test", url_type="group", publish_state="pending")
+                record_posted_link(target="https://fb.com/groups/hue-test", post_url="https://fb.com/groups/hue-test/posts/999", url_type="post", publish_state="published")
+
+                with open(temp_file, "r", encoding="utf-8") as f:
+                    items = json.load(f)
+                self.assertGreaterEqual(len(items), 1)
+                self.assertEqual(items[0]["url_type"], "post")
+                self.assertEqual(items[0]["publish_state"], "published")
+
+
+class AuditV582RegressionTests(unittest.TestCase):
+    """Regression suite covering all 36 audit findings for v5.8.2 correctness release."""
+
+    def test_post_submitted_unverified_semantic_failure(self):
+        from utils import scrape_post_link, ActionResult
+        class FakeLocator:
+            def all(self):
+                return []
+        class FakePage:
+            url = "https://facebook.com/groups/hue-audit"
+            def locator(self, *args, **kwargs):
+                return FakeLocator()
+
+        # Without permalink or pending confirmation, result must be success=False
+        res = scrape_post_link(FakePage(), target="https://facebook.com/groups/hue-audit", content="Hello Hue")
+        self.assertFalse(res.success)
+        self.assertEqual(res.code, "POST_SUBMITTED_UNVERIFIED")
+        self.assertEqual(res.state, "submitted_unverified")
+
+    def test_click_post_publish_button_dialog_remains_open(self):
+        from utils import click_post_publish_button
+        class FakeBtn:
+            def is_visible(self, timeout=1000):
+                return True
+            def is_enabled(self):
+                return True
+            def get_attribute(self, attr):
+                if attr == "aria-label":
+                    return "Đăng"
+                return "false"
+            def inner_text(self):
+                return "Đăng"
+            def scroll_into_view_if_needed(self, timeout=1000):
+                pass
+            def click(self, force=True, timeout=1000):
+                pass
+            def evaluate(self, expr):
+                pass
+
+        class FakeSubLoc:
+            def __init__(self, items=None):
+                self._items = items or [FakeBtn()]
+            def count(self):
+                return len(self._items)
+            def nth(self, idx):
+                return self._items[idx]
+            def all(self):
+                return self._items
+            @property
+            def first(self):
+                return self._items[0] if self._items else FakeBtn()
+            @property
+            def last(self):
+                return self._items[-1] if self._items else FakeBtn()
+            def filter(self, *a, **kw):
+                return self
+
+        class FakeDialog:
+            def is_visible(self, timeout=1000):
+                # Dialog remains open indefinitely
+                return True
+            def locator(self, selector, **kw):
+                return FakeSubLoc()
+            def get_by_role(self, role, **kw):
+                return FakeSubLoc()
+            def inner_text(self):
+                return "Đang tạo bài viết..."
+
+        class FakePage:
+            def locator(self, selector, **kw):
+                return FakeSubLoc([FakeDialog()])
+
+        # Must return False if dialog does not close within timeout
+        with patch("time.sleep", return_value=None):
+            res = click_post_publish_button(FakePage(), dialog=FakeDialog())
+            self.assertFalse(res)
+
+    def test_normalize_target_url_canonical_equality(self):
+        from utils import normalize_target_url
+        norm_a = normalize_target_url("https://www.facebook.com/groups/123/?ref=share")
+        norm_b = normalize_target_url("http://m.facebook.com/groups/123/")
+        norm_c = normalize_target_url("https://facebook.com/groups/123")
+        norm_d = normalize_target_url("https://facebook.com/groups/1234")
+
+        self.assertEqual(norm_a, "https://facebook.com/groups/123")
+        self.assertEqual(norm_b, "https://facebook.com/groups/123")
+        self.assertEqual(norm_a, norm_b)
+        self.assertEqual(norm_b, norm_c)
+        # Substring collision prevention (123 vs 1234)
+        self.assertNotEqual(norm_c, norm_d)
+
+    def test_is_recently_posted_allows_retry_on_unverified_or_failed(self):
+        import uuid
+        from utils import is_recently_posted, record_posted_link
+        target = f"https://facebook.com/groups/audit-retry-{uuid.uuid4().hex[:8]}"
+        
+        # When unverified, retry is NOT blocked
+        record_posted_link(target, target, "Draft post", url_type="group", publish_state="submitted_unverified")
+        recent, _, _ = is_recently_posted(target, hours=24.0)
+        self.assertFalse(recent)
+
+        # When published, retry IS blocked
+        record_posted_link(target, f"{target}/posts/888", "Published post", url_type="post", publish_state="published")
+        recent_pub, hours_ago, _ = is_recently_posted(target, hours=24.0)
+        self.assertTrue(recent_pub)
+        self.assertGreaterEqual(hours_ago, 0.0)
+
+    def test_text_similarity_match_multi_checkpoint(self):
+        from utils import text_similarity_match
+        post_a = "Chào mọi người trong nhóm! Mình có căn homestay xinh xắn tại thành phố Huế cần cho thuê theo ngày giá hạt dẻ chỉ 350k."
+        post_b = "Chào mọi người trong nhóm! Mình đang cần tìm mua xe máy cũ biển số 75 còn chạy tốt giá tầm 5 triệu để đi làm."
+        
+        # Both share same first 30 chars ("Chào mọi người trong nhóm! Mình ") but different middle/suffix
+        self.assertFalse(text_similarity_match(post_a, post_b))
+
+        # Real post with slight whitespace / formatting variation must match
+        post_a_variant = "Chào mọi người trong nhóm!\n\nMình có căn homestay xinh xắn tại thành phố Huế cần cho thuê theo ngày giá hạt dẻ chỉ 350k."
+        self.assertTrue(text_similarity_match(post_a, post_a_variant))
+
+    def test_media_attach_failure_aborts_posting(self):
+        from unittest.mock import MagicMock, patch
+        from fb_group import post_to_group
+
+        mock_p = MagicMock()
+        mock_page = MagicMock()
+        mock_loc = MagicMock()
+        mock_loc.count.return_value = 1
+        mock_loc.is_visible.return_value = True
+        mock_loc.get_attribute.return_value = ""
+        mock_loc.first = mock_loc
+        mock_loc.last = mock_loc
+        mock_loc.nth.return_value = mock_loc
+        mock_loc.filter.return_value = mock_loc
+        mock_page.locator.return_value = mock_loc
+        mock_page.get_by_text.return_value = mock_loc
+        mock_p.chromium.launch.return_value.new_context.return_value.new_page.return_value = mock_page
+
+        with patch("fb_group.sync_playwright") as mock_sp, \
+             patch("fb_group.attach_image_to_composer", return_value=False), \
+             patch("fb_group.is_recently_posted", return_value=(False, 0, None)), \
+             patch("time.sleep", return_value=None):
+            mock_sp.return_value.__enter__.return_value = mock_p
+            res = post_to_group("https://facebook.com/groups/test-attach", "Hello", image_path="photo.jpg")
+            self.assertFalse(res.success)
+            self.assertEqual(res.code, "MEDIA_ATTACH_FAILED")
+
+    def test_comment_on_post_requires_dom_verification(self):
+        from unittest.mock import MagicMock, patch
+        from fb_comment import comment_on_post
+        
+        mock_p = MagicMock()
+        mock_page = MagicMock()
+        mock_input = MagicMock()
+        mock_input.is_visible.return_value = True
+        mock_input.inner_text.return_value = ""
+        mock_spam = MagicMock()
+        mock_spam.is_visible.return_value = False
+        mock_page.wait_for_function.side_effect = Exception("Timeout waiting for comment")
+        
+        def locator_mock(sel, *a, **kw):
+            if "tạm thời" in sel or "hạn chế" in sel or "something went wrong" in sel:
+                m = MagicMock()
+                m.first = mock_spam
+                return m
+            elif "textbox" in sel or "data-lexical-editor" in sel or "contenteditable" in sel or "bình luận" in sel or "comment" in sel:
+                m = MagicMock()
+                m.count.return_value = 1
+                m.nth.return_value = mock_input
+                m.first = mock_input
+                return m
+            else:
+                m = MagicMock()
+                m.is_visible.return_value = False
+                m.first = m
+                m.filter.return_value = m
+                m.count.return_value = 0
+                return m
+        
+        mock_page.locator.side_effect = locator_mock
+        mock_p.chromium.launch.return_value.new_context.return_value.new_page.return_value = mock_page
+
+        with patch("fb_comment.sync_playwright") as mock_sp, patch("time.sleep", return_value=None):
+            mock_sp.return_value.__enter__.return_value = mock_p
+            res = comment_on_post("https://facebook.com/groups/1/posts/2", "Test comment")
+            self.assertFalse(res.success)
+            self.assertEqual(res.code, "COMMENT_UNVERIFIED")
+
+    def test_comment_on_list_returns_aggregate_action_result(self):
+        from fb_comment import comment_on_list
+        from utils import ActionResult
+        # 1 success, 1 fail
+        responses = [
+            ActionResult(success=True, code="SUCCESS", message="Commented"),
+            ActionResult(success=False, code="COMMENT_UNVERIFIED", message="Failed"),
+        ]
+        with patch("fb_comment.comment_on_post", side_effect=responses):
+            res = comment_on_list(["https://fb.com/p/1", "https://fb.com/p/2"], "Nice post!", min_delay=0, max_delay=0)
+            self.assertFalse(res.success)
+            self.assertEqual(res.code, "COMMENT_LIST_PARTIAL_FAIL")
+            self.assertEqual(res.data["total"], 2)
+            self.assertEqual(res.data["success"], 1)
+            self.assertEqual(res.data["failed"], 1)
+
+    def test_process_runner_cancel_race_prepare_job(self):
+        from services.process_runner import ProcessRunner
+        runner = ProcessRunner()
+        job_id = "test-race-prepare"
+        runner.prepare_job(job_id)
+        self.assertFalse(runner.is_cancelled(job_id))
+        runner.cancel(job_id)
+        self.assertTrue(runner.is_cancelled(job_id))
+        # Running sync on pre-cancelled job must abort with -1
+        ret = runner.run_command_sync(["cmd.exe", "/c", "echo", "hi"], job_id=job_id)
+        self.assertEqual(ret, -1)
+
+    def test_process_runner_cleanup_job(self):
+        from services.process_runner import ProcessRunner
+        runner = ProcessRunner()
+        job_id = "test-cleanup-runner"
+        runner.prepare_job(job_id)
+        runner.add_listener(job_id, lambda line: None)
+        runner.cleanup_job(job_id)
+        self.assertNotIn(job_id, runner._listeners)
+        self.assertNotIn(job_id, runner._cancellation_requested)
+
+    def test_process_runner_get_log_path_path_traversal_prevention(self):
+        from services.process_runner import ProcessRunner
+        runner = ProcessRunner()
+        with self.assertRaises(ValueError):
+            runner.get_log_path("../../etc/passwd")
+        with self.assertRaises(ValueError):
+            runner.get_log_path("job/with/forward/slashes")
+        with self.assertRaises(ValueError):
+            runner.get_log_path("job\\with\\backslashes")
+        # Valid alphanumeric / hyphen ID must work
+        valid_path = runner.get_log_path("valid-job-id-123")
+        self.assertTrue(str(valid_path).endswith("valid-job-id-123.log"))
+
+    def test_job_repo_mark_finished_state_machine_guard(self):
+        from repositories.job_repo import JobRepository
+        repo = JobRepository()
+        job_id = "test-terminal-guard-audit"
+        repo.create_job({"id": job_id, "state": "queued"})
+        repo.mark_running(job_id)
+        repo.mark_finished(job_id, state="cancelled")
+        self.assertEqual(repo.get_job(job_id)["state"], "cancelled")
+        
+        # Overwrite attempt with success/failed must be rejected
+        ret = repo.mark_finished(job_id, state="success")
+        self.assertFalse(ret)
+        self.assertEqual(repo.get_job(job_id)["state"], "cancelled")
+
+    def test_job_repo_reconcile_running_and_queued_jobs(self):
+        from repositories.job_repo import JobRepository
+        repo = JobRepository()
+        q_id = "test-zombie-queued"
+        r_id = "test-zombie-running"
+        repo.create_job({"id": q_id, "state": "queued"})
+        repo.create_job({"id": r_id, "state": "running"})
+
+        reconciled = repo.reconcile_running_jobs()
+        self.assertGreaterEqual(reconciled, 1)
+        self.assertEqual(repo.get_job(q_id)["state"], "queued")
+        self.assertEqual(repo.get_job(r_id)["state"], "interrupted")
+
+    def test_job_manager_cancel_terminal_job_guard(self):
+        from services.job_manager import JobManager
+        jm = JobManager()
+        job_id = "test-terminal-cancel-guard"
+        jm.job_repo.create_job({"id": job_id, "state": "success"})
+        self.assertFalse(jm.cancel_job(job_id))
+
+    def test_job_repo_payload_redaction(self):
+        from repositories.job_repo import JobRepository
+        repo = JobRepository()
+        job_id = "test-secret-redact"
+        repo.create_job({
+            "id": job_id,
+            "state": "queued",
+            "payload": {
+                "target": "hue",
+                "geminiApiKey": "AIzaSySecretKey999",
+                "pageAccessToken": "EAASecretToken123",
+                "password": "MySuperSecretPassword!"
+            }
+        })
+        saved = repo.get_job(job_id)
+        self.assertEqual(saved["payload"]["geminiApiKey"], "***REDACTED***")
+        self.assertEqual(saved["payload"]["pageAccessToken"], "***REDACTED***")
+        self.assertEqual(saved["payload"]["password"], "***REDACTED***")
+
+    def test_vault_api_redacts_passwords(self):
+        client = server.app.test_client()
+        res = client.get("/api/vault")
+        self.assertEqual(res.status_code, 200)
+        for item in res.get_json():
+            self.assertNotIn("password", item)
+            self.assertIn("has_password", item)
+
+    def test_posted_links_api_reads_from_sqlite(self):
+        from repositories.activity_repo import ActivityRepository
+        repo = ActivityRepository()
+        repo.record_posted_link(
+            target="https://facebook.com/groups/sql-group",
+            post_url="https://facebook.com/groups/sql-group/posts/999888",
+            content="SQL post test",
+            url_type="post",
+            publish_state="published"
+        )
+        client = server.app.test_client()
+        res = client.get("/api/posted-links")
+        self.assertEqual(res.status_code, 200)
+        urls = [item.get("url") for item in res.get_json()]
+        self.assertIn("https://facebook.com/groups/sql-group/posts/999888", urls)
+
+    def test_photos_list_directory_traversal_prevention(self):
+        client = server.app.test_client()
+        # Unauthorized traversal path outside allowed dirs must return 403
+        res = client.get("/api/photos/list?folder=C:/Windows/System32")
+        self.assertEqual(res.status_code, 403)
+
+    def test_page_config_masks_short_tokens(self):
+        client = server.app.test_client()
+        with patch.object(server, "load_config", return_value={"page_access_token": "12345"}):
+            res = client.get("/api/page/config")
+            self.assertEqual(res.status_code, 200)
+            data = res.get_json()
+            self.assertEqual(data["token_masked"], "...2345")
+
+    def test_group_join_button_confirmation_rejects_unknown_state(self):
+        from fb_join_group import search_and_join_groups
+        class FakeAfterClickElement:
+            def is_visible(self, *a, **kw): return True
+            def inner_text(self): return "Yêu cầu xác minh danh tính"
+            def get_attribute(self, attr): return ""
+
+        class FakePage:
+            def set_default_timeout(self, *a, **kw): pass
+            def goto(self, *a, **kw): pass
+            def locator(self, *a, **kw):
+                class SubLoc:
+                    def all(self): return [FakeAfterClickElement()]
+                    def first(self): return FakeAfterClickElement()
+                    def count(self): return 0
+                    def is_visible(self, *a, **kw): return False
+                return SubLoc()
+
+        with patch("fb_join_group.sync_playwright"):
+            cnt = search_and_join_groups("https://facebook.com/groups/unknown-state", max_groups=1)
+            self.assertEqual(cnt, 0)
+
+    def test_interact_with_group_feed_safe(self):
+        from fb_join_group import interact_with_group_feed
+        class MockArticle:
+            def scroll_into_view_if_needed(self): pass
+            def locator(self, sel):
+                class MockBtn:
+                    def filter(self, *a, **kw): return self
+                    def first(self): return self
+                    def is_visible(self, *a, **kw): return True
+                    def is_enabled(self): return True
+                    def click(self): pass
+                return MockBtn()
+
+        class MockPage:
+            def evaluate(self, code): pass
+            def locator(self, sel):
+                class MockLoc:
+                    def all(self): return [MockArticle()]
+                return MockLoc()
+            @property
+            def keyboard(self):
+                class MockKB:
+                    def press(self, key): pass
+                return MockKB()
+
+        # Test execution does not throw
+        with patch("time.sleep", return_value=None), patch("fb_join_group.safe_mouse_wheel"):
+            interact_with_group_feed(MockPage())
+
+    def test_join_group_chunks_urls_max_two_per_profile(self):
+        import server
+        client = server.app.test_client()
+        mock_accounts = [
+            {"id": "acc-1", "name": "Profile 1", "type": "local"},
+            {"id": "acc-2", "name": "Profile 2", "type": "local"}
+        ]
+        with patch("server.load_accounts", return_value=mock_accounts), \
+             patch("server.record_profile_activity"), \
+             patch("time.sleep", return_value=None), \
+             patch("subprocess.Popen") as mock_popen:
+            class DummyProc:
+                def __init__(self):
+                    self.stdout = io.StringIO("Batch completed\n")
+                def poll(self): return 0
+                def wait(self, timeout=None): return 0
+                def kill(self): pass
+            mock_popen.side_effect = lambda *a, **kw: DummyProc()
+
+            res = client.post("/api/run", json={
+                "command": "join-group",
+                "accountId": "__rotate__",
+                "mode": "urls",
+                "urls": "https://fb.com/g/1\nhttps://fb.com/g/2\nhttps://fb.com/g/3\nhttps://fb.com/g/4",
+                "limit": 2
+            })
+            self.assertEqual(res.status_code, 200)
+            data = res.get_data(as_text=True)
+            self.assertIn("RUN_RESULT:finished", data)
+            # Should have run 2 chunks (2 batches of 2)
+            self.assertEqual(mock_popen.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
 
 
+
+
+
+class V601RegressionTests(unittest.TestCase):
+    def test_mutable_runtime_paths_live_under_data_dir(self):
+        from paths import DATA_DIR
+        for value in (server.CONFIG_FILE, server.QUEUE_FILE, server.CAMPAIGNS_FILE, server.ACTIVITY_LOG_FILE, server.POSTED_LINKS_FILE, server.JOINED_GROUPS_FILE):
+            self.assertTrue(Path(value).resolve().is_relative_to(DATA_DIR.resolve()))
+
+    def test_gemini_default_model_and_api_key_header(self):
+        import ai_spinner
+        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-3.8-flash")
+        captured = {}
+        def fake(req, timeout=20, attempts=3):
+            captured["url"] = req.full_url
+            captured["key"] = req.headers.get("X-goog-api-key") or req.headers.get("x-goog-api-key")
+            return {"candidates":[{"content":{"parts":[{"text":"Homestay Huế mới. Hotline: 0905555317. Giá 350k/đêm. https://example.com"}]}}]}
+        original = "Homestay Huế. Hotline: 0905555317. Giá 350k/đêm. https://example.com"
+        with patch("ai_spinner._urlopen_json", side_effect=fake):
+            out = ai_spinner.spin_content_gemini(original, "secret-api-key-123")
+        self.assertIn("gemini-3.8-flash:generateContent", captured["url"])
+        self.assertNotIn("secret-api-key-123", captured["url"])
+        self.assertEqual(captured["key"], "secret-api-key-123")
+        self.assertIn("0905555317", out)
+
+    def test_build_reads_version_dynamically(self):
+        script = Path("BUILD_PORTABLE.ps1").read_text(encoding="utf-8")
+        self.assertIn("Get-Content (Join-Path $root 'VERSION')", script)
+        self.assertNotIn("FB-Automation-Portable-v5.", script)

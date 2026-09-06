@@ -4,7 +4,7 @@ import random
 import re
 import os
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, resolve_account, launch_browser, close_browser
+from utils import process_spintax, human_type, resolve_account, launch_browser, close_browser, safe_mouse_wheel
 
 STATE_FILE = "state.json"
 
@@ -14,7 +14,8 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
     if comment_pool_str:
         comment_pool = [c.strip() for c in comment_pool_str.split(";") if c.strip()]
     else:
-        comment_pool = ["Tuyệt vời quá!", "Bài viết rất hay.", "Chúc bạn ngày mới tốt lành!", "Like mạnh nhé!", "Quá xuất sắc!"]
+        # v6: không tự tạo bình luận ngẫu nhiên nếu người dùng không cung cấp nội dung.
+        comment_pool = []
         
     # Load account if provided
     account = None
@@ -53,7 +54,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     break
                     
                 scroll_y = random.randint(300, 700)
-                page.mouse.wheel(0, scroll_y)
+                safe_mouse_wheel(page, 0, scroll_y)
                 print(f"Đang lướt Newsfeed... (Cuộn xuống {scroll_y}px)")
                 time.sleep(random.uniform(2.5, 4.5))
                 
@@ -102,6 +103,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     continue
                     
             print(f"✅ Hoàn thành tương tác Newsfeed. Đã tương tác: {interacted_count}/{limit} bài viết.")
+            return True
             
         except Exception as e:
             print(f"❌ Có lỗi xảy ra khi nuôi nick: {e}")
@@ -115,6 +117,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
 
 if __name__ == "__main__":
     import argparse
+    import sys
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("--comments", default="")
@@ -122,4 +125,8 @@ if __name__ == "__main__":
     parser.add_argument("--gpm-api", default=None)
     args = parser.parse_args()
     
-    interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
+    try:
+        ok = interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
+        sys.exit(0 if ok is not False else 1)
+    except Exception:
+        sys.exit(1)
