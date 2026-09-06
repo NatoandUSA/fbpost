@@ -261,9 +261,13 @@ def execute_automation_task(
                     job_repo.update_job(job_id, progress_current=chunk_idx + 1)
 
                 if chunk_idx < total_chunks - 1:
-                    rot_delay = random.randint(60, 180)
                     next_acc = active_pool[(chunk_idx + 1) % pool_len].get("name", "profile tiếp theo")
-                    on_line(f"\n⏳ [Anti-Spam] Đã hoàn thành đợt của {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
+                    if ret != 0:
+                        rot_delay = 5
+                        on_line(f"\n⚠️ Đợt chạy của {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
+                    else:
+                        rot_delay = random.randint(60, 180)
+                        on_line(f"\n⏳ [Anti-Spam] Đã hoàn thành đợt của {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
                     if not sleep_with_cancel(rot_delay):
                         return False
 
@@ -302,9 +306,13 @@ def execute_automation_task(
                     if job_repo:
                         job_repo.update_job(job_id, progress_current=idx + 1)
                     if idx < total_acc - 1:
-                        rot_delay = random.randint(60, 180)
                         next_acc = accounts_pool[idx + 1].get("name", "profile tiếp theo")
-                        on_line(f"\n⏳ [Anti-Spam] Đã hoàn tất profile {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
+                        if ret != 0:
+                            rot_delay = 5
+                            on_line(f"\n⚠️ Profile {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
+                        else:
+                            rot_delay = random.randint(60, 180)
+                            on_line(f"\n⏳ [Anti-Spam] Đã hoàn tất profile {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
                         if not sleep_with_cancel(rot_delay):
                             return False
                 on_line(f"RUN_RESULT:{'failed' if join_failed else 'finished'}\n")

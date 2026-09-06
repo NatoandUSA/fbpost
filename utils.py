@@ -275,7 +275,7 @@ def resolve_account(account_id, gpm_api_url=None):
     }
 
 
-def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=20):
+def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):
     """Wait for a GPM-launched browser to expose its local CDP endpoint."""
     deadline = time.monotonic() + timeout_seconds
     last_error = None
@@ -283,12 +283,15 @@ def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=20):
     while time.monotonic() < deadline:
         attempt += 1
         try:
-            return playwright.chromium.connect_over_cdp(cdp_url)
+            # Sử dụng timeout 8s cho mỗi lần thử để không block quá lâu và có thể retry
+            return playwright.chromium.connect_over_cdp(cdp_url, timeout=8000)
         except Exception as error:
             last_error = error
             if attempt == 1:
                 print("GPM has started the profile; waiting for its debugging port to become ready...")
-            time.sleep(0.75)
+            else:
+                print(f"⏳ Đang thử kết nối lại CDP lần {attempt}...")
+            time.sleep(1.0)
     raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
 
 
@@ -394,6 +397,11 @@ def launch_browser(account, p, api_url=None):
             except Exception as e:
                 gpm_error = f"GPM Login v4 CDP connection failed: {e}"
                 print(f"GPM Login v4 API attempt failed: {e}")
+                try:
+                    requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=4)
+                    requests.get(f"{api_base}/api/v3/profiles/stop/{profile_id}", timeout=4)
+                except Exception:
+                    pass
 
         # Backward-compatible GPM v2 fallback.
         if not browser and not api_is_v1:
@@ -408,6 +416,10 @@ def launch_browser(account, p, api_url=None):
             except Exception as e:
                 if not gpm_error:
                     gpm_error = f"GPM v2 fallback connection failed: {e}"
+                try:
+                    requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=4)
+                except Exception:
+                    pass
                 
         if not browser:
             raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
@@ -580,6 +592,10 @@ def close_browser(browser_or_context, account=None, api_url=None):
         else:
             try:
                 requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=5)
+            except Exception:
+                pass
+            try:
+                requests.get(f"{api_base}/api/v3/profiles/stop/{profile_id}", timeout=5)
             except Exception:
                 pass
         try:

@@ -4738,10 +4738,18 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
 
     // In phiên bản hệ thống vào nhật ký hoạt động
-    setTimeout(() => {
-        appendLog('🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN v5.7.0 [Build: 2026-09-04 17:00]');
-        appendLog('💡 Hệ thống đã sẵn sàng với tài khoản GPM M14 và 3 nhóm Homestay tại Huế.');
-        appendLog('🛡️ Chế độ chống spam: Giãn cách an toàn 5 - 10 phút & Hỗ trợ xoay tua Profile GPM.');
+    setTimeout(async () => {
+        let ver = 'v6.0.1';
+        let build = '2026-09-06';
+        try {
+            const res = await fetch('/api/app-info');
+            const data = await res.json();
+            if (data.version) ver = `v${data.version}`;
+            if (data.built_at) build = data.built_at;
+        } catch (e) {}
+        appendLog(`🚀 FB AUTOMATION SYSTEM — PHIÊN BẢN ${ver} [Build: ${build}]`);
+        appendLog('💡 Hệ thống tự động hóa Facebook: Sẵn sàng tác vụ Đăng bài, Nuôi nick & Gia nhập nhóm.');
+        appendLog('🛡️ Chế độ chống spam: Giãn cách an toàn & Hỗ trợ xoay tua Profile tự động.');
         appendLog('📋 Quy trình duyệt: Hỗ trợ Đưa vào hàng đợi & bấm Duyệt bài trước khi đăng.');
     }, 500);
 });
