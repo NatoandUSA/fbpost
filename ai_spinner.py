@@ -157,7 +157,7 @@ def spin_content_local(content: str) -> str:
     return "\n".join(parts).strip()
 
 
-def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") -> str:
+def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "") -> str:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
@@ -167,7 +167,8 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") 
         
     prompt = (
         f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản.\n"
-        f"Hãy viết lại bài đăng Facebook sau đây thành một phiên bản hoàn toàn mới lạ, hấp dẫn, văn phong {style}, "
+        + (f"Thương hiệu/Project hiện tại là {brand_name}. Hãy dùng đúng tên thương hiệu này khi cần nhắc đến cơ sở lưu trú.\n" if brand_name else "")
+        + f"Hãy viết lại bài đăng Facebook sau đây thành một phiên bản hoàn toàn mới lạ, hấp dẫn, văn phong {style}, "
         f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
         f"YÊU CẦU BẮT BUỘC:\n"
         f"- Giữ nguyên toàn bộ số điện thoại, Zalo, địa chỉ, giá phòng hoặc link nếu có trong bài gốc.\n"
@@ -209,7 +210,7 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên") 
     raise Exception("Gemini không trả về nội dung hợp lệ.")
 
 
-def generate_unique_variant(content: str, api_key: str = None) -> str:
+def generate_unique_variant(content: str, api_key: str = None, brand_key: str = None, include_signature: bool = False) -> str:
     """
     Hàm giao tiếp tổng quát: Thử dùng Gemini API nếu có key hợp lệ,
     nếu lỗi hoặc không có key sẽ tự động chuyển sang Local Smart Spinner.
@@ -217,14 +218,20 @@ def generate_unique_variant(content: str, api_key: str = None) -> str:
     """
     if not content or not content.strip():
         return content
-        
+
+    from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
+    source_content = strip_known_signature(content)
+    selected_brand_name = brand_name(brand_key)
+
     if api_key and len(api_key.strip()) > 10:
         try:
-            return spin_content_gemini(content, api_key.strip())
+            spun = spin_content_gemini(source_content, api_key.strip(), brand_name=selected_brand_name)
+            return apply_brand_signature(spun, brand_key, include_signature)
         except Exception as e:
             print(f"⚠️ [AI Spinner] Gemini API gặp lỗi ({e}), chuyển sang chế độ Local Smart Spinner.")
             
-    return spin_content_local(content)
+    spun = spin_content_local(source_content)
+    return apply_brand_signature(spun, brand_key, include_signature)
 
 
 COMMENT_HOOKS = [

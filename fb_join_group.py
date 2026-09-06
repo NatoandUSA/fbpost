@@ -292,7 +292,23 @@ def search_and_join_groups(
 
                 if not candidates:
                     if is_direct_url:
-                        print(f"ℹ️ Bạn đã tham gia hoặc đã gửi yêu cầu trước đó tại nhóm: {kw}")
+                        # Direct URL mode: distinguish an existing membership/request from a true missing control.
+                        existing_state = False
+                        try:
+                            for state_btn in page.locator('div[role="button"], button').all():
+                                if not state_btn.is_visible():
+                                    continue
+                                state_text = f"{state_btn.inner_text() or ''} {state_btn.get_attribute('aria-label') or ''}".lower()
+                                if any(marker in state_text for marker in ["đã tham gia", "đã yêu cầu", "yêu cầu đã gửi", "joined", "requested", "rời khỏi", "leave", "hủy yêu cầu", "cancel request"]):
+                                    existing_state = True
+                                    break
+                        except Exception:
+                            existing_state = False
+                        if existing_state:
+                            joined_count += 1
+                            print(f"ℹ️ Nhóm đã ở trạng thái thành viên/chờ duyệt; tính là đã xử lý: {kw}")
+                        else:
+                            print(f"⚠️ Không tìm thấy nút Tham gia hoặc trạng thái thành viên/chờ duyệt tại nhóm: {kw}")
                     else:
                         print(f"ℹ️ Không có nhóm mới nào chưa tham gia cho từ khóa '{kw}'.")
                     continue

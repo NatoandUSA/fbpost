@@ -78,7 +78,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-06 v6.0.2"
+BUILD_TIME = "2026-09-06 v6.0.3"
 
 
 def app_build_info():
@@ -1165,10 +1165,13 @@ def api_joined_groups():
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
     from ai_spinner import generate_unique_variant, spin_comment, generate_interact_comments
+    from brand_profiles import BRAND_SIGNATURES
     data = json_body()
     content = data.get("content", "").strip()
     api_key = data.get("apiKey", "").strip()
     mode = data.get("mode", "post")
+    brand_key = data.get("brandKey", "")
+    include_signature = bool(data.get("includeSignature", False))
     if not content and mode != "interact":
         return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
     try:
@@ -1177,10 +1180,16 @@ def api_ai_spin():
         elif mode == "interact":
             spun = generate_interact_comments(content, api_key)
         else:
-            spun = generate_unique_variant(content, api_key)
+            spun = generate_unique_variant(content, api_key, brand_key=brand_key, include_signature=include_signature)
         return jsonify({"success": True, "spun_content": spun})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/brands', methods=['GET'])
+def api_brands():
+    from brand_profiles import BRAND_SIGNATURES
+    return jsonify({"success": True, "brands": BRAND_SIGNATURES})
 
 @app.route('/api/photos/list', methods=['GET'])
 def api_photos_list():

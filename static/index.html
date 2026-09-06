@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Workspace v6.0.2 [Build: 2026-09-06 20:00]</title>
-    <link rel="stylesheet" href="styles.css?v=6.0.2">
+    <title>FB Automation Workspace v6.0.3 [Build: 2026-09-06 20:00]</title>
+    <link rel="stylesheet" href="styles.css?v=6.0.3">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.0.2</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.0.3</span>
                     </div>
                     <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-06 20:00</span>
                 </div>
@@ -307,6 +307,20 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 </div>
                                 <div id="gemini-key-container" class="hidden" style="margin-bottom:8px;">
                                     <input type="password" id="gemini-api-key-input" class="field-input" placeholder="Dán Gemini API Key (để trống sẽ dùng Local Smart Spinner miễn phí)" style="font-size:12px; padding:6px 10px;">
+                                </div>
+                                <div id="brand-project-box" style="margin-bottom:10px; padding:10px 12px; border:1px solid #DDD6FE; background:#FAF5FF; border-radius:8px;">
+                                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                        <label class="field-label" for="brand-project-select" style="margin:0;">🏨 Project / Homestay</label>
+                                        <select id="brand-project-select" class="field-input" style="max-width:220px; padding:6px 8px;">
+                                            <option value="">— Không gắn thương hiệu —</option>
+                                            <option value="umee">Umee Homestay</option>
+                                            <option value="lacasa">Lacasa Homestay</option>
+                                        </select>
+                                        <label class="checkbox-label" style="margin:0; font-size:12px; font-weight:600;">
+                                            <input type="checkbox" id="brand-signature-opt" checked> Tự động đính kèm chữ ký
+                                        </label>
+                                    </div>
+                                    <pre id="brand-signature-preview" style="display:none; margin:8px 0 0; padding:8px 10px; white-space:pre-wrap; font-size:11px; line-height:1.45; background:white; border:1px solid #E5E7EB; border-radius:6px;"></pre>
                                 </div>
                                 <textarea id="post-content" class="field-textarea" rows="5" placeholder="Bạn đang nghĩ gì?">{Xin chào cả nhà|Chào mọi người}! Bên mình còn phòng homestay xinh xắn tại trung tâm TP Huế, đầy đủ tiện nghi, không gian thoáng mát, giá cực ưu đãi cho khách du lịch. Anh/chị nào cần tìm phòng cứ inbox mình để nhận hình ảnh và vị trí chi tiết nhé! {Chúc mọi người ngày mới vui vẻ|Cảm ơn admin đã duyệt bài ạ}!</textarea>
                                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px;">

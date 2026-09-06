@@ -453,6 +453,23 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         from utils import GPM_START_TIMEOUT_SECONDS
         self.assertGreaterEqual(GPM_START_TIMEOUT_SECONDS, 30)
 
+    def test_brand_signature_exact_and_idempotent(self):
+        from brand_profiles import apply_brand_signature, BRAND_SIGNATURES
+        base = "Nội dung quảng cáo thử nghiệm"
+        once = apply_brand_signature(base, "umee", True)
+        twice = apply_brand_signature(once, "umee", True)
+        self.assertEqual(once, twice)
+        self.assertTrue(once.endswith(BRAND_SIGNATURES["umee"]["signatureText"]))
+        self.assertIn("Zalo: 0905555317", once)
+
+    def test_brand_signature_switches_projects(self):
+        from brand_profiles import apply_brand_signature
+        base = "Nội dung quảng cáo thử nghiệm"
+        umee = apply_brand_signature(base, "umee", True)
+        lacasa = apply_brand_signature(umee, "lacasa", True)
+        self.assertIn("lacasahomestayinvietnam", lacasa)
+        self.assertNotIn("facebook.com/umeehomestay", lacasa)
+
     def test_fetch_gpm_profiles_offline(self):
         from utils import fetch_gpm_profiles
         with patch("requests.get", side_effect=Exception("Connection refused")):
@@ -783,7 +800,7 @@ class NclProInspiredFeatureTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.2")
+        self.assertEqual(get_version(), "6.0.3")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())

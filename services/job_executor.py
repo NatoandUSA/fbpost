@@ -68,6 +68,8 @@ def execute_automation_task(
     skip_duplicate = data.get("skipDuplicate24h", True)
     clean_exif = data.get("cleanExif", True)
     anti_hash_text = data.get("antiHashText", False)
+    brand_key = str(data.get("brandKey") or "").strip().lower()
+    include_signature = bool(data.get("includeSignature", False))
 
     auto_join_groups = data.get("autoJoinGroups", cfg.get("auto_join_groups", False))
     group_keywords = str(data.get("groupKeywords") or cfg.get("group_keywords", "Homestay Huế, Du lịch Huế")).strip()
@@ -520,11 +522,15 @@ def execute_automation_task(
         if auto_spin and cmd in ("group", "page"):
             try:
                 from ai_spinner import generate_unique_variant
-                task_content = generate_unique_variant(content, gemini_api_key)
+                task_content = generate_unique_variant(content, gemini_api_key, brand_key=brand_key, include_signature=include_signature)
                 on_line(f"🤖 [AI Content Spinner] Đã tạo biến thể bài viết mới cho mục tiêu {i+1}/{total}!\n")
             except Exception as spin_err:
                 on_line(f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n")
-                task_content = content
+                from brand_profiles import apply_brand_signature
+                task_content = apply_brand_signature(content, brand_key, include_signature)
+        elif cmd in ("group", "page"):
+            from brand_profiles import apply_brand_signature
+            task_content = apply_brand_signature(content, brand_key, include_signature)
 
         task_images = []
         if photo_folder and not image:
@@ -566,10 +572,13 @@ def execute_automation_task(
             job_repo.update_job(job_id, progress_current=i + 1)
 
         if i < total - 1:
-            delay = random.randint(delay_min, delay_max)
+            delay = 5 if ret != 0 else random.randint(delay_min, delay_max)
             mins = delay // 60
             secs = delay % 60
-            on_line(f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
+            if ret != 0:
+                on_line(f"\n⚠️ Target {i+1} lỗi trước khi hoàn tất. Nghỉ nhanh {delay}s trước target tiếp theo.\n")
+            else:
+                on_line(f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
             if auto_join_groups and group_keywords:
                 on_line(f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n")
                 on_line("⏳ [GPM Cooldown] Nghỉ an toàn 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")

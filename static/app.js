@@ -2785,6 +2785,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const geminiKeyInput = document.getElementById('gemini-api-key-input');
             payload.geminiApiKey = geminiKeyInput ? geminiKeyInput.value.trim() : '';
+            const brandProjectSelectRun = document.getElementById('brand-project-select');
+            const brandSignatureOptRun = document.getElementById('brand-signature-opt');
+            payload.brandKey = brandProjectSelectRun ? brandProjectSelectRun.value : '';
+            payload.includeSignature = brandSignatureOptRun ? brandSignatureOptRun.checked : false;
 
             const photoFolderInput = document.getElementById('photo-folder-input');
             payload.photoFolder = photoFolderInput ? photoFolderInput.value.trim() : '';
@@ -3150,6 +3154,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleGeminiKeyBtn = document.getElementById('toggle-gemini-key-btn');
     const geminiKeyContainer = document.getElementById('gemini-key-container');
     const geminiApiKeyInput = document.getElementById('gemini-api-key-input');
+    const brandProjectSelect = document.getElementById('brand-project-select');
+    const brandSignatureOpt = document.getElementById('brand-signature-opt');
+    const brandSignaturePreview = document.getElementById('brand-signature-preview');
+    let brandProfiles = {};
+
+
+    async function loadBrandProfiles() {
+        try {
+            const res = await fetch('/api/brands');
+            const data = await res.json();
+            brandProfiles = data.brands || {};
+        } catch (e) { brandProfiles = {}; }
+        refreshBrandPreview();
+    }
+
+    function refreshBrandPreview() {
+        if (!brandSignaturePreview || !brandProjectSelect) return;
+        const key = brandProjectSelect.value;
+        const profile = brandProfiles[key];
+        const enabled = !!(brandSignatureOpt && brandSignatureOpt.checked && profile);
+        brandSignaturePreview.style.display = enabled ? 'block' : 'none';
+        brandSignaturePreview.textContent = enabled ? `-------------------\n${profile.signatureText}` : '';
+    }
+
+    brandProjectSelect?.addEventListener('change', refreshBrandPreview);
+    brandSignatureOpt?.addEventListener('change', refreshBrandPreview);
+    loadBrandProfiles();
 
     if (toggleGeminiKeyBtn && geminiKeyContainer) {
         toggleGeminiKeyBtn.addEventListener('click', () => {
@@ -3177,7 +3208,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({
                         content: content,
                         mode: 'post',
-                        apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : ''
+                        apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
+                        brandKey: brandProjectSelect ? brandProjectSelect.value : '',
+                        includeSignature: brandSignatureOpt ? brandSignatureOpt.checked : false
                     })
                 });
                 const data = await res.json();
@@ -4739,7 +4772,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.2';
+        let ver = 'v6.0.3';
         let build = '2026-09-06';
         try {
             const res = await fetch('/api/app-info');
