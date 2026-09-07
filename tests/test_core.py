@@ -1,9 +1,13 @@
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="fb-auto-tests-")
+os.environ.setdefault("FB_AUTOMATION_DATA_DIR", _TEST_DATA_DIR)
 
 import scheduler
 import server
@@ -797,10 +801,47 @@ class NclProInspiredFeatureTests(unittest.TestCase):
                 self.assertIn("RUN_RESULT:finished", text_url)
 
 
+class V604QueueAndHistoryTests(unittest.TestCase):
+    def test_queue_active_filter_hides_cancelled_and_limits(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(server, "QUEUE_FILE", str(Path(directory) / "queue.json")):
+            items = [
+                {"id":"1","target":"a","content":"x","state":"approved","updated_at":"2026-01-01T00:00:03"},
+                {"id":"2","target":"b","content":"x","state":"processing","updated_at":"2026-01-01T00:00:02"},
+                {"id":"3","target":"c","content":"x","state":"cancelled","updated_at":"2026-01-01T00:00:01"},
+            ]
+            Path(server.QUEUE_FILE).write_text(json.dumps(items), encoding="utf-8")
+            res = server.app.test_client().get("/api/queue?active=1&limit=2")
+            self.assertEqual(res.status_code, 200)
+            payload = res.get_json()
+            self.assertEqual(len(payload), 2)
+            self.assertNotIn("cancelled", {x["state"] for x in payload})
+
+    def test_posted_link_reconciles_unverified_record(self):
+        from db import init_db
+        from repositories.activity_repo import ActivityRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "app.db"
+            init_db(db_file)
+            repo = ActivityRepository(db_file)
+            target = "https://facebook.com/groups/example"
+            content = "Same exact post content"
+            repo.record_posted_link(target, target, content, "unverified", "M4", "unverified", "group", "submitted_unverified")
+            repo.record_posted_link(target, target + "/posts/999", content, "Đã xuất bản", "M4", "Đã xuất bản", "post", "published")
+            rows = repo.list_posted_links()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["publish_state"], "published")
+            self.assertTrue(rows[0]["url"].endswith("/posts/999"))
+
+    def test_permalink_group_key_guard(self):
+        from utils import _group_key_from_url
+        self.assertEqual(_group_key_from_url("https://facebook.com/groups/hue/posts/123"), "hue")
+        self.assertNotEqual(_group_key_from_url("https://facebook.com/groups/other/posts/123"), "hue")
+
+
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.3")
+        self.assertEqual(get_version(), "6.0.4")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -876,41 +917,32 @@ class Phase2JobManagerTests(unittest.TestCase):
         self.client = server.app.test_client()
 
     def test_job_submission_and_query_endpoints(self):
-        # 1. Submit job
-        res = self.client.post("/api/jobs", json={
-            "command": "test-command",
-            "accountId": "test-acc-1",
-            "payload": {"demo": True},
-        })
-        self.assertEqual(res.status_code, 201)
-        data = res.get_json()
-        self.assertTrue(data.get("success"))
-        job_id = data.get("job_id")
-        self.assertTrue(job_id)
+        # Endpoint contract uses an allowed production command; execution is mocked.
+        fake_id = "jobtest123"
+        fake_job = {"id": fake_id, "command": "auth", "state": "queued", "payload": {}}
+        with patch("api.jobs.job_manager.submit_job", return_value=fake_id), \
+             patch("api.jobs.job_manager.get_job", return_value=fake_job), \
+             patch("api.jobs.job_manager.list_jobs", return_value=[fake_job]), \
+             patch("api.jobs.job_manager.get_job_logs", return_value="hello"), \
+             patch("api.jobs.job_manager.cancel_job", return_value=True):
+            res = self.client.post("/api/jobs", json={"command": "auth", "accountId": "test-acc-1"})
+            self.assertEqual(res.status_code, 201)
+            self.assertEqual(res.get_json()["job_id"], fake_id)
 
-        # 2. Get job
-        res_get = self.client.get(f"/api/jobs/{job_id}")
-        self.assertEqual(res_get.status_code, 200)
-        job_data = res_get.get_json().get("job")
-        self.assertEqual(job_data["id"], job_id)
-        self.assertEqual(job_data["command"], "test-command")
+            res_get = self.client.get(f"/api/jobs/{fake_id}")
+            self.assertEqual(res_get.status_code, 200)
+            self.assertEqual(res_get.get_json()["job"]["command"], "auth")
 
-        # 3. List jobs
-        res_list = self.client.get("/api/jobs")
-        self.assertEqual(res_list.status_code, 200)
-        jobs_list = res_list.get_json().get("jobs")
-        self.assertGreaterEqual(len(jobs_list), 1)
+            res_list = self.client.get("/api/jobs")
+            self.assertEqual(res_list.status_code, 200)
+            self.assertEqual(len(res_list.get_json()["jobs"]), 1)
 
-        # 4. Get logs
-        res_logs = self.client.get(f"/api/jobs/{job_id}/logs")
-        self.assertEqual(res_logs.status_code, 200)
-        self.assertIn("logs", res_logs.get_json())
+            res_logs = self.client.get(f"/api/jobs/{fake_id}/logs")
+            self.assertEqual(res_logs.status_code, 200)
+            self.assertEqual(res_logs.get_json()["logs"], "hello")
 
-        # 5. Cancel job
-        res_cancel = self.client.post(f"/api/jobs/{job_id}/cancel")
-        self.assertEqual(res_cancel.status_code, 200)
-        res_after = self.client.get(f"/api/jobs/{job_id}")
-        self.assertEqual(res_after.get_json()["job"]["state"], "cancelled")
+            res_cancel = self.client.post(f"/api/jobs/{fake_id}/cancel")
+            self.assertEqual(res_cancel.status_code, 200)
 
     def test_cancel_active_endpoint_when_no_active_job(self):
         res = self.client.post("/api/cancel")
@@ -1118,15 +1150,15 @@ class AuditV582RegressionTests(unittest.TestCase):
         # Substring collision prevention (123 vs 1234)
         self.assertNotEqual(norm_c, norm_d)
 
-    def test_is_recently_posted_allows_retry_on_unverified_or_failed(self):
+    def test_is_recently_posted_blocks_unverified_to_prevent_duplicate(self):
         import uuid
         from utils import is_recently_posted, record_posted_link
         target = f"https://facebook.com/groups/audit-retry-{uuid.uuid4().hex[:8]}"
         
-        # When unverified, retry is NOT blocked
+        # Unverified may already exist on Facebook, so auto-retry must be blocked.
         record_posted_link(target, target, "Draft post", url_type="group", publish_state="submitted_unverified")
         recent, _, _ = is_recently_posted(target, hours=24.0)
-        self.assertFalse(recent)
+        self.assertTrue(recent)
 
         # When published, retry IS blocked
         record_posted_link(target, f"{target}/posts/888", "Published post", url_type="post", publish_state="published")
@@ -1473,3 +1505,191 @@ class V601RegressionTests(unittest.TestCase):
         script = Path("BUILD_PORTABLE.ps1").read_text(encoding="utf-8")
         self.assertIn("Get-Content (Join-Path $root 'VERSION')", script)
         self.assertNotIn("FB-Automation-Portable-v5.", script)
+
+
+class V604ArchitectureInvariantTests(unittest.TestCase):
+    def test_jobs_api_rejects_unsupported_command_and_bad_pagination(self):
+        client = server.app.test_client()
+        bad_cmd = client.post('/api/jobs', json={'command': 'not-allowed'})
+        self.assertEqual(bad_cmd.status_code, 400)
+        bad_limit = client.get('/api/jobs?limit=abc')
+        self.assertEqual(bad_limit.status_code, 400)
+        with patch("api.jobs.job_manager.get_job", return_value={"id": "safejob"}):
+            bad_offset = client.get('/api/jobs/safejob/logs?offset=abc')
+        self.assertEqual(bad_offset.status_code, 400)
+
+    def test_queue_transition_is_atomic_and_single_claim(self):
+        from db import init_db
+        from repositories.campaign_repo import CampaignRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = str(Path(directory) / 'queue.db')
+            init_db(db_file)
+            repo = CampaignRepository(db_file=db_file)
+            item = {'id':'q1','target':'https://facebook.com/groups/x','content':'hello valid content','state':'approved','created_at':'2026-09-07T00:00:00+00:00','audit':[]}
+            self.assertTrue(repo.insert_queue_item(item))
+            first = repo.transition_queue_item('q1', ('approved',), 'processing', {}, 'processing')
+            second = repo.transition_queue_item('q1', ('approved',), 'processing', {}, 'processing')
+            self.assertEqual(first['state'], 'processing')
+            self.assertIsNone(second)
+
+    def test_canonical_queue_prefers_sqlite_over_stale_json(self):
+        from repositories.campaign_repo import CampaignRepository
+        original = CampaignRepository.list_queue
+        try:
+            CampaignRepository.list_queue = lambda self: [{'id':'db','state':'approved'}]
+            with patch.object(server, 'QUEUE_FILE', str(server.DATA_DIR / 'publication_queue.json')):
+                got = server.load_queue()
+            self.assertEqual(got[0]['id'], 'db')
+        finally:
+            CampaignRepository.list_queue = original
+
+
+    def test_processing_queue_recovery_is_idempotent(self):
+        from db import init_db
+        from repositories.campaign_repo import CampaignRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = str(Path(directory) / 'reconcile.db')
+            init_db(db_file)
+            repo = CampaignRepository(db_file=db_file)
+            item = {'id':'q2','target':'https://facebook.com/groups/y','content':'hello valid content','state':'processing','created_at':'2026-09-07T00:00:00+00:00','audit':[]}
+            self.assertTrue(repo.insert_queue_item(item))
+            self.assertEqual(repo.reconcile_processing_queue(), 1)
+            self.assertEqual(repo.reconcile_processing_queue(), 0)
+            recovered = repo.get_queue_item('q2')
+            self.assertEqual(recovered['state'], 'unverified')
+            self.assertIn('không tự động retry', recovered['error'].lower())
+
+    def test_ui_bulk_path_handles_group_and_page_and_terminal_truth(self):
+        js = Path('static/app.js').read_text(encoding='utf-8')
+        self.assertIn("if (groupTasks.length > 0)", js)
+        self.assertIn("if (pageTasks.length > 0)", js)
+        self.assertIn("terminalRunResult === 'failed'", js)
+        self.assertIn("terminalRunResult === 'cancelled'", js)
+
+
+class V604FinalProductionInvariantTests(unittest.TestCase):
+    def test_unverified_queue_is_reconcile_only(self):
+        from db import init_db
+        from repositories.campaign_repo import CampaignRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = str(Path(directory) / 'queue-final.db')
+            init_db(db_file)
+            repo = CampaignRepository(db_file=db_file)
+            item = {'id':'u1','target':'https://facebook.com/groups/x','content':'original submitted content','state':'unverified','created_at':'2026-09-07T00:00:00+00:00','audit':[]}
+            self.assertTrue(repo.insert_queue_item(item))
+            self.assertIsNone(repo.transition_queue_item('u1', ('approved',), 'processing', {}, 'processing'))
+            claimed = repo.transition_queue_item('u1', ('unverified',), 'reconciling', {}, 'reconciling')
+            self.assertEqual(claimed['state'], 'reconciling')
+            self.assertIsNone(repo.transition_queue_item('u1', ('unverified',), 'reconciling', {}, 'reconciling'))
+            back = repo.transition_queue_item('u1', ('reconciling',), 'unverified', {}, 'reconcile_not_found')
+            self.assertEqual(back['state'], 'unverified')
+
+    def test_release_build_includes_reconcile_module(self):
+        script = Path('BUILD_PORTABLE.ps1').read_text(encoding='utf-8')
+        self.assertIn("'fb_reconcile.py'", script)
+        self.assertIn('reconcile-post', Path('api/jobs.py').read_text(encoding='utf-8'))
+        self.assertIn('reconcile-post', Path('main.py').read_text(encoding='utf-8'))
+
+    def test_join_optional_engagement_defaults_off(self):
+        main = Path('main.py').read_text(encoding='utf-8')
+        executor = Path('services/job_executor.py').read_text(encoding='utf-8')
+        html = Path('static/index.html').read_text(encoding='utf-8')
+        self.assertIn('interact-feed", action="store_true", default=False', main)
+        self.assertIn('data.get("interactFeed", False)', executor)
+        self.assertNotIn('id="join-group-interact-feed" checked', html)
+        self.assertNotIn('id="join-group-auto-rules" checked', html)
+
+    def test_reconcile_no_match_is_zero_write(self):
+        import fb_reconcile
+        class FakePage:
+            def set_default_timeout(self, *_): pass
+            def goto(self, *_args, **_kwargs): pass
+            def reload(self, *_args, **_kwargs): pass
+        class FakeCM:
+            def __enter__(self): return object()
+            def __exit__(self, *args): return False
+        account = {'id':'acc1','type':'local','profile_path_or_id':'acc1'}
+        with patch('fb_reconcile.sync_playwright', return_value=FakeCM()), \
+             patch('fb_reconcile.resolve_account', return_value=account), \
+             patch('fb_reconcile.launch_browser', return_value=(object(), object(), FakePage())), \
+             patch('fb_reconcile.close_browser'), \
+             patch('fb_reconcile._scan_post_permalink_once', return_value=''), \
+             patch('fb_reconcile._has_pending_post_notice', return_value=False), \
+             patch('fb_reconcile.record_posted_link') as record, \
+             patch('fb_reconcile.time.sleep', return_value=None):
+            result = fb_reconcile.reconcile_existing_post('https://facebook.com/groups/x', 'original submitted content', 'acc1')
+        self.assertFalse(result.success)
+        self.assertEqual(result.state, 'unverified')
+        self.assertEqual(result.code, 'RECONCILE_NOT_FOUND')
+        record.assert_not_called()
+
+    def test_reconcile_match_updates_existing_lifecycle(self):
+        import fb_reconcile
+        class FakePage:
+            def set_default_timeout(self, *_): pass
+            def goto(self, *_args, **_kwargs): pass
+            def reload(self, *_args, **_kwargs): pass
+        class FakeCM:
+            def __enter__(self): return object()
+            def __exit__(self, *args): return False
+        account = {'id':'acc1','type':'local','profile_path_or_id':'acc1'}
+        permalink = 'https://www.facebook.com/groups/x/posts/999'
+        with patch('fb_reconcile.sync_playwright', return_value=FakeCM()), \
+             patch('fb_reconcile.resolve_account', return_value=account), \
+             patch('fb_reconcile.launch_browser', return_value=(object(), object(), FakePage())), \
+             patch('fb_reconcile.close_browser'), \
+             patch('fb_reconcile._scan_post_permalink_once', return_value=permalink), \
+             patch('fb_reconcile.record_posted_link') as record, \
+             patch('fb_reconcile.time.sleep', return_value=None):
+            result = fb_reconcile.reconcile_existing_post('https://facebook.com/groups/x', 'original submitted content', 'acc1')
+        self.assertTrue(result.success)
+        self.assertEqual(result.state, 'published')
+        self.assertEqual(result.result_url, permalink)
+        record.assert_called_once()
+
+    def test_submit_timeout_after_click_is_unverified_not_retryable(self):
+        from utils import click_post_publish_button, ActionResult
+        class Textbox:
+            def get_attribute(self, name): return "Write something" if name == "aria-label" else ""
+        class Textboxes:
+            def count(self): return 1
+            def nth(self, _): return Textbox()
+        class Dialog:
+            def is_visible(self, timeout=None): return True
+            def inner_text(self): return ''
+            def locator(self, selector): return Textboxes()
+        class Loc:
+            def all(self): return [Dialog()]
+        class Page:
+            def evaluate(self, *_): return {'clicked': True, 'text': 'Post'}
+            def locator(self, *_args, **_kwargs): return Loc()
+        with patch('time.sleep', return_value=None):
+            result = click_post_publish_button(Page(), Dialog())
+        self.assertIsInstance(result, ActionResult)
+        self.assertFalse(result.success)
+        self.assertEqual(result.state, 'submitted_unverified')
+        self.assertEqual(result.code, 'SUBMIT_TRIGGERED_UNVERIFIED')
+
+    def test_accounts_api_masks_proxy_credentials(self):
+        client = server.app.test_client()
+        fake = [{'id':'a1','name':'A','type':'local','profile_path_or_id':'p','proxy':'user:secret@10.0.0.1:9000'}]
+        with patch('utils.load_accounts', return_value=fake):
+            data = client.get('/api/accounts').get_json()
+        self.assertEqual(data[0]['proxy'], '10.0.0.1:9000')
+        self.assertNotIn('secret', str(data))
+
+    def test_gpm_profiles_api_never_exposes_raw_proxy(self):
+        client = server.app.test_client()
+        fake = {
+            'connected': True,
+            'profiles': [{'id':'g1','name':'G1','raw_proxy':'user:pass@1.2.3.4:5555','browser_type':'Chrome'}],
+            'total': 1,
+            'base_url': 'http://127.0.0.1:19995'
+        }
+        with patch('utils.fetch_gpm_profiles', return_value=fake):
+            data = client.get('/api/gpm/profiles').get_json()
+        profile = data['profiles'][0]
+        self.assertNotIn('raw_proxy', profile)
+        self.assertNotIn('proxy', profile)
+        self.assertEqual(profile['proxy_hint'], '1.2.3.4:5555')
+        self.assertNotIn('pass', str(data))

@@ -159,8 +159,9 @@ def search_and_join_groups(
     gpm_api_url=None,
     delay_min=60,
     delay_max=180,
-    interact_feed=True,
+    interact_feed=False,
     gemini_key=None,
+    auto_rules=False,
 ):
     """
     Tìm kiếm nhóm theo từ khóa và tự động xin gia nhập nhóm an toàn.
@@ -357,7 +358,16 @@ def search_and_join_groups(
                     # Kiểm tra xem có dialog nội quy/câu hỏi nhóm hiện ra không
                     rule_dialog = page.locator('div[role="dialog"]')
                     if rule_dialog.is_visible(timeout=3000):
-                        print("📝 Phát hiện bảng câu hỏi / nội quy nhóm, đang tự động xử lý...")
+                        if not auto_rules:
+                            print("📝 Nhóm yêu cầu nội quy/câu hỏi. Chế độ tự trả lời đang tắt; bỏ qua để người dùng xử lý thủ công.")
+                            try:
+                                close_dlg = rule_dialog.locator('div[aria-label="Đóng"], div[aria-label="Close"]').first
+                                if close_dlg.is_visible(timeout=1000):
+                                    close_dlg.click()
+                            except Exception:
+                                pass
+                            continue
+                        print("📝 Phát hiện bảng câu hỏi / nội quy nhóm, đang xử lý theo tùy chọn người dùng...")
                         rule_checkbox = rule_dialog.locator('input[type="checkbox"], div[role="checkbox"]')
                         if rule_checkbox.count() > 0:
                             for i in range(min(rule_checkbox.count(), 3)):
@@ -487,7 +497,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpm-api", default=None, help="URL GPM API")
     parser.add_argument("--delay-min", type=int, default=60, help="Thời gian nghỉ tối thiểu giữa các nhóm (giây)")
     parser.add_argument("--delay-max", type=int, default=180, help="Thời gian nghỉ tối đa giữa các nhóm (giây)")
-    parser.add_argument("--interact-feed", action="store_true", default=True, help="Tự động Like/Bình luận AI bài viết trong nhóm")
+    parser.add_argument("--interact-feed", action="store_true", default=False, help="Tùy chọn tương tác bảng tin nhóm; mặc định tắt")
     parser.add_argument("--no-interact-feed", action="store_false", dest="interact_feed", help="Tắt tương tác bảng tin nhóm")
     parser.add_argument("--gemini-key", default=None, help="Gemini API Key")
     args = parser.parse_args()

@@ -4,11 +4,12 @@ safe, loss-free upgrades and backups.
 """
 
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent
 VERSION_FILE = BASE_DIR / "VERSION"
 
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("FB_AUTOMATION_DATA_DIR", str(BASE_DIR / "data"))).resolve()
 UPLOAD_DIR = DATA_DIR / "uploads"
 LOG_DIR = DATA_DIR / "logs"
 JOBS_LOG_DIR = LOG_DIR / "jobs"
@@ -26,4 +27,4 @@ def get_version() -> str:
             return VERSION_FILE.read_text(encoding="utf-8-sig").strip()
         except OSError:
             pass
-    return "6.0.1"
+    return "6.0.4"

@@ -1,6 +1,7 @@
 import sys
 import argparse
 import os
+import json
 
 
 def configure_unicode_output():
@@ -40,9 +41,9 @@ def main():
     group_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
     group_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
     group_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
-    group_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    group_parser.add_argument("--anti-hash-text", action="store_true", default=False, help="Legacy compatibility option; disabled by default")
     group_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
-    group_parser.add_argument("--clean-exif", action="store_true", default=True, help="Strip EXIF and randomize image pHash")
+    group_parser.add_argument("--clean-exif", action="store_true", default=True, help="Create a metadata-sanitized image copy")
     group_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
     
     # Page command
@@ -58,7 +59,7 @@ def main():
     page_parser.add_argument("--auto-spin", action="store_true", help="Automatically spin post content with AI")
     page_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI rewriting")
     page_parser.add_argument("--skip-duplicate", action="store_true", help="Skip if posted within 24 hours")
-    page_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    page_parser.add_argument("--anti-hash-text", action="store_true", default=False, help="Legacy compatibility option; disabled by default")
     page_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     page_parser.add_argument("--clean-exif", action="store_true", default=True, help="Strip EXIF and randomize image pHash")
     page_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
@@ -87,7 +88,7 @@ def main():
     comment_parser.add_argument("--like", action="store_true", default=False, help="Like the post before commenting")
     comment_parser.add_argument("--min-delay", type=int, default=25, help="Min delay between comments in seconds")
     comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
-    comment_parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Inject zero-width characters to break text hashing")
+    comment_parser.add_argument("--anti-hash-text", action="store_true", default=False, help="Legacy compatibility option; disabled by default")
     comment_parser.add_argument("--no-anti-hash-text", action="store_false", dest="anti_hash_text", help="Disable anti-hash text")
 
     # Join-group command
@@ -96,9 +97,15 @@ def main():
     join_group_parser.add_argument("--limit", type=int, default=2, help="Max groups to join per run (Max 2 per profile)")
     join_group_parser.add_argument("--delay-min", type=int, default=60, help="Min delay between groups in seconds")
     join_group_parser.add_argument("--delay-max", type=int, default=180, help="Max delay between groups in seconds")
-    join_group_parser.add_argument("--interact-feed", action="store_true", default=True, help="Interact with group feed (Like/Comment)")
+    join_group_parser.add_argument("--interact-feed", action="store_true", default=False, help="Optional: interact with group feed")
     join_group_parser.add_argument("--no-interact-feed", action="store_false", dest="interact_feed", help="Disable group feed interaction")
+    join_group_parser.add_argument("--auto-rules", action="store_true", default=False, help="Optional: answer/accept group rules when a join dialog requires it")
     join_group_parser.add_argument("--gemini-key", default=None, help="Gemini API Key for AI comment generation")
+
+    # Reconcile an already submitted post without posting again
+    reconcile_parser = subparsers.add_parser("reconcile-post", help="Reconcile an existing submitted post without posting again")
+    reconcile_parser.add_argument("url", help="Target Group/Page URL")
+    reconcile_parser.add_argument("content", help="Original submitted content used for matching")
 
     # Create-page command
     create_page_parser = subparsers.add_parser("create-page", help="Create a personal Facebook Fanpage with avatar and cover")
@@ -118,7 +125,7 @@ def main():
     elif args.command == "group":
         from fb_group import post_to_group
         img_arg = args.images if args.images else args.image
-        success = bool(post_to_group(
+        result = post_to_group(
             args.url, args.content, img_arg, args.account_id, args.gpm_api,
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
@@ -126,11 +133,14 @@ def main():
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
             clean_exif=args.clean_exif
-        ))
+        )
+        if hasattr(result, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+        success = bool(result)
     elif args.command == "page":
         from fb_page import post_to_page
         img_arg = args.images if args.images else args.image
-        success = bool(post_to_page(
+        result = post_to_page(
             args.url, args.content, img_arg, args.account_id, args.gpm_api,
             args.feeling, args.checkin,
             photos_folder=args.photos_folder, photo_count=args.photo_count,
@@ -138,7 +148,10 @@ def main():
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
             clean_exif=args.clean_exif
-        ))
+        )
+        if hasattr(result, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+        success = bool(result)
     elif args.command == "thread":
         from fb_thread import send_message
         success = bool(send_message(args.id, args.content, args.image, args.account_id, args.gpm_api))
@@ -165,7 +178,7 @@ def main():
         from fb_join_group import search_and_join_groups
         delay_min = getattr(args, "delay_min", 60)
         delay_max = getattr(args, "delay_max", 180)
-        interact_feed = getattr(args, "interact_feed", True)
+        interact_feed = getattr(args, "interact_feed", False)
         gemini_key = getattr(args, "gemini_key", None)
         joined_count = search_and_join_groups(
             args.keywords,
@@ -175,9 +188,15 @@ def main():
             delay_min=delay_min,
             delay_max=delay_max,
             interact_feed=interact_feed,
-            gemini_key=gemini_key
+            gemini_key=gemini_key,
+            auto_rules=getattr(args, "auto_rules", False)
         )
         success = (joined_count is not None and (joined_count > 0 or getattr(args, 'limit', 1) == 0))
+    elif args.command == "reconcile-post":
+        from fb_reconcile import reconcile_existing_post
+        result = reconcile_existing_post(args.url, args.content, args.account_id, args.gpm_api)
+        print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+        success = bool(result)
     elif args.command == "create-page":
         from fb_create_page import create_facebook_page
         success = bool(create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api))

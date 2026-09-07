@@ -183,6 +183,7 @@ class ProcessRunner:
         except Exception:
             try:
                 proc.kill()
+                proc.wait(timeout=1.0)
             except Exception:
                 pass
 

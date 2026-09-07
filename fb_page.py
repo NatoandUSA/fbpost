@@ -16,7 +16,7 @@ STATE_FILE = "state.json"
 
 def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
                  photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False,
-                 anti_hash_text=True, clean_exif=True):
+                 anti_hash_text=False, clean_exif=True):
     # 1. Kiểm tra lọc trùng lặp 24h nếu bật
     if skip_duplicate:
         is_dup, hours_ago, posted_at = is_recently_posted(page_url)
@@ -226,9 +226,11 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             # 3. Tìm và bấm chính xác nút 'Đăng' (loại bỏ các nút sai và xác nhận dialog đóng)
             print("🚀 Đang bấm nút 'Đăng' / 'Chia sẻ' bài viết...")
             published = click_post_publish_button(page, dialog)
-            if not published:
-                print("❌ Bấm nút Đăng bài thất bại hoặc phát hiện cảnh báo lỗi từ Facebook.")
-                return ActionResult(success=False, code="PUBLISH_FAILED", message="Bấm nút Đăng bài thất bại hoặc phát hiện cảnh báo lỗi từ Facebook.", target_url=page_url)
+            if not published and getattr(published, "state", "") != "submitted_unverified":
+                print("❌ Chưa trigger được submit hoặc Facebook trả lỗi xác định trước khi tiếp nhận.")
+                return ActionResult(success=False, code="PUBLISH_FAILED", message="Chưa trigger được submit hoặc Facebook trả lỗi xác định.", target_url=page_url)
+            if getattr(published, "state", "") == "submitted_unverified":
+                print("⚠️ Submit đã được trigger nhưng terminal state chưa rõ; chỉ đối soát, không gửi lại.")
 
             # Chờ 3 - 5s để Facebook cập nhật feed
             time.sleep(random.uniform(3.0, 5.0))
@@ -240,10 +242,12 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             
             # Quét tìm và tự động lưu liên kết bài đăng vừa tạo
             action_res = scrape_post_link(page, target=page_url, content=content, account_id=account_id)
-            if action_res.state == "pending":
-                print("ℹ️ Bài viết đã gửi và đang chờ duyệt.")
+            if action_res.state == "published":
+                print("✅ Bài đăng Page đã được xác minh và có permalink.")
+            elif action_res.state == "pending":
+                print("⏳ Bài viết đã gửi và đang chờ duyệt.")
             else:
-                print("✅ Đã đăng bài lên Fanpage quản trị thành công!")
+                print(f"⚠️ Bài đã được gửi nhưng chưa xác minh được permalink ({action_res.code}). Không tự động đăng lại.")
             return action_res
             
     except Exception as e:

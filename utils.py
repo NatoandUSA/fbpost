@@ -298,6 +298,18 @@ def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):
     raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
 
 
+def _ensure_gpm_service_reachable(api_url, timeout=3.0):
+    import socket
+    parsed = urllib.parse.urlparse(api_url or "http://127.0.0.1:19995")
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError as exc:
+        raise RuntimeError(f"GPM_API_UNREACHABLE: {host}:{port} ({exc})") from exc
+
+
 def launch_browser(account, p, api_url=None):
     """
     Launches browser for a given account. Unifies local profile and GPM profile methods.
@@ -313,6 +325,7 @@ def launch_browser(account, p, api_url=None):
             api_url = "http://127.0.0.1:19995"
 
         import requests
+        _ensure_gpm_service_reachable(api_url, timeout=3.0)
         browser = None
         gpm_error = None
         api_base = api_url.rstrip("/").split("/api/")[0]
@@ -492,7 +505,7 @@ def launch_browser(account, p, api_url=None):
         proxy = None
         if proxy_str:
             proxy = {"server": proxy_str}
-            print(f"Sử dụng Proxy: {proxy_str}")
+            print(f"Sử dụng Proxy: {proxy_str.rsplit(chr(64), 1)[-1] if chr(64) in proxy_str else proxy_str}")
             
         context = p.chromium.launch_persistent_context(
             user_data_dir=profile_dir,
@@ -615,23 +628,14 @@ def close_browser(browser_or_context, account=None, api_url=None):
 # =========================================================================
 
 def clean_and_randomize_image(image_path: str, output_dir: str = None) -> str:
-    """
-    Xóa sạch EXIF metadata và vi chỉnh nhẹ hình ảnh để thay đổi mã băm (pHash/MD5) của ảnh:
-    - Bóc tách toàn bộ metadata EXIF (GPS, thông số camera, timestamp chụp).
-    - Vi chỉnh kích thước ngẫu nhiên (cắt xén hoặc co giãn cực nhẹ ±1 đến ±2 pixel).
-    - Lưu file vào thư mục runtime/processed_media/ (giữ nguyên file gốc của người dùng).
-    - Nếu Pillow chưa có hoặc gặp lỗi, trả về image_path gốc an toàn.
-    """
+    """Compatibility name: create a metadata-sanitized copy without pixel randomization."""
     if not image_path or not os.path.exists(image_path):
         return image_path
-
     if "processed_media" in os.path.abspath(image_path):
         return image_path
-
     try:
         from PIL import Image, ImageOps
         import uuid
-        
         if not output_dir:
             try:
                 import paths
@@ -639,52 +643,32 @@ def clean_and_randomize_image(image_path: str, output_dir: str = None) -> str:
             except Exception:
                 output_dir = os.path.join("runtime", "processed_media")
         os.makedirs(output_dir, exist_ok=True)
-        
         ext = os.path.splitext(image_path)[1].lower()
         if ext not in {".jpg", ".jpeg", ".png", ".webp"}:
             return image_path
-            
-        unique_name = f"clean_{uuid.uuid4().hex[:10]}{ext if ext != '.webp' else '.jpg'}"
-        out_path = os.path.abspath(os.path.join(output_dir, unique_name))
-
+        out_ext = ".jpg" if ext == ".webp" else ext
+        out_path = os.path.abspath(os.path.join(output_dir, f"clean_{uuid.uuid4().hex[:10]}{out_ext}"))
         with Image.open(image_path) as img:
-            # 1. Tự động xoay ảnh theo hướng chuẩn trước khi xóa EXIF
             try:
                 img = ImageOps.exif_transpose(img)
             except Exception:
                 pass
-                
-            # 2. Tạo bản sao ảnh RGB mới hoàn toàn không chứa EXIF
-            if img.mode in ("RGBA", "P"):
+            if img.mode in ("RGBA", "P") and out_ext in {".jpg", ".jpeg"}:
                 img = img.convert("RGB")
             else:
                 img = img.copy()
-
-            # 3. Vi chỉnh kích thước ngẫu nhiên ±1 đến ±2 pixel để đổi Perceptual Hash
-            w, h = img.size
-            if w > 100 and h > 100:
-                delta_w = random.choice([-2, -1, 1, 2])
-                delta_h = random.choice([-2, -1, 1, 2])
-                new_w = max(100, w + delta_w)
-                new_h = max(100, h + delta_h)
-                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-
-            # 4. Lưu lại với EXIF rỗng và chất lượng nén ngẫu nhiên (92 - 96)
-            save_quality = random.randint(92, 96)
-            img.save(out_path, format="JPEG" if ext in {".jpg", ".jpeg", ".webp"} else "PNG", quality=save_quality)
-
+            save_kwargs = {}
+            if out_ext in {".jpg", ".jpeg"}:
+                save_kwargs["quality"] = 95
+            img.save(out_path, format="JPEG" if out_ext in {".jpg", ".jpeg"} else "PNG", **save_kwargs)
         return out_path
     except Exception as e:
-        try:
-            print(f"⚠️ [Media Anti-Hash] Không thể xử lý ảnh ({e}), dùng ảnh gốc: {image_path}")
-        except Exception:
-            pass
+        print(f"⚠️ [Media Sanitizer] Không thể xóa metadata ảnh ({e}), dùng ảnh gốc: {image_path}")
         return image_path
-
 
 def process_images_anti_hash(image_paths: list) -> list:
     """
-    Xử lý danh sách ảnh qua Media Anti-Hash Pipeline trước khi đính kèm vào bài đăng.
+    Tạo bản sao ảnh đã xóa metadata trước khi đính kèm vào bài đăng.
     """
     if not image_paths:
         return []
@@ -699,7 +683,7 @@ def pick_random_photos(folder_path, count_mode="2-4", clean_exif=True):
     """
     Quét thư mục ảnh và bốc ngẫu nhiên số lượng ảnh theo cấu hình:
     count_mode: '2-4' (ngẫu nhiên 2 đến 4 ảnh), '1', '2', '3', '4', hoặc 'all'.
-    Nếu clean_exif=True: Tự động xóa sạch EXIF và vi chỉnh kích thước để chống Meta quét trùng ảnh.
+    Nếu clean_exif=True: tạo bản sao đã xóa metadata EXIF, không ngẫu nhiên hóa pixel/kích thước.
     Trả về danh sách đường dẫn tuyệt đối của các ảnh được chọn.
     """
     if not folder_path or not os.path.exists(folder_path):
@@ -743,7 +727,7 @@ def pick_random_photos(folder_path, count_mode="2-4", clean_exif=True):
         try:
             selected = process_images_anti_hash(selected)
             try:
-                print("🛡️ [Media Anti-Hash] Đã xóa EXIF và đổi mã băm thành công cho ảnh trước khi đăng.")
+                print("🧹 [Media Sanitizer] Đã tạo bản sao ảnh không chứa EXIF trước khi đăng.")
             except Exception:
                 pass
         except Exception as e:
@@ -785,7 +769,7 @@ def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
         try:
             files_to_attach = process_images_anti_hash(files_to_attach)
             try:
-                print("🛡️ [Media Anti-Hash] Đã xóa EXIF và đổi mã băm cho ảnh đính kèm.")
+                print("🧹 [Media Sanitizer] Đã xóa metadata EXIF cho ảnh đính kèm.")
             except Exception:
                 pass
         except Exception as e:
@@ -1234,7 +1218,7 @@ def click_post_publish_button(page, dialog=None):
 
             if not open_composer or not open_composer.is_visible():
                 dialog_closed = True
-                print("🎉 Khung soạn thảo đã đóng — Bài đăng đã được Facebook tiếp nhận thành công!")
+                print("ℹ️ Khung soạn thảo đã đóng — chuyển sang bước xác minh permalink/pending; chưa coi là published.")
                 break
             else:
                 dlg_text = (open_composer.inner_text() or "").lower()
@@ -1258,8 +1242,13 @@ def click_post_publish_button(page, dialog=None):
             continue
 
     if not dialog_closed:
-        print("❌ Không xác minh được Facebook đã tiếp nhận bài viết (Khung soạn bài vẫn chưa đóng sau 15 giây).")
-        return False
+        print("⚠️ Đã trigger submit nhưng chưa xác minh được terminal state sau 15 giây; chuyển sang submitted_unverified để đối soát, không tự retry.")
+        return ActionResult(
+            success=False,
+            code="SUBMIT_TRIGGERED_UNVERIFIED",
+            state="submitted_unverified",
+            message="Đã trigger submit nhưng chưa xác minh được Facebook hoàn tất xử lý.",
+        )
 
     return True
 
@@ -1471,7 +1460,7 @@ def _resolve_posted_links_file():
 
 def record_posted_link(target, post_url, content="", note="", account_id="", status="", url_type=None, publish_state=None):
     """
-    Lưu link bài viết đã đăng thành công vào SQLite và posted_links.json để phục vụ quản lý và comment seeding.
+    Ghi nhận lifecycle của lần submit (published/pending/submitted_unverified) vào SQLite và JSON compatibility mirror.
     """
     if not post_url or not post_url.startswith("http"):
         return
@@ -1494,10 +1483,10 @@ def record_posted_link(target, post_url, content="", note="", account_id="", sta
             url_type=derived_url_type,
             publish_state=derived_state,
         )
-    except Exception:
-        pass
+    except Exception as db_err:
+        print(f"⚠️ [History DB] Không thể ghi posted_links vào SQLite: {db_err}")
 
-    # 2. Ghi nhận vào JSON file (đồng bộ kép)
+    # 2. JSON compatibility mirror; SQLite remains authoritative.
     try:
         target_file = _resolve_posted_links_file()
         items = []
@@ -1511,13 +1500,24 @@ def record_posted_link(target, post_url, content="", note="", account_id="", sta
                 items = []
         
         now_ts = time.time()
-        # Tránh ghi đúp cùng 1 bài trong vòng 60 giây
-        is_recent_dup = False
+        # Reconcile the same lifecycle in JSON instead of appending a second row.
+        lifecycle_item = None
         for item in items:
-            item_ts = float(item.get("timestamp", 0))
-            if item.get("target") == target and item.get("url") == post_url and (now_ts - item_ts) < 60.0:
-                is_recent_dup = True
+            same_attempt = (
+                item.get("target") == target
+                and (item.get("account_id") or "default") == (account_id or "default")
+                and (item.get("content_preview") or "") == ((content[:120] + "...") if len(content) > 120 else content)
+            )
+            if same_attempt and item.get("publish_state") in ("submitted_unverified", "pending"):
+                lifecycle_item = item
                 break
+        lifecycle_updated = False
+        if lifecycle_item and derived_state in ("published", "pending"):
+            lifecycle_item.update({"timestamp": now_ts, "url": post_url, "url_type": derived_url_type, "publish_state": derived_state, "status": final_status, "posted_at": time.strftime("%Y-%m-%d %H:%M:%S")})
+            lifecycle_updated = True
+            is_recent_dup = True
+        else:
+            is_recent_dup = any(item.get("target") == target and item.get("url") == post_url and (now_ts - float(item.get("timestamp", 0))) < 60.0 for item in items)
 
         if not is_recent_dup:
             item = {
@@ -1538,6 +1538,11 @@ def record_posted_link(target, post_url, content="", note="", account_id="", sta
             with open(target_file, "w", encoding="utf-8") as f:
                 json.dump(items, f, indent=2, ensure_ascii=False)
             print(f"💾 Đã lưu bài viết vào Lịch sử đăng: {post_url} [{item['status']}] (Loại: {derived_url_type})")
+        elif lifecycle_updated:
+            items = items[:200]
+            with open(target_file, "w", encoding="utf-8") as f:
+                json.dump(items, f, indent=2, ensure_ascii=False)
+            print(f"🔄 Đã cập nhật lifecycle History: {post_url} [{final_status}]")
     except Exception as e:
         print(f"⚠️ Lỗi khi lưu link bài đăng: {e}")
 
@@ -1565,8 +1570,8 @@ def normalize_target_url(url: str) -> str:
 def is_recently_posted(target_url: str, hours: float = 24.0):
     """
     Kiểm tra xem target_url (Group hoặc Page) đã từng đăng bài thành công trong vòng `hours` giờ qua chưa.
-    Chỉ chặn nếu bài trước đó ở trạng thái 'published' hoặc 'pending'.
-    KHÔNG chặn retry nếu lần trước thất bại hoặc unverified.
+    Chặn nếu target gần đây đã published, pending, hoặc submitted_unverified.
+    submitted_unverified có thể đã được Facebook nhận nên phải đối soát trước khi đăng lại.
     Trả về (True, hours_ago, posted_at_str) nếu trùng lặp gần đây, ngược lại trả về (False, 0, None).
     """
     if not target_url:
@@ -1581,8 +1586,8 @@ def is_recently_posted(target_url: str, hours: float = 24.0):
         db_links = ActivityRepository().list_posted_links(limit=300)
         for row in db_links:
             pub_state = (row.get("publish_state") or "").lower()
-            # Nếu có publish_state, chỉ chặn published hoặc pending
-            if pub_state and pub_state not in ("published", "pending"):
+            # Fail-closed: uncertain submission also blocks automatic retry.
+            if pub_state and pub_state not in ("published", "pending", "submitted_unverified"):
                 continue
             item_target = normalize_target_url(row.get("target") or "")
             # So sánh chính xác tuyệt đối (exact match)
@@ -1615,7 +1620,7 @@ def is_recently_posted(target_url: str, hours: float = 24.0):
 
         for item in items:
             pub_state = (item.get("publish_state") or "").lower()
-            if pub_state and pub_state not in ("published", "pending"):
+            if pub_state and pub_state not in ("published", "pending", "submitted_unverified"):
                 continue
             recorded_target = normalize_target_url(item.get("target", ""))
             # So sánh chính xác tuyệt đối (exact match)
@@ -1696,138 +1701,118 @@ def text_similarity_match(needle: str, haystack: str) -> bool:
 
 TOAST_CONFIRM_RE = re.compile(r"(đã đăng|đã chia sẻ|bài viết của bạn đã|bài viết đã được chia sẻ|posted|published|shared|your post has been)", re.I)
 
-def scrape_post_link(page, target="", content="", account_id="") -> ActionResult:
-    """
-    Trích xuất permalink của bài viết vừa đăng:
-    - Ưu tiên 1: Chỉ quét link từ Toast/Alert/Notification container xác nhận xuất bản.
-    - Ưu tiên 2: Quét feed article nhưng chỉ chọn article khớp nội dung bài viết vừa đăng (multi-checkpoint).
-    - Fallback: Nếu không tìm thấy link trực tiếp, kiểm tra modal duyệt pending (scoped vào dialog/alert container).
-      Nếu unverified -> success=False. Chỉ POST_PENDING với dialog xác nhận mới success=True.
-    """
-    print("Đang quét tìm liên kết của bài đăng vừa tạo...")
-    clean_href = None
+def _group_key_from_url(url: str) -> str:
     try:
-        time.sleep(2.0)
-        
-        # Cách 1: Tìm thông báo Toast/Alert nổi lên của Facebook xác nhận xuất bản
-        try:
-            toast_containers = page.locator("div[role='alert'], div[role='status']").all()
-            for container in toast_containers:
-                try:
-                    c_text = container.inner_text(timeout=500) or ""
-                    if TOAST_CONFIRM_RE.search(c_text):
-                        toast_links = container.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php']").all()
-                        for link in toast_links:
-                            href = link.get_attribute("href")
-                            if href:
-                                clean = clean_facebook_post_url(href)
-                                if clean:
-                                    clean_href = clean
-                                    break
-                        if clean_href:
-                            break
-                except Exception:
-                    continue
-        except Exception:
-            pass
+        path = urllib.parse.urlparse(url or "").path
+        m = re.search(r"/groups/([^/]+)", path, re.I)
+        return (m.group(1) if m else "").lower()
+    except Exception:
+        return ""
 
-        # Cách 2: Quét các article trên feed nhưng BẮT BUỘC phải khớp nội dung vừa đăng (multi-checkpoint)
-        if not clean_href:
+
+def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> str:
+    target_group = _group_key_from_url(target)
+    selectors = "a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']"
+    try:
+        for container in page.locator("div[role='alert'], div[role='status']").all():
             try:
-                articles = page.locator("div[role='article']").all()[:5]
-                for art in articles:
-                    try:
-                        if not art.is_visible(timeout=1000):
-                            continue
-                        art_text = art.inner_text() or ""
-                        # Nếu có content truyền vào, chỉ nhận article khớp nội dung
-                        if content and not text_similarity_match(content, art_text):
-                            continue
-                        article_links = art.locator("a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']").all()
-                        for link in article_links:
-                            href = link.get_attribute("href")
-                            if href and not any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
-                                clean = clean_facebook_post_url(href)
-                                if clean:
-                                    clean_href = clean
-                                    break
-                        if clean_href:
-                            break
-                    except Exception:
-                        continue
+                c_text = container.inner_text(timeout=500) or ""
+                if not TOAST_CONFIRM_RE.search(c_text):
+                    continue
+                for link in container.locator(selectors).all():
+                    href = link.get_attribute("href") or ""
+                    clean = clean_facebook_post_url(href)
+                    if clean and (not target_group or _group_key_from_url(clean) in ("", target_group)):
+                        return clean
             except Exception:
-                pass
+                continue
+    except Exception:
+        pass
 
-        if clean_href:
-            print(f"POSTED_LINK:{clean_href}")
-            record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
-            return ActionResult(
-                success=True,
-                code="POST_PUBLISHED",
-                state="published",
-                target_url=target,
-                result_url=clean_href,
-                url_type="post",
-                message="Đã đăng bài và trích xuất thành công liên kết bài viết."
-            )
-            
-        # Fallback: Kiểm tra xem có dialog/alert thông báo chờ admin duyệt hay không (chỉ scope vào dialog/alert)
-        fallback_url = target or (page.url if hasattr(page, 'url') else "")
-        target_type = "group" if "/groups/" in fallback_url else ("page" if "/pages/" in fallback_url else "unknown")
-        is_pending = False
-        try:
-            pending_notice = page.locator(
-                "div[role='alert'], div[role='status'], div[role='dialog']"
-            ).filter(
-                has_text=re.compile(
-                    r"(bài viết.*chờ.*duyệt|post.*pending.*approval|submitted.*approval)",
-                    re.I,
-                )
-            )
-            is_pending = pending_notice.count() > 0
-        except Exception:
-            pass
+    try:
+        articles = page.locator("div[role='article']").all()[:max_articles]
+        for art in articles:
+            try:
+                if not art.is_visible(timeout=800):
+                    continue
+                art_text = art.inner_text() or ""
+                if content and not text_similarity_match(content, art_text):
+                    continue
+                for link in art.locator(selectors).all():
+                    href = link.get_attribute("href") or ""
+                    if not href or any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
+                        continue
+                    clean = clean_facebook_post_url(href)
+                    if not clean:
+                        continue
+                    candidate_group = _group_key_from_url(clean)
+                    if target_group and candidate_group and candidate_group != target_group:
+                        continue
+                    return clean
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return ""
 
-        if is_pending:
-            note_status = "Đang chờ admin duyệt"
-            publish_state = "pending"
-            record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state=publish_state)
-            print(f"💾 Đã ghi nhận bài đăng vào Lịch sử: {fallback_url} [{note_status}]")
-            return ActionResult(
-                success=True,
-                code="POST_PENDING",
-                state=publish_state,
-                target_url=target,
-                result_url="",
-                url_type=target_type,
-                message=f"Bài đăng đã được tiếp nhận [{note_status}]"
-            )
 
-        # Nếu không có permalink và cũng không có thông báo pending xác nhận -> unverified (success=False)
-        note_status = "Đã gửi đăng (Chưa trích xuất được link bài)"
-        publish_state = "submitted_unverified"
-        record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state=publish_state)
-        print(f"⚠️ Bài đăng chưa được xác thực permalink: {fallback_url} [{note_status}]")
-        return ActionResult(
-            success=False,
-            code="POST_SUBMITTED_UNVERIFIED",
-            state=publish_state,
-            target_url=target,
-            result_url="",
-            url_type=target_type,
-            message="Bài đăng đã gửi nhưng chưa trích xuất được permalink xác thực."
+def _has_pending_post_notice(page) -> bool:
+    try:
+        pending_notice = page.locator(
+            "div[role='alert'], div[role='status'], div[role='dialog']"
+        ).filter(
+            has_text=re.compile(
+                r"(bài viết.*chờ.*duyệt|post.*pending.*approval|submitted.*approval|đang chờ.*phê duyệt|awaiting.*approval)",
+                re.I,
+            )
         )
+        return pending_notice.count() > 0
+    except Exception:
+        return False
+
+
+def scrape_post_link(page, target="", content="", account_id="") -> ActionResult:
+    """Resolve the newly submitted post into published/pending/unverified with bounded retries."""
+    print("Đang quét tìm liên kết của bài đăng vừa tạo...")
+    fallback_url = target or (page.url if hasattr(page, "url") else "")
+    target_type = "group" if "/groups/" in fallback_url else ("page" if fallback_url else "unknown")
+    try:
+        time.sleep(1.5)
+        for attempt in range(3):
+            clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=10)
+            if clean_href:
+                print(f"POSTED_LINK:{clean_href}")
+                record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
+                return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=clean_href, url_type="post", message="Đã đăng bài và trích xuất thành công liên kết bài viết.")
+            if _has_pending_post_notice(page):
+                record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
+                print(f"💾 Đã ghi nhận bài đăng vào Lịch sử: {fallback_url} [Đang chờ admin duyệt]")
+                return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đã được tiếp nhận [Đang chờ admin duyệt]")
+            if attempt < 2:
+                time.sleep(2.0)
+
+        # Một lần refresh có kiểm soát giúp feed hiển thị bài mới khi composer đã đóng nhưng DOM chưa cập nhật.
+        if target_type == "group":
+            try:
+                print("🔄 Chưa thấy permalink trong DOM; làm mới Group một lần để đối soát bài vừa đăng...")
+                page.reload(wait_until="domcontentloaded", timeout=15000)
+                time.sleep(2.5)
+                clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=12)
+                if clean_href:
+                    print(f"POSTED_LINK:{clean_href}")
+                    record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
+                    return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=clean_href, url_type="post", message="Đã đối soát và trích xuất permalink sau refresh.")
+                if _has_pending_post_notice(page):
+                    record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
+                    return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đang chờ admin duyệt.")
+            except Exception as refresh_err:
+                print(f"⚠️ Không thể refresh để đối soát permalink: {refresh_err}")
+
+        note_status = "Đã gửi đăng (Chưa trích xuất được link bài)"
+        record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state="submitted_unverified")
+        print(f"⚠️ Bài đăng chưa được xác thực permalink: {fallback_url} [{note_status}]")
+        return ActionResult(success=False, code="POST_SUBMITTED_UNVERIFIED", state="submitted_unverified", target_url=target, result_url="", url_type=target_type, message="Bài đăng đã gửi nhưng chưa trích xuất được permalink xác thực.")
     except Exception as e:
         print(f"⚠️ Cảnh báo: Lỗi khi quét liên kết bài đăng: {e}")
-        fallback_url = target or (page.url if hasattr(page, 'url') else "")
-        target_type = "group" if "/groups/" in fallback_url else "page"
         record_posted_link(target, fallback_url, content, note="Đã gửi đăng (lỗi quét)", account_id=account_id, url_type=target_type, publish_state="submitted_unverified")
-        return ActionResult(
-            success=False,
-            code="POST_SUBMITTED_UNVERIFIED",
-            state="submitted_unverified",
-            target_url=target,
-            result_url="",
-            url_type=target_type,
-            message=f"Đã gửi đăng (gặp lỗi khi quét link: {e})"
-        )
+        return ActionResult(success=False, code="POST_SUBMITTED_UNVERIFIED", state="submitted_unverified", target_url=target, result_url="", url_type=target_type, message=f"Đã gửi đăng (gặp lỗi khi quét link: {e})")

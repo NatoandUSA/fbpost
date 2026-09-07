@@ -100,10 +100,20 @@ class ActivityRepository(BaseRepository):
                 "SELECT id FROM posted_links WHERE target = ? AND url = ? ORDER BY id DESC LIMIT 1",
                 (target, post_url),
             ).fetchone()
+            if not existing and publish_state == "published" and url_type == "post":
+                existing = conn.execute(
+                    """
+                    SELECT id FROM posted_links
+                    WHERE target = ? AND account_id = ? AND content = ?
+                      AND publish_state IN ('submitted_unverified','pending')
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    (target, account_id, content),
+                ).fetchone()
             if existing:
                 conn.execute(
-                    "UPDATE posted_links SET content = ?, note = ?, status = ?, url_type = ?, publish_state = ?, created_at = ? WHERE id = ?",
-                    (content, note, status, url_type, publish_state, now_str, existing["id"]),
+                    "UPDATE posted_links SET url = ?, content = ?, note = ?, status = ?, url_type = ?, publish_state = ?, created_at = ? WHERE id = ?",
+                    (post_url, content, note, status, url_type, publish_state, now_str, existing["id"]),
                 )
             else:
                 conn.execute(

@@ -7,6 +7,8 @@ from services.job_manager import JobManager
 
 jobs_bp = Blueprint("jobs", __name__)
 job_manager = JobManager()
+ALLOWED_JOB_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
+
 
 
 @jobs_bp.route("/api/jobs", methods=["POST"])
@@ -15,6 +17,8 @@ def submit_job():
     command = data.get("command")
     if not command:
         return jsonify({"success": False, "error": "Command is required"}), 400
+    if command not in ALLOWED_JOB_COMMANDS:
+        return jsonify({"success": False, "error": "Unsupported command"}), 400
 
     account_id = data.get("accountId")
     job_id = job_manager.submit_job(command, data, account_id=account_id)
@@ -28,7 +32,10 @@ def submit_job():
 
 @jobs_bp.route("/api/jobs", methods=["GET"])
 def list_jobs():
-    limit = max(1, min(int(request.args.get("limit", 50)), 200))
+    try:
+        limit = max(1, min(int(request.args.get("limit", 50)), 200))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "limit must be an integer"}), 400
     state = request.args.get("state")
     jobs = job_manager.list_jobs(limit=limit, state=state)
     return jsonify({
@@ -77,7 +84,10 @@ def get_job_logs(job_id):
     if stream_mode:
         return Response(job_manager.subscribe_logs(job_id), mimetype="text/plain; charset=utf-8")
 
-    offset = int(request.args.get("offset", 0))
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "offset must be a non-negative integer"}), 400
     logs = job_manager.get_job_logs(job_id, offset=offset)
     return jsonify({
         "success": True,
@@ -118,6 +128,10 @@ def run_streaming():
         def _err():
             yield "Error: Command is required.\nRUN_RESULT:failed\n"
         return Response(_err(), mimetype="text/plain; charset=utf-8")
+    if cmd not in ALLOWED_JOB_COMMANDS:
+        def _unsupported():
+            yield "Error: Unsupported command.\nRUN_RESULT:failed\n"
+        return Response(_unsupported(), mimetype="text/plain; charset=utf-8")
 
     account_id = data.get("accountId")
     job_id = job_manager.submit_job(cmd, data, account_id=account_id)

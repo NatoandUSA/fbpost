@@ -8,7 +8,20 @@ from utils import process_spintax, human_type, load_accounts, resolve_account, l
 
 STATE_FILE = "state.json"
 
-def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=True, anti_hash_text=False):
+def _save_comment_evidence(page, code):
+    try:
+        from paths import LOG_DIR
+        from datetime import datetime
+        evidence_dir = LOG_DIR / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        safe_code = re.sub(r"[^A-Za-z0-9_-]+", "_", code or "comment")[:40]
+        out = evidence_dir / f"comment_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{safe_code}.png"
+        page.screenshot(path=str(out), full_page=False)
+        return str(out)
+    except Exception:
+        return ""
+
+def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=False, anti_hash_text=False):
     """
     Tự động mở một bài viết Facebook (trong Group public hoặc Fanpage public) và để lại bình luận.
     Hỗ trợ Spintax, human typing, like trước khi comment, và xử lý các loại giao diện Facebook.
@@ -148,16 +161,32 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
             time.sleep(random.uniform(1.0, 2.0))
 
-            # 4. Nhấn Enter để gửi bình luận
-            print("🚀 Nhấn Enter gửi bình luận...")
-            page.keyboard.press("Enter")
+            # 4. Ưu tiên nút Gửi/Send rõ ràng; Enter chỉ là fallback.
+            submitted_by_button = False
+            for send_sel in [
+                "div[role='button'][aria-label='Gửi' i]", "button[aria-label='Gửi' i]",
+                "div[role='button'][aria-label='Send' i]", "button[aria-label='Send' i]"
+            ]:
+                try:
+                    send_btn = page.locator(send_sel).last
+                    if send_btn.is_visible(timeout=500) and send_btn.is_enabled():
+                        send_btn.click(timeout=2500)
+                        submitted_by_button = True
+                        print("🚀 Đã bấm nút Gửi bình luận.")
+                        break
+                except Exception:
+                    continue
+            if not submitted_by_button:
+                print("🚀 Không thấy nút Gửi rõ ràng; dùng Enter fallback.")
+                page.keyboard.press("Enter")
             time.sleep(random.uniform(3.0, 5.0))
 
             # Kiểm tra nhanh lỗi spam cảnh báo từ Facebook
             spam_warning = page.locator("text='Bạn tạm thời bị chặn', text='không thể bình luận', text='bị hạn chế', text='something went wrong'").first
             if spam_warning.is_visible():
                 print("⚠️ Cảnh báo Facebook: Bạn tạm thời bị hạn chế tính năng bình luận.")
-                return ActionResult(success=False, code="ACTION_BLOCKED", message="Cảnh báo Facebook: Bạn tạm thời bị hạn chế tính năng bình luận.", target_url=post_url)
+                evidence = _save_comment_evidence(page, "ACTION_BLOCKED")
+                return ActionResult(success=False, code="ACTION_BLOCKED", message="Cảnh báo Facebook: Bạn tạm thời bị hạn chế tính năng bình luận.", target_url=post_url, metadata={"evidence_path": evidence})
 
             # Xác thực ô bình luận đã được dọn sạch (comment đã submit)
             try:
@@ -199,22 +228,19 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
 
             if not comment_verified:
                 print(f"⚠️ Bình luận đã nhấn gửi nhưng không thể xác thực hiển thị trên bài viết: {post_url}")
+                evidence = _save_comment_evidence(page, "COMMENT_UNVERIFIED")
                 return ActionResult(
-                    success=False,
-                    code="COMMENT_UNVERIFIED",
-                    state="unverified",
+                    success=False, code="COMMENT_UNVERIFIED", state="unverified",
                     message="Bình luận đã gửi nhưng không tìm thấy hiển thị trên bài viết.",
-                    target_url=post_url
+                    target_url=post_url, metadata={"evidence_path": evidence}
                 )
 
+            evidence = _save_comment_evidence(page, "COMMENT_VERIFIED")
             print("✅ Đã bình luận bài viết thành công và xác thực hiển thị!")
             return ActionResult(
-                success=True,
-                code="SUCCESS",
-                state="commented",
-                message="Đã bình luận bài viết thành công!",
-                target_url=post_url,
-                result_url=post_url
+                success=True, code="SUCCESS", state="commented",
+                message="Đã bình luận bài viết thành công!", target_url=post_url, result_url=post_url,
+                metadata={"evidence_path": evidence}
             )
 
     except Exception as e:
@@ -230,7 +256,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 except Exception:
                     pass
 
-def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=True, min_delay=25, max_delay=45, anti_hash_text=False):
+def comment_on_list(urls, comment_content, account_id=None, gpm_api_url=None, like_post=False, min_delay=25, max_delay=45, anti_hash_text=False):
     """
     Duyệt qua danh sách link bài viết và bình luận lần lượt.
     """
@@ -289,10 +315,10 @@ if __name__ == "__main__":
     parser.add_argument("--urls-file", help="Đường dẫn file chứa danh sách link (mỗi dòng 1 link)")
     parser.add_argument("--account-id", default=None, help="ID tài khoản trong accounts.json")
     parser.add_argument("--gpm-api", default=None, help="URL GPM API")
-    parser.add_argument("--like", action="store_true", default=True, help="Tự động like trước khi comment")
+    parser.add_argument("--like", action="store_true", default=False, help="Tùy chọn like trước khi comment; mặc định tắt")
     parser.add_argument("--min-delay", type=int, default=25, help="Thời gian nghỉ tối thiểu (giây)")
     parser.add_argument("--max-delay", type=int, default=45, help="Thời gian nghỉ tối đa (giây)")
-    parser.add_argument("--anti-hash-text", action="store_true", default=True, help="Chèn ký tự tàng hình chống quét trùng lặp")
+    parser.add_argument("--anti-hash-text", action="store_true", default=False, help="Legacy compatibility option; disabled by default")
     parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     args = parser.parse_args()
 

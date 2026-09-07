@@ -228,8 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v5.5.1';
-            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-04 00:07';
+            const verText = data.version ? `v${data.version}` : 'v6.0.4';
+            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-07';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
             const sidebarBuild = document.getElementById('sidebar-build-time');
@@ -386,19 +386,22 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(item => {
             const row = document.createElement('div');
             row.className = 'queue-item-card';
-            row.style.cssText = 'background: #ffffff; border: 1px solid #ced0d4; border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
+            row.style.cssText = 'background:#fff;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;margin-bottom:6px;display:flex;flex-direction:column;gap:5px;';
 
             const title = document.createElement('div');
             title.style.cssText = 'font-weight: 600; font-size: 13px; color: #1877f2; word-break: break-all;';
-            const statusBadge = item.state === 'approved' 
-                ? '<span style="background:#e6f4ea; color:#1e7e34; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">✅ Đã duyệt</span>' 
-                : item.state === 'cancelled' 
-                ? '<span style="background:#fdecea; color:#c62828; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">⏹ Đã hủy</span>' 
-                : '<span style="background:#fff3cd; color:#856404; padding:2px 8px; border-radius:12px; font-size:11px; margin-right:4px;">📝 Nháp (Chờ duyệt)</span>';
-            title.innerHTML = `${statusBadge} <strong>${item.target}</strong>`;
+            const queueStatus = {
+                approved: ['✅','Đã duyệt','#DCFCE7','#166534'], draft: ['📝','Nháp','#FEF3C7','#92400E'],
+                processing: ['⚙️','Đang đăng','#DBEAFE','#1D4ED8'], reconciling: ['🔎','Đang đối soát','#E0E7FF','#3730A3'],
+                pending: ['⏳','Chờ duyệt FB','#FEF3C7','#92400E'], unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'],
+                unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#FEE2E2','#991B1B']
+            };
+            const qs = queueStatus[item.state] || ['•', item.state || 'Không rõ','#F1F5F9','#475569'];
+            const statusBadge = `<span style="background:${qs[2]};color:${qs[3]};padding:2px 7px;border-radius:10px;font-size:10px;margin-right:4px;">${qs[0]} ${qs[1]}</span>`;
+            title.innerHTML = `${statusBadge} <strong>${escapeHtml(item.target)}</strong>`;
 
             const preview = document.createElement('div');
-            preview.style.cssText = 'font-size: 12px; color: #65676b; line-height: 1.4; max-height: 60px; overflow: hidden; text-overflow: ellipsis; background: #f0f2f5; padding: 6px 8px; border-radius: 6px;';
+            preview.style.cssText = 'font-size:11px;color:#64748B;line-height:1.35;max-height:32px;overflow:hidden;background:#F8FAFC;padding:4px 6px;border-radius:5px;';
             preview.textContent = item.content;
 
             const actions = document.createElement('div');
@@ -413,6 +416,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 actions.appendChild(approve);
             }
 
+            if (item.state === 'unverified') {
+                const reconcileBtn = document.createElement('button');
+                reconcileBtn.className = 'btn btn-secondary btn-sm';
+                reconcileBtn.textContent = '🔎 Đối soát link';
+                reconcileBtn.addEventListener('click', () => {
+                    const accId = item.account_id || (accountSelector ? accountSelector.value : '');
+                    runCommand('reconcile-post', { accountId: accId, tasks: [{ target: item.target, content: item.content, queueItemId: item.id }] });
+                });
+                actions.appendChild(reconcileBtn);
+            }
+
             if (item.state === 'approved') {
                 const postItemBtn = document.createElement('button');
                 postItemBtn.className = 'btn btn-primary btn-sm';
@@ -425,7 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showToast(`Bắt đầu đăng bài: ${item.target}`);
                     runCommand(mode, {
                         accountId: accId,
-                        tasks: [{ target: item.target, content: item.content, image: null }]
+                        tasks: [{ target: item.target, content: item.content, image: null, queueItemId: item.id }]
                     });
                 });
                 actions.appendChild(postItemBtn);
@@ -442,52 +456,27 @@ document.addEventListener('DOMContentLoaded', () => {
             approvalQueueList.appendChild(row);
         });
 
-        // Nút to ở dưới cùng để đăng toàn bộ bài đã duyệt
-        const approvedCount = items.filter(i => i.state === 'approved').length;
-        if (approvedCount > 0) {
-            const bottomPostAllDiv = document.createElement('div');
-            bottomPostAllDiv.style.cssText = 'margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ced0d4;';
-            const bottomPostAllBtn = document.createElement('button');
-            bottomPostAllBtn.className = 'btn btn-primary';
-            bottomPostAllBtn.style.cssText = 'width: 100%; padding: 10px; font-size: 14px; font-weight: 700; background: #1877f2; color: #ffffff; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(24,119,242,0.3);';
-            bottomPostAllBtn.innerHTML = `🚀 ĐĂNG TẤT CẢ ${approvedCount} BÀI ĐÃ DUYỆT NGAY`;
-            bottomPostAllBtn.onclick = () => {
-                const accId = accountSelector ? accountSelector.value : '';
-                const approvedItems = items.filter(i => i.state === 'approved');
-                const groupTasks = approvedItems.filter(i => i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
-                const pageTasks = approvedItems.filter(i => !i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
-
-                if (groupTasks.length > 0) {
-                    showToast(`Đang chạy đăng ${groupTasks.length} bài Nhóm đã duyệt...`);
-                    runCommand('group', { accountId: accId, tasks: groupTasks });
-                } else if (pageTasks.length > 0) {
-                    showToast(`Đang chạy đăng ${pageTasks.length} bài Trang đã duyệt...`);
-                    runCommand('page', { accountId: accId, tasks: pageTasks });
-                }
-            };
-            bottomPostAllDiv.appendChild(bottomPostAllBtn);
-            approvalQueueList.appendChild(bottomPostAllDiv);
-        }
-
         // Xử lý nút Đăng tất cả bài đã duyệt trên Header
         const postAllApprovedBtn = document.getElementById('post-all-approved-btn');
         if (postAllApprovedBtn) {
-            postAllApprovedBtn.onclick = () => {
+            postAllApprovedBtn.onclick = async () => {
                 const approvedItems = items.filter(i => i.state === 'approved');
                 if (!approvedItems.length) {
                     showToast('Không có bài nào ở trạng thái "Đã duyệt" để đăng!', 'error');
                     return;
                 }
                 const accId = accountSelector ? accountSelector.value : '';
-                const groupTasks = approvedItems.filter(i => i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
-                const pageTasks = approvedItems.filter(i => !i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null }));
+                const groupTasks = approvedItems.filter(i => i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null, queueItemId: i.id }));
+                const pageTasks = approvedItems.filter(i => !i.target.includes('/groups/')).map(i => ({ target: i.target, content: i.content, image: null, queueItemId: i.id }));
 
                 if (groupTasks.length > 0) {
                     showToast(`Đang chạy đăng ${groupTasks.length} bài Nhóm đã duyệt...`);
-                    runCommand('group', { accountId: accId, tasks: groupTasks });
-                } else if (pageTasks.length > 0) {
+                    const groupResult = await runCommand('group', { accountId: accId, tasks: groupTasks });
+                    if (groupResult === 'cancelled') return;
+                }
+                if (pageTasks.length > 0) {
                     showToast(`Đang chạy đăng ${pageTasks.length} bài Trang đã duyệt...`);
-                    runCommand('page', { accountId: accId, tasks: pageTasks });
+                    await runCommand('page', { accountId: accId, tasks: pageTasks });
                 }
             };
         }
@@ -495,12 +484,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadQueue() {
         try {
-            const response = await fetch('/api/queue');
+            const filter = document.getElementById('queue-filter')?.value || 'active';
+            const query = filter === 'active' ? '?active=1&limit=30' : (filter === 'all' ? '?limit=30' : `?state=${encodeURIComponent(filter)}&limit=30`);
+            const [response, summaryRes] = await Promise.all([fetch('/api/queue' + query), fetch('/api/queue-summary')]);
             renderQueue(await response.json());
-        } catch (_) {
-            approvalQueueList.textContent = 'Không thể tải hàng đợi.';
-        }
+            if (summaryRes.ok) {
+                const q = await summaryRes.json();
+                const el = document.getElementById('queue-summary-text');
+                if (el) el.textContent = `(${q.active || 0} đang xử lý · ${q.published || 0} xong)`;
+            }
+        } catch (_) { approvalQueueList.textContent = 'Không thể tải hàng đợi.'; }
     }
+    document.getElementById('queue-filter')?.addEventListener('change', loadQueue);
 
     async function updateQueueItem(id, action) {
         const response = await fetch(`/api/queue/${id}/${action}`, { method: 'POST' });
@@ -604,12 +599,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadPostedLinks() {
         try {
-            const res = await fetch('/api/posted-links');
+            const filter = document.getElementById('posted-links-filter')?.value || 'all';
+            const query = filter === 'all' ? '?limit=30' : `?limit=30&state=${encodeURIComponent(filter)}`;
+            const res = await fetch('/api/posted-links' + query);
             if (res.ok) {
                 const links = await res.json();
                 if (Array.isArray(links)) {
                     savedPostLinks = links;
                     renderPostedLinks(links);
+                    const countEl = document.getElementById('posted-links-count');
+                    if (countEl) countEl.textContent = `(${links.length} mục)`;
                     return;
                 }
             }
@@ -645,6 +644,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
     function renderPostedLinks(links) {
         if (!postedLinksList) return;
         postedLinksList.innerHTML = '';
@@ -656,26 +659,24 @@ document.addEventListener('DOMContentLoaded', () => {
         links.forEach(item => {
             const row = document.createElement('div');
             row.className = 'posted-link-item';
-            row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid #E2E8F0; gap:8px; font-size:13px;';
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-bottom:1px solid #E2E8F0;gap:7px;font-size:12px;';
 
             const targetUrl = item.url || item.target || (typeof item === 'string' ? item : '');
             const status = item.status || 'Đã xuất bản';
             const postedAt = item.posted_at || '';
-            const isPending = status.toLowerCase().includes('duyệt') || status.toLowerCase().includes('pending') || status.toLowerCase().includes('chờ');
-
-            const statusBadge = isPending
-                ? `<span style="background:#FEF3C7; color:#92400E; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px;">⏳ ${status}</span>`
-                : `<span style="background:#DCFCE7; color:#166534; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px;">✅ ${status}</span>`;
+            const state = item.publish_state || 'unknown';
+            const stateUi = state === 'published' ? ['✅','#DCFCE7','#166534'] : state === 'pending' ? ['⏳','#FEF3C7','#92400E'] : state === 'submitted_unverified' ? ['⚠️','#FFF7ED','#C2410C'] : ['•','#F1F5F9','#475569'];
+            const statusBadge = `<span style="background:${stateUi[1]};color:${stateUi[2]};font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;">${stateUi[0]} ${escapeHtml(status)}</span>`;
 
             const infoCol = document.createElement('div');
             infoCol.style.cssText = 'display:flex; flex-direction:column; gap:3px; overflow:hidden; flex:1;';
             infoCol.innerHTML = `
                 <div style="display:flex; align-items:center; gap:6px;">
                     ${statusBadge}
-                    ${postedAt ? `<span style="font-size:11px; color:#64748B;">${postedAt}</span>` : ''}
+                    ${postedAt ? `<span style="font-size:11px; color:#64748B;">${escapeHtml(postedAt)}</span>` : ''}
                 </div>
-                <div style="font-weight:600; color:#1E293B; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${targetUrl}">
-                    ${targetUrl}
+                <div style="font-weight:600; color:#1E293B; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(targetUrl)}">
+                    ${escapeHtml(targetUrl)}
                 </div>
             `;
 
@@ -691,6 +692,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 a.innerHTML = '🔗 Mở';
                 btnCol.appendChild(a);
             }
+            if (state === 'submitted_unverified' && item.target && item.content) {
+                const reconcileHistoryBtn = document.createElement('button');
+                reconcileHistoryBtn.className = 'btn btn-secondary btn-xs';
+                reconcileHistoryBtn.style.marginLeft = '4px';
+                reconcileHistoryBtn.textContent = '🔎 Đối soát';
+                reconcileHistoryBtn.addEventListener('click', async () => {
+                    const accId = item.account_id || (accountSelector ? accountSelector.value : '');
+                    await runCommand('reconcile-post', { accountId: accId, tasks: [{ target: item.target, content: item.content }] });
+                    loadPostedLinks();
+                });
+                btnCol.appendChild(reconcileHistoryBtn);
+            }
 
             row.append(infoCol, btnCol);
             postedLinksList.appendChild(row);
@@ -698,6 +711,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (postedLinksCard) postedLinksCard.classList.remove('hidden');
     }
+
+    document.getElementById('posted-links-filter')?.addEventListener('change', loadPostedLinks);
 
     // Nút Xóa toàn bộ lịch sử link bài đăng
     if (clearLinksBtn) {
@@ -872,7 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 otherGpmProfiles.forEach(p => {
                     const opt = document.createElement('option');
                     opt.value = p.id;
-                    const proxyText = p.raw_proxy ? ` - ${p.raw_proxy.split(':')[0]}` : '';
+                    const proxyText = p.proxy_hint ? ` - ${p.proxy_hint}` : '';
                     opt.textContent = `📱 ${p.name} (${p.browser_type || 'Chrome'}${proxyText})`;
                     grpOther.appendChild(opt);
                 });
@@ -1051,7 +1066,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     profiles: [{
                                         id: p.id,
                                         name: p.name,
-                                        raw_proxy: p.raw_proxy || '',
+                                        proxy_hint: p.proxy_hint || '',
                                         browser_type: p.browser_type || 'Chrome'
                                     }]
                                 })
@@ -1685,8 +1700,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const kwVal = joinGroupKeywords ? joinGroupKeywords.value.trim() : '';
             const urlVal = joinGroupUrls ? joinGroupUrls.value.trim() : '';
             const limitVal = joinGroupLimit ? parseInt(joinGroupLimit.value) || 2 : 2;
-            const autoRulesVal = joinGroupAutoRules ? joinGroupAutoRules.checked : true;
-            const interactFeedVal = joinGroupInteractFeed ? joinGroupInteractFeed.checked : true;
+            const autoRulesVal = joinGroupAutoRules ? joinGroupAutoRules.checked : false;
+            const interactFeedVal = joinGroupInteractFeed ? joinGroupInteractFeed.checked : false;
 
             if (isUrlMode && !urlVal) {
                 showToast('Vui lòng nhập ít nhất một đường dẫn nhóm Facebook!', 'error');
@@ -2726,6 +2741,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Run Command ----
     async function runCommand(command, payload = {}) {
+        let terminalRunResult = '';
         setRunning(true);
         progressContainer.classList.remove('hidden');
         progressFill.style.width = '20%';
@@ -2803,7 +2819,7 @@ document.addEventListener('DOMContentLoaded', () => {
             payload.cleanExif = cleanExifOpt ? cleanExifOpt.checked : true;
 
             const antiHashTextOpt = document.getElementById('anti-hash-text-opt');
-            payload.antiHashText = antiHashTextOpt ? antiHashTextOpt.checked : true;
+            payload.antiHashText = antiHashTextOpt ? antiHashTextOpt.checked : false;
         }
 
 
@@ -2826,7 +2842,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lines = chunk.split('\n');
                 for (const l of lines) {
                     const cleanLine = l.trim();
-                    if (cleanLine.startsWith('JSON_DATA:')) {
+                    if (cleanLine.startsWith('RUN_RESULT:')) {
+                        terminalRunResult = cleanLine.substring('RUN_RESULT:'.length).trim().toLowerCase();
+                        appendLog(cleanLine);
+                    } else if (cleanLine.startsWith('JSON_DATA:')) {
                         const jsonStr = cleanLine.substring('JSON_DATA:'.length);
                         try {
                             const data = JSON.parse(jsonStr);
@@ -2967,9 +2986,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             progressFill.style.width = '100%';
-            appendLog('[✅ Hoàn tất]');
-            showToast('Tác vụ hoàn tất thành công!');
+            if (terminalRunResult === 'failed') {
+                appendLog('[❌ Hoàn tất với lỗi]');
+                showToast('Tác vụ hoàn tất nhưng có lỗi. Xem trạng thái mục tiêu/Queue.', 'error');
+            } else if (terminalRunResult === 'cancelled') {
+                appendLog('[⏹ Đã hủy]');
+                showToast('Tác vụ đã được hủy.', 'warning');
+            } else {
+                appendLog('[✅ Hoàn tất]');
+                showToast('Tác vụ hoàn tất thành công!');
+                terminalRunResult = terminalRunResult || 'finished';
+            }
         } catch (error) {
+            terminalRunResult = 'failed';
             appendLog(`❌ Lỗi: ${error.message}`);
             showToast('Đã xảy ra lỗi!', 'error');
         } finally {
@@ -2981,6 +3010,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 progressContainer.classList.add('hidden');
             }, 1000);
         }
+        return terminalRunResult || 'finished';
     }
 
     // ---- Auth Button ----
@@ -4772,8 +4802,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.3';
-        let build = '2026-09-06';
+        let ver = 'v6.0.4';
+        let build = '2026-09-07';
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();

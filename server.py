@@ -65,6 +65,13 @@ try:
 except Exception as _jm_err:
     print(f"Warning: JobManager init error: {_jm_err}")
 
+try:
+    _queue_recovered = CampaignRepository().reconcile_processing_queue()
+    if _queue_recovered:
+        print(f"[PublicationQueue] Đã chuyển {_queue_recovered} mục processing bị gián đoạn sang chưa xác minh để đối soát; không tự retry.")
+except Exception as _queue_err:
+    print(f"Warning: Publication queue reconciliation error: {_queue_err}")
+
 CONFIG_FILE = str(DATA_DIR / "config.json")
 QUEUE_FILE = str(DATA_DIR / "publication_queue.json")
 CAMPAIGNS_FILE = str(DATA_DIR / "campaigns.json")
@@ -76,9 +83,9 @@ ACCOUNTS_FILE = str(DATA_DIR / "accounts.json")
 STATE_FILE = str(DATA_DIR / "state.json")
 AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page"}
+ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-06 v6.0.3"
+BUILD_TIME = "2026-09-07 v6.0.4"
 
 
 def app_build_info():
@@ -123,7 +130,18 @@ def save_config(data):
         if os.path.exists(temp_path):
             os.unlink(temp_path)
 
+def _is_canonical_runtime_file(path_value, filename):
+    try:
+        return Path(path_value).resolve() == (DATA_DIR / filename).resolve()
+    except Exception:
+        return False
+
 def load_queue():
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        try:
+            return CampaignRepository().list_queue()
+        except Exception as db_err:
+            print(f"⚠️ Không thể đọc publication queue từ SQLite: {db_err}")
     if os.path.exists(QUEUE_FILE):
         try:
             with open(QUEUE_FILE, "r", encoding="utf-8") as f:
@@ -132,19 +150,9 @@ def load_queue():
                 return queue
         except (OSError, json.JSONDecodeError):
             pass
-    try:
-        q = CampaignRepository().list_queue()
-        if q:
-            return q
-    except Exception:
-        pass
     return []
 
-def save_queue(queue):
-    try:
-        CampaignRepository().save_queue(queue)
-    except Exception:
-        pass
+def _write_queue_json(queue):
     queue_directory = str(Path(QUEUE_FILE).resolve().parent)
     fd, temp_path = tempfile.mkstemp(prefix="publication-queue-", suffix=".json", dir=queue_directory)
     try:
@@ -155,7 +163,17 @@ def save_queue(queue):
         if os.path.exists(temp_path):
             os.unlink(temp_path)
 
+def save_queue(queue):
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        CampaignRepository().save_queue(queue)
+    _write_queue_json(queue)
+
 def load_campaigns():
+    if _is_canonical_runtime_file(CAMPAIGNS_FILE, "campaigns.json"):
+        try:
+            return CampaignRepository().list_campaigns()
+        except Exception as db_err:
+            print(f"⚠️ Không thể đọc campaigns từ SQLite: {db_err}")
     if os.path.exists(CAMPAIGNS_FILE):
         try:
             with open(CAMPAIGNS_FILE, "r", encoding="utf-8") as f:
@@ -164,19 +182,11 @@ def load_campaigns():
                 return campaigns
         except (OSError, json.JSONDecodeError):
             pass
-    try:
-        c = CampaignRepository().list_campaigns()
-        if c:
-            return c
-    except Exception:
-        pass
     return []
 
 def save_campaigns(campaigns):
-    try:
+    if _is_canonical_runtime_file(CAMPAIGNS_FILE, "campaigns.json"):
         CampaignRepository().save_campaigns(campaigns)
-    except Exception:
-        pass
     campaign_directory = str(Path(CAMPAIGNS_FILE).resolve().parent)
     fd, temp_path = tempfile.mkstemp(prefix="campaigns-", suffix=".json", dir=campaign_directory)
     try:
@@ -186,7 +196,6 @@ def save_campaigns(campaigns):
     finally:
         if os.path.exists(temp_path):
             os.unlink(temp_path)
-
 
 def load_json_list(filename):
     try:
@@ -618,15 +627,20 @@ def approve_campaign_drafts(campaign_id):
         return jsonify({"error": "Không tìm thấy chiến dịch."}), 404
     if campaign.get("state") != "active":
         return jsonify({"error": "Chỉ có thể duyệt mục thuộc chiến dịch đang hoạt động."}), 409
-    queue = load_queue()
-    approved = 0
-    for item in queue:
-        if item.get("campaign_id") == campaign_id and item.get("state") == "draft":
-            item["state"] = "approved"
-            item["updated_at"] = now_iso()
-            item.setdefault("audit", []).append({"at": now_iso(), "event": "approved_batch"})
-            approved += 1
-    save_queue(queue)
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        approved = CampaignRepository().approve_campaign_drafts_atomic(campaign_id)
+        queue = CampaignRepository().list_queue()
+        _write_queue_json(queue)
+    else:
+        queue = load_queue()
+        approved = 0
+        for item in queue:
+            if item.get("campaign_id") == campaign_id and item.get("state") == "draft":
+                item["state"] = "approved"
+                item["updated_at"] = now_iso()
+                item.setdefault("audit", []).append({"at": now_iso(), "event": "approved_batch"})
+                approved += 1
+        save_queue(queue)
     return jsonify({"approved": approved, "campaign": campaign_summary(campaign, queue)})
 
 @app.route('/api/preflight', methods=['POST'])
@@ -650,7 +664,31 @@ def preflight_post():
 
 @app.route('/api/queue', methods=['GET'])
 def get_queue():
-    return jsonify(load_queue())
+    items = load_queue()
+    active = request.args.get("active", "0") == "1"
+    state = (request.args.get("state") or "").strip().lower()
+    try:
+        limit = max(1, min(int(request.args.get("limit", 200)), 500))
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        return jsonify({"error": "limit/offset không hợp lệ"}), 400
+    if active:
+        items = [i for i in items if i.get("state") in ("draft", "approved", "processing", "reconciling", "pending", "unverified")]
+    elif state:
+        items = [i for i in items if str(i.get("state", "")).lower() == state]
+    items = sorted(items, key=lambda i: i.get("updated_at") or i.get("created_at") or "", reverse=True)
+    return jsonify(items[offset:offset + limit])
+
+@app.route('/api/queue-summary', methods=['GET'])
+def queue_summary():
+    items = load_queue()
+    counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "cancelled": 0, "published": 0}
+    for item in items:
+        st = str(item.get("state") or "")
+        if st in counts:
+            counts[st] += 1
+    counts["active"] = counts["draft"] + counts["approved"] + counts["processing"] + counts["reconciling"] + counts["pending"] + counts["unverified"]
+    return jsonify(counts)
 
 @app.route('/api/queue', methods=['POST'])
 def create_queue_item():
@@ -683,8 +721,14 @@ def create_queue_item():
         "updated_at": now_iso(),
         "audit": [{"at": now_iso(), "event": "created"}],
     }
-    queue.insert(0, item)
-    save_queue(queue)
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        if not CampaignRepository().insert_queue_item(item):
+            return jsonify({"error": "Không thể tạo mục hàng đợi."}), 409
+        # Compatibility mirror only after authoritative DB commit.
+        _write_queue_json(CampaignRepository().list_queue())
+    else:
+        queue.insert(0, item)
+        save_queue(queue)
     return jsonify(item), 201
 
 @app.route('/api/queue/<item_id>/approve', methods=['POST'])
@@ -695,6 +739,12 @@ def approve_queue_item(item_id):
         return jsonify({"error": "Không tìm thấy mục trong hàng đợi."}), 404
     if item.get("state") != "draft":
         return jsonify({"error": "Chỉ mục nháp mới có thể được duyệt."}), 409
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        updated = CampaignRepository().transition_queue_item(item_id, ("draft",), "approved", {"approved_at": now_iso(), "error": None}, "approved")
+        if not updated:
+            return jsonify({"error": "Trạng thái mục đã thay đổi; hãy làm mới hàng đợi."}), 409
+        _write_queue_json(CampaignRepository().list_queue())
+        return jsonify(updated)
     item["state"] = "approved"
     item["updated_at"] = now_iso()
     item.setdefault("audit", []).append({"at": now_iso(), "event": "approved"})
@@ -709,6 +759,12 @@ def cancel_queue_item(item_id):
         return jsonify({"error": "Không tìm thấy mục trong hàng đợi."}), 404
     if item.get("state") == "published":
         return jsonify({"error": "Không thể hủy mục đã đăng."}), 409
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        updated = CampaignRepository().transition_queue_item(item_id, ("draft", "approved", "pending", "unverified"), "cancelled", {}, "cancelled")
+        if not updated:
+            return jsonify({"error": "Không thể hủy mục ở trạng thái hiện tại."}), 409
+        _write_queue_json(CampaignRepository().list_queue())
+        return jsonify(updated)
     item["state"] = "cancelled"
     item["updated_at"] = now_iso()
     item.setdefault("audit", []).append({"at": now_iso(), "event": "cancelled"})
@@ -854,10 +910,23 @@ def delete_vault_account(entry_id):
     save_json_list(VAULT_FILE, remaining, "account-vault-")
     return jsonify({"success": True})
 
+def _mask_proxy_value(value):
+    raw = str(value or '').strip()
+    if not raw:
+        return ''
+    return raw.rsplit('@', 1)[-1] if '@' in raw else raw
+
+
+def _public_account(account):
+    item = dict(account or {})
+    item['proxy'] = _mask_proxy_value(item.get('proxy'))
+    return item
+
+
 @app.route('/api/accounts', methods=['GET'])
 def get_accounts():
     from utils import load_accounts
-    return jsonify(load_accounts())
+    return jsonify([_public_account(a) for a in load_accounts()])
 
 @app.route('/api/accounts', methods=['POST'])
 def add_account():
@@ -899,7 +968,7 @@ def add_account():
     
     accounts.append(new_acc)
     if save_accounts(accounts):
-        return jsonify(new_acc)
+        return jsonify(_public_account(new_acc))
     else:
         return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
 
@@ -935,7 +1004,7 @@ def batch_import_accounts():
     for p in profiles:
         pid = str(p.get('id', '')).strip()
         pname = str(p.get('name', '')).strip() or pid
-        raw_proxy = str(p.get('raw_proxy', p.get('proxy', ''))).strip()
+        raw_proxy = ''  # GPM owns proxy configuration; never trust/store client-supplied proxy credentials.
         browser_type = str(p.get('browser_type', 'Chrome')).strip()
 
         if not pid or pid in existing_ids:
@@ -982,6 +1051,15 @@ def api_gpm_profiles():
     page = max(1, request.args.get('page', 1, type=int))
     page_size = max(1, min(request.args.get('page_size', 100, type=int), 500))
     result = fetch_gpm_profiles(gpm_api_url=gpm_url, page=page, page_size=page_size)
+    safe_profiles = []
+    for profile in result.get("profiles", []):
+        item = dict(profile)
+        raw_proxy = item.pop("raw_proxy", "")
+        item.pop("proxy", None)
+        item["proxy_hint"] = _mask_proxy_value(raw_proxy)
+        safe_profiles.append(item)
+    result = dict(result)
+    result["profiles"] = safe_profiles
     return jsonify(result)
 
 
@@ -1090,7 +1168,15 @@ def api_posted_links():
     # Ưu tiên 1: Đọc từ SQLite ActivityRepository (nguồn chuẩn của hệ thống)
     try:
         from repositories.activity_repo import ActivityRepository
-        db_items = ActivityRepository().list_posted_links(limit=200)
+        try:
+            limit = max(1, min(int(request.args.get("limit", 30)), 200))
+        except ValueError:
+            return jsonify({"error": "limit không hợp lệ"}), 400
+        state_filter = (request.args.get("state") or "").strip().lower()
+        fetch_limit = 200 if state_filter else limit
+        db_items = ActivityRepository().list_posted_links(limit=fetch_limit)
+        if state_filter:
+            db_items = [r for r in db_items if str(r.get("publish_state") or "").lower() == state_filter][:limit]
         formatted = []
         for r in db_items:
             content_str = r.get("content") or ""

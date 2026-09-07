@@ -13,6 +13,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="fb-auto-audit-tests-")
+os.environ.setdefault("FB_AUTOMATION_DATA_DIR", _TEST_DATA_DIR)
+
 import server
 from utils import (
     ActionResult,
@@ -114,7 +117,7 @@ class AuditV582RegressionTests(unittest.TestCase):
             self.assertEqual(res.code, "POST_SUBMITTED_UNVERIFIED")
 
     # 6. test_pending_record_does_not_block_retry
-    def test_pending_record_does_not_block_retry(self):
+    def test_unverified_record_blocks_retry_until_reconciled(self):
         target = f"https://facebook.com/groups/audit-retry-{int(time.time()*1000)}"
         repo = ActivityRepository()
         # Ghi nhận trạng thái submitted_unverified
@@ -126,7 +129,7 @@ class AuditV582RegressionTests(unittest.TestCase):
             publish_state="submitted_unverified"
         )
         is_dup, _, _ = is_recently_posted(target)
-        self.assertFalse(is_dup, "submitted_unverified record must NOT block retry")
+        self.assertTrue(is_dup, "submitted_unverified may already exist on Facebook and must block auto-retry")
 
         # Ghi nhận trạng thái published
         repo.record_posted_link(

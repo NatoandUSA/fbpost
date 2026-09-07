@@ -4,4 +4,4 @@ import { stopCurrentJob } from './jobs.js';
 import { state } from './state.js';
 
 window.AppModules = { API, showToast, stopCurrentJob, state };
-console.log('FB Automation ES Modules loaded (v5.8.0)');
+console.log('FB Automation ES Modules loaded (v6.0.4)');

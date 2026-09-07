@@ -5,6 +5,7 @@ Integrates with ProcessRunner for process tree execution and cancellation.
 """
 
 import os
+import json
 import sys
 import re
 import time
@@ -208,8 +209,9 @@ def execute_automation_task(
         limit = min(max(1, int(data.get("limit", 2))), 2)
 
         # Chế độ tương tác feed & delay
-        interact_feed = data.get("interactFeed", True)
+        interact_feed = data.get("interactFeed", False)
         feed_flag = ["--interact-feed"] if interact_feed else ["--no-interact-feed"]
+        rules_flag = ["--auto-rules"] if data.get("autoRules", False) else []
         delay_args = ["--delay-min", "60", "--delay-max", "180"]
         if gemini_api_key:
             delay_args.extend(["--gemini-key", str(gemini_api_key)])
@@ -252,6 +254,7 @@ def execute_automation_task(
                     build_cmd_for_account(acc_id)
                     + ["join-group", "--keywords", chunk_targets, "--limit", str(len(chunk))]
                     + feed_flag
+                    + rules_flag
                     + delay_args
                 )
                 ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
@@ -298,6 +301,7 @@ def execute_automation_task(
                         build_cmd_for_account(acc_id)
                         + ["join-group", "--keywords", str(input_targets), "--limit", str(limit)]
                         + feed_flag
+                        + rules_flag
                         + delay_args
                     )
                     ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
@@ -371,7 +375,7 @@ def execute_automation_task(
 
     # 6. COMMENT COMMAND
     if cmd == "comment":
-        like_post = data.get("likePost", True)
+        like_post = data.get("likePost", False)
         comment_tasks = data.get("tasks", [])
         if not comment_tasks:
             targets = data.get("targets", [])
@@ -548,6 +552,30 @@ def execute_automation_task(
         on_line(f"\n========== [Target {i+1}/{total}] ==========\n")
         on_line(f"Posting to: {target}\n")
 
+        queue_item_id = str(task.get("queueItemId") or "").strip()
+        if queue_item_id:
+            try:
+                from repositories.campaign_repo import CampaignRepository
+                claim_from = ("unverified",) if cmd == "reconcile-post" else ("approved",)
+                claim_to = "reconciling" if cmd == "reconcile-post" else "processing"
+                claimed = CampaignRepository().transition_queue_item(
+                    queue_item_id, claim_from, claim_to,
+                    {"error": None, "processing_at": server.now_iso(), "account_id": curr_acc_id}, claim_to
+                )
+            except Exception as claim_err:
+                on_line(f"❌ [Queue Authority] Không thể khóa mục {queue_item_id} để đăng: {claim_err}\n")
+                batch_failed = True
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
+            if not claimed:
+                expected_state = "Chưa xác minh" if cmd == "reconcile-post" else "Đã duyệt"
+                on_line(f"❌ [Queue Authority] Mục {queue_item_id} không còn ở trạng thái {expected_state}; từ chối thao tác để tránh duplicate/bypass.\n")
+                batch_failed = True
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
+
         full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]
         if image:
             full_cmd.extend(["--image", image])
@@ -562,17 +590,55 @@ def execute_automation_task(
         if not anti_hash_text:
             full_cmd.append("--no-anti-hash-text")
 
-        ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+        structured_result = {}
+        def _capture_post_line(line):
+            on_line(line)
+            clean = (line or "").strip()
+            if clean.startswith("ACTION_RESULT:"):
+                try:
+                    structured_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                except Exception:
+                    pass
+
+        ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR))
         outcome = "finished" if ret == 0 else "failed"
         if ret != 0:
             batch_failed = True
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
+        if queue_item_id:
+            from repositories.campaign_repo import CampaignRepository
+            action_state = structured_result.get("state") or ""
+            transition_from = ("reconciling",) if cmd == "reconcile-post" else ("processing",)
+            if action_state == "published" and ret == 0:
+                final_queue_state = "published"
+                updates = {"published_at": server.now_iso(), "result_url": structured_result.get("result_url") or "", "error": None}
+            elif action_state == "pending" and ret == 0:
+                final_queue_state = "pending"
+                updates = {"result_url": structured_result.get("result_url") or "", "error": None}
+            elif action_state in ("submitted_unverified", "unverified") or cmd == "reconcile-post":
+                final_queue_state = "unverified"
+                updates = {"error": structured_result.get("message") or "Facebook có thể đã nhận bài nhưng chưa xác minh được permalink; chỉ đối soát, không tự động đăng lại."}
+            else:
+                final_queue_state = "approved"
+                updates = {"error": structured_result.get("message") or "Thất bại trước khi có bằng chứng bài được gửi; có thể thử lại."}
+            try:
+                transitioned = CampaignRepository().transition_queue_item(
+                    queue_item_id, transition_from, final_queue_state, updates,
+                    f"post_result:{action_state or outcome}"
+                )
+                if not transitioned:
+                    on_line(f"⚠️ [Queue Authority] Không thể ghi kết quả cho {queue_item_id}; state đã thay đổi ngoài tiến trình.\n")
+                    batch_failed = True
+            except Exception as state_err:
+                on_line(f"❌ [Queue Authority] Lỗi ghi state kết quả {queue_item_id}: {state_err}\n")
+                batch_failed = True
+
         if job_repo:
             job_repo.update_job(job_id, progress_current=i + 1)
 
         if i < total - 1:
-            delay = 5 if ret != 0 else random.randint(delay_min, delay_max)
+            delay = 2 if cmd == "reconcile-post" else (5 if ret != 0 else random.randint(delay_min, delay_max))
             mins = delay // 60
             secs = delay % 60
             if ret != 0:

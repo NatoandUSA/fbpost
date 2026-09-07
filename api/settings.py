@@ -27,7 +27,7 @@ def app_build_info():
     source_mtime = datetime.fromtimestamp(Path(__file__).stat().st_mtime, timezone.utc)
     return {
         "version": get_version(),
-        "built_at": "2026-09-04 17:00",
+        "built_at": "2026-09-07",
         "source_updated_at": source_mtime.strftime("%Y-%m-%d %H:%M:%S UTC"),
         "group_manager_available": True,
     }
