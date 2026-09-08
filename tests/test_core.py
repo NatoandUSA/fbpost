@@ -841,7 +841,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.6")
+        self.assertEqual(get_version(), "6.0.7")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1446,8 +1446,8 @@ class AuditV582RegressionTests(unittest.TestCase):
             {"id": "acc-1", "name": "Profile 1", "type": "local"},
             {"id": "acc-2", "name": "Profile 2", "type": "local"}
         ]
-        with patch("server.load_accounts", return_value=mock_accounts), \
-             patch("server.record_profile_activity"), \
+        with patch("services.job_executor.load_accounts", return_value=mock_accounts), \
+             patch("services.job_executor.record_profile_activity"), \
              patch("time.sleep", return_value=None), \
              patch("subprocess.Popen") as mock_popen:
             class DummyProc:
@@ -1468,8 +1468,12 @@ class AuditV582RegressionTests(unittest.TestCase):
             self.assertEqual(res.status_code, 200)
             data = res.get_data(as_text=True)
             self.assertIn("RUN_RESULT:finished", data)
-            # Should have run 2 chunks (2 batches of 2)
+            # Profile-first invariant: both selected profiles run independently; each child receives --limit 2.
             self.assertEqual(mock_popen.call_count, 2)
+            for call in mock_popen.call_args_list:
+                args = call.args[0]
+                self.assertIn("--limit", args)
+                self.assertEqual(args[args.index("--limit") + 1], "2")
 
 
 if __name__ == "__main__":
@@ -1817,3 +1821,36 @@ class V606ReviewP1RegressionTests(unittest.TestCase):
         check_libs = canonical.split("\n:check_libs\n", 1)[1].split("\n:run\n", 1)[0]
         self.assertIn('if not exist "%venv_dir%\\lib\\site-packages\\flask"', check_libs)
         self.assertNotIn("playwright.exe install chromium", check_libs)
+
+
+class V607JobLifecycleRegressionTests(unittest.TestCase):
+    def test_job_executor_import_does_not_import_server_module(self):
+        import subprocess, sys
+        env = os.environ.copy()
+        with tempfile.TemporaryDirectory() as td:
+            env["FB_AUTOMATION_DATA_DIR"] = td
+            code = "import sys; import services.job_executor; assert 'server' not in sys.modules, list(sys.modules)"
+            result = subprocess.run([sys.executable, "-c", code], cwd=str(Path(__file__).resolve().parents[1]), env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_api_run_stream_starts_with_job_id(self):
+        import api.jobs as jobs_api
+        with patch.object(jobs_api.job_manager, "submit_job", return_value="jobabc123"), \
+             patch.object(jobs_api.job_manager, "subscribe_logs", return_value=iter(["RUN_RESULT:finished\n"])):
+            response = server.app.test_client().post("/api/run", json={"command": "interact", "limit": 1})
+            body = response.get_data(as_text=True)
+            self.assertTrue(body.startswith("JOB_ID:jobabc123\n"), body)
+            self.assertIn("RUN_RESULT:finished", body)
+    def test_ui_does_not_treat_missing_terminal_result_as_success(self):
+        src = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("Luồng log đã đóng trước terminal result", src)
+        self.assertIn("terminalRunResult = 'failed'", src)
+        self.assertIn("currentJobId = null", src)
+        self.assertIn("Đang có một Job hoạt động; từ chối gửi Job mới", src)
+
+    def test_join_group_cap_is_based_on_attempted_join_requests(self):
+        src = (Path(__file__).resolve().parents[1] / "fb_join_group.py").read_text(encoding="utf-8")
+        self.assertIn("join_attempts = 0", src)
+        self.assertIn("if join_attempts >= max_groups", src)
+        self.assertIn("join_attempts += 1", src)
+        self.assertIn("vẫn tính vào giới hạn phiên", src)

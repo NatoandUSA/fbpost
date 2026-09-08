@@ -11,25 +11,45 @@ import re
 import time
 import random
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
-from paths import BASE_DIR, UPLOAD_DIR
+from paths import BASE_DIR, DATA_DIR, UPLOAD_DIR, get_version
 from utils import (
-    load_accounts,
+    load_accounts as utils_load_accounts,
     is_recently_posted,
     pick_random_photos,
 )
-import server
 from services.process_runner import ProcessRunner
 from repositories.job_repo import JobRepository
+from repositories.settings_repo import SettingsRepository
+from repositories.activity_repo import ActivityRepository
 
 def load_config():
-    return server.load_config()
+    try:
+        cfg = SettingsRepository().get_config()
+        if cfg:
+            return cfg
+    except Exception:
+        pass
+    config_file = DATA_DIR / "config.json"
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            value = json.load(f)
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        return {}
 
 def load_accounts():
-    return server.load_accounts()
+    return utils_load_accounts()
 
-def record_profile_activity(*args, **kwargs):
-    return server.record_profile_activity(*args, **kwargs)
+def record_profile_activity(profile_id, action, target="", content="", outcome="finished"):
+    try:
+        ActivityRepository().record_activity(profile_id or "default-session", action, target, content, outcome)
+    except Exception:
+        pass
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def is_uploaded_image(value: str) -> bool:
@@ -49,7 +69,7 @@ def execute_automation_task(
 ) -> bool:
     """Execute an automation command and return True if successful, False otherwise."""
     cfg = load_config()
-    on_line(f"RUNTIME_IDENTITY:v{server.APP_VERSION}|root={BASE_DIR.resolve()}|main={(BASE_DIR / 'main.py').resolve()}\n")
+    on_line(f"RUNTIME_IDENTITY:v{get_version()}|root={BASE_DIR.resolve()}|main={(BASE_DIR / 'main.py').resolve()}\n")
     account_id = data.get("accountId")
     gpm_api = data.get("gpmApiUrl") or cfg.get("gpm_api_url", "http://127.0.0.1:19995")
 
@@ -561,7 +581,7 @@ def execute_automation_task(
                 claim_to = "reconciling" if cmd == "reconcile-post" else "processing"
                 claimed = CampaignRepository().transition_queue_item(
                     queue_item_id, claim_from, claim_to,
-                    {"error": None, "processing_at": server.now_iso(), "account_id": curr_acc_id}, claim_to
+                    {"error": None, "processing_at": now_iso(), "account_id": curr_acc_id}, claim_to
                 )
             except Exception as claim_err:
                 on_line(f"❌ [Queue Authority] Không thể khóa mục {queue_item_id} để đăng: {claim_err}\n")
@@ -613,7 +633,7 @@ def execute_automation_task(
             transition_from = ("reconciling",) if cmd == "reconcile-post" else ("processing",)
             if action_state == "published" and ret == 0:
                 final_queue_state = "published"
-                updates = {"published_at": server.now_iso(), "result_url": structured_result.get("result_url") or "", "error": None}
+                updates = {"published_at": now_iso(), "result_url": structured_result.get("result_url") or "", "error": None}
             elif action_state == "pending" and ret == 0:
                 final_queue_state = "pending"
                 updates = {"result_url": structured_result.get("result_url") or "", "error": None}

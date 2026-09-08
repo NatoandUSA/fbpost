@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMode = 'group'; // group, page, thread, interact, scrape, content-hub
     let isCsvMode = false;
     let isRunning = false;
+    let currentJobId = null;
     let logHasContent = false;
     let rawLogLines = [];
     let currentScrapedData = [];
@@ -228,8 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.6';
-            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-07';
+            const verText = data.version ? `v${data.version}` : 'v6.0.7';
+            const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
             const sidebarBuild = document.getElementById('sidebar-build-time');
@@ -2594,6 +2595,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isRunning = running;
         postBtn.disabled = running;
         authBtn.disabled = running;
+        [submitJoinGroupBtn, interactSubmitBtn, scrapeSubmitBtn, commentSubmitBtn, threadSubmitBtn, submitCreatePageBtn, postBtnBottom].forEach(btn => { if (btn) btn.disabled = running; });
         logDot.className = running ? 'log-dot running' : 'log-dot idle';
         
         const cancelBtn = document.getElementById('cancel-log-btn');
@@ -2621,7 +2623,8 @@ document.addEventListener('DOMContentLoaded', () => {
             cancelLogBtn.textContent = '⏳ Đang dừng...';
             appendLog('🛑 Đang gửi yêu cầu dừng tiến trình và đóng trình duyệt...');
             try {
-                const res = await fetch('/api/cancel', { method: 'POST' });
+                const cancelUrl = currentJobId ? `/api/jobs/${encodeURIComponent(currentJobId)}/cancel` : '/api/cancel';
+            const res = await fetch(cancelUrl, { method: 'POST' });
                 const d = await res.json();
                 appendLog(d.message || 'Đã gửi lệnh dừng tiến trình.');
                 showToast(d.message || 'Đã yêu cầu dừng', d.success ? 'success' : 'error');
@@ -2741,7 +2744,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Run Command ----
     async function runCommand(command, payload = {}) {
+        if (isRunning) {
+            appendLog('⚠️ Đang có một Job hoạt động; từ chối gửi Job mới để tránh chồng tiến trình.');
+            showToast('Đang có tác vụ chạy. Hãy chờ hoàn tất hoặc bấm Dừng.', 'warning');
+            return 'busy';
+        }
         let terminalRunResult = '';
+        currentJobId = null;
         setRunning(true);
         progressContainer.classList.remove('hidden');
         progressFill.style.width = '20%';
@@ -2842,7 +2851,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lines = chunk.split('\n');
                 for (const l of lines) {
                     const cleanLine = l.trim();
-                    if (cleanLine.startsWith('RUN_RESULT:')) {
+                    if (cleanLine.startsWith('JOB_ID:')) {
+                        currentJobId = cleanLine.substring('JOB_ID:'.length).trim();
+                        appendLog(`🆔 Job ID: ${currentJobId}`);
+                    } else if (cleanLine.startsWith('RUN_RESULT:')) {
                         terminalRunResult = cleanLine.substring('RUN_RESULT:'.length).trim().toLowerCase();
                         appendLog(cleanLine);
                     } else if (cleanLine.startsWith('JSON_DATA:')) {
@@ -2985,6 +2997,33 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+            if (!terminalRunResult && currentJobId) {
+                appendLog('⚠️ Luồng log đã đóng trước terminal result; tiếp tục theo dõi trạng thái Job trên server...');
+                while (!terminalRunResult) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    try {
+                        const jobRes = await fetch(`/api/jobs/${encodeURIComponent(currentJobId)}`);
+                        if (!jobRes.ok) continue;
+                        const jobData = await jobRes.json();
+                        const state = String(jobData?.job?.state || '').toLowerCase();
+                        if (state === 'success') terminalRunResult = 'finished';
+                        else if (state === 'failed' || state === 'interrupted') terminalRunResult = 'failed';
+                        else if (state === 'cancelled') terminalRunResult = 'cancelled';
+                        if (jobData?.job?.progress_total) {
+                            const cur = jobData.job.progress_current || 0;
+                            const total = jobData.job.progress_total || 0;
+                            statusDetailText.textContent = `Job ${currentJobId}: ${cur}/${total} · ${state}`;
+                        }
+                    } catch (_) {
+                        // Keep ownership: a transient status request failure must not unlock new jobs.
+                    }
+                }
+            }
+            if (!terminalRunResult) {
+                terminalRunResult = 'failed';
+                appendLog('❌ Không nhận được Job ID/terminal result hợp lệ; không coi tác vụ là thành công.');
+            }
+
             progressFill.style.width = '100%';
             if (terminalRunResult === 'failed') {
                 appendLog('[❌ Hoàn tất với lỗi]');
@@ -3003,6 +3042,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Đã xảy ra lỗi!', 'error');
         } finally {
             setRunning(false);
+            currentJobId = null;
             checkStatus();
             loadPostedLinks();
             loadJoinedGroups();
@@ -4802,8 +4842,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.6';
-        let build = '2026-09-07';
+        let ver = 'v6.0.7';
+        let build = '2026-09-08';
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();

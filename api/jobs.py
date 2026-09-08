@@ -138,6 +138,7 @@ def run_streaming():
 
     def _stream():
         try:
+            yield f"JOB_ID:{job_id}\n"
             for line in job_manager.subscribe_logs(job_id):
                 yield line
         except Exception as e:

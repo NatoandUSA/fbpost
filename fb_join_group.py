@@ -181,7 +181,8 @@ def search_and_join_groups(
         print("⚠️ Không có từ khóa tìm kiếm nhóm.")
         return 0
 
-    random.shuffle(kw_list)
+    if not all(str(k).lower().startswith("http") for k in kw_list):
+        random.shuffle(kw_list)
     joined_records = load_joined_groups()
 
     account = None
@@ -194,6 +195,7 @@ def search_and_join_groups(
 
     joined_count = 0
     existing_count = 0
+    join_attempts = 0
     browser_obj = None
     context = None
 
@@ -210,7 +212,8 @@ def search_and_join_groups(
             page.set_default_timeout(35000)
 
             for kw in kw_list:
-                if joined_count >= max_groups:
+                if join_attempts >= max_groups:
+                    print(f"🛑 Đã đạt giới hạn {max_groups} lần gửi yêu cầu Join cho profile này; dừng xử lý thêm nhóm.")
                     break
 
                 is_direct_url = kw.lower().startswith("http")
@@ -380,7 +383,8 @@ def search_and_join_groups(
                         except Exception:
                             pass
 
-                    print(f"👉 Đang bấm 'Tham gia' nhóm: {group_name}...")
+                    join_attempts += 1
+                    print(f"👉 [Join attempt {join_attempts}/{max_groups}] Đang bấm 'Tham gia' nhóm: {group_name}...")
                     btn_to_click.scroll_into_view_if_needed()
                     time.sleep(random.uniform(0.5, 1.2))
                     btn_to_click.click()
@@ -454,7 +458,7 @@ def search_and_join_groups(
                             state = "pending"
                             is_confirmed = True
                         elif any(kw_sub in combined_after for kw_sub in ["tham gia", "join"]) and not any(kw_sub in combined_after for kw_sub in ["hủy", "cancel"]):
-                            print(f"⚠️ Nút vẫn hiển thị 'Tham gia', thao tác chưa được ghi nhận.")
+                            print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng UI chưa xác minh trạng thái; vẫn tính vào giới hạn phiên để tránh gửi quá nhiều yêu cầu.")
                             is_confirmed = False
                         else:
                             is_confirmed = False
@@ -502,7 +506,7 @@ def search_and_join_groups(
                         interact_with_group_feed(page, gemini_key=gemini_key)
 
                     # Giãn cách an toàn ngẫu nhiên 1 - 3 phút (60 - 180s) nếu còn nhóm tiếp theo
-                    if joined_count < max_groups:
+                    if join_attempts < max_groups:
                         cooldown = random.randint(max(10, delay_min), max(delay_min, delay_max))
                         print(f"\n⏳ [Anti-Spam] Nghỉ an toàn {cooldown}s ({cooldown//60}p {cooldown%60}s) trước khi xử lý nhóm tiếp theo...")
                         for sec in range(cooldown, 0, -1):
