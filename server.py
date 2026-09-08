@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-08 v6.0.7"
+BUILD_TIME = "2026-09-08 v6.0.8"
 
 
 def app_build_info():
@@ -686,7 +686,7 @@ def get_queue():
 @app.route('/api/queue-summary', methods=['GET'])
 def queue_summary():
     items = load_queue()
-    counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "cancelled": 0, "published": 0}
+    counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "failed": 0, "cancelled": 0, "published": 0}
     for item in items:
         st = str(item.get("state") or "")
         if st in counts:
@@ -754,6 +754,12 @@ def approve_queue_item(item_id):
     item.setdefault("audit", []).append({"at": now_iso(), "event": "approved"})
     save_queue(queue)
     return jsonify(item)
+
+@app.route('/api/queue/<item_id>/retry', methods=['POST'])
+def retry_queue_item(item_id):
+    updated=CampaignRepository().transition_queue_item(item_id,("failed",),"approved",{"error":None,"approved_at":now_iso()},"manual_retry_approved")
+    if not updated: return jsonify({"error":"Chỉ bài lỗi xác định trước submit mới được thử lại."}),409
+    _write_queue_json(CampaignRepository().list_queue()); return jsonify(updated)
 
 @app.route('/api/queue/<item_id>/cancel', methods=['POST'])
 def cancel_queue_item(item_id):

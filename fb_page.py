@@ -8,7 +8,7 @@ from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted,
-    click_post_publish_button, safe_mouse_wheel, ActionResult
+    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content
 )
 from ai_spinner import generate_unique_variant
 
@@ -187,16 +187,15 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             
             # 1. Nhập nội dung bài viết trước để tránh bị nuốt phím khi gắn ảnh
             print("✍️ Đang nhập nội dung bài viết...")
-            if textbox and textbox.is_visible():
-                human_type(page, textbox, content)
-            else:
-                if dialog and dialog.is_visible():
-                    try:
-                        dialog.click()
-                    except Exception:
-                        pass
-                page.keyboard.type(content)
-            time.sleep(random.uniform(1.5, 2.5))
+            if not textbox or not textbox.is_visible():
+                print("❌ Không tìm thấy textbox soạn bài đáng tin cậy; dừng trước khi submit.")
+                return ActionResult(success=False, code="COMPOSER_TEXTBOX_NOT_FOUND", message="Không tìm thấy ô soạn bài.", target_url=page_url)
+            human_type(page, textbox, content)
+            time.sleep(0.6)
+            if not verify_entered_content(textbox, content):
+                print("❌ Nội dung composer thiếu chữ ký/hashtag bắt buộc; dừng trước khi submit.")
+                return ActionResult(success=False, code="CONTENT_ENTRY_INCOMPLETE", message="Nội dung composer không khớp nội dung chuẩn bị đăng.", target_url=page_url)
+            print(f"✅ Đã xác minh nội dung composer: {len(content)} ký tự · chữ ký/hashtag đầy đủ.")
 
             # 2. Đính kèm ảnh nếu có (sau khi đã có nội dung văn bản)
             if image_path:

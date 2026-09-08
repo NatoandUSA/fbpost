@@ -239,6 +239,16 @@ body {
 
 .workspace-panel { display: flex; flex-direction: column; gap: 16px; }
 
+.workspace-grid.queue-focus { grid-template-columns: minmax(0, 1fr); }
+.workspace-grid.queue-focus .workspace-panel.right-panel { display: none !important; }
+.workspace-grid.queue-focus .workspace-panel.left-panel { width: 100%; max-width: none; }
+.workspace-grid.queue-focus #queue-section { display: block; width: 100%; }
+.workspace-grid.queue-focus #approval-queue-card { box-shadow: none; }
+.workspace-grid.queue-focus #approval-queue-list { max-height: none; overflow: visible; padding: 12px; }
+.workspace-grid.queue-focus .queue-item-card { display: grid !important; grid-template-columns: minmax(220px, 1.1fr) minmax(280px, 2fr) auto; align-items: center; gap: 12px !important; padding: 12px 14px !important; }
+@media (max-width: 1000px) { .workspace-grid.queue-focus .queue-item-card { grid-template-columns: 1fr; } }
+
+
 /* ============================================
    CARDS
    ============================================ */

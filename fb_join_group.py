@@ -383,12 +383,22 @@ def search_and_join_groups(
                         except Exception:
                             pass
 
+                    attempt_no=join_attempts+1
+                    print(f"👉 [Join attempt {attempt_no}/{max_groups}] Đang bấm 'Tham gia' nhóm: {group_name}...")
+                    click_triggered=False
+                    try:
+                        btn_to_click.scroll_into_view_if_needed(); btn_to_click.click(timeout=4000); click_triggered=True
+                    except Exception as e:
+                        if "intercepts pointer events" in str(e):
+                            print("ℹ️ Banner Facebook che nút Join; căn giữa và thử click trực tiếp một lần.")
+                            try:
+                                btn_to_click.evaluate("el => el.scrollIntoView({block:'center',inline:'center'})")
+                                if _is_join_button(btn_to_click): btn_to_click.click(force=True,timeout=3000); click_triggered=True
+                            except Exception as e2: print(f"⚠️ Join fallback thất bại trước khi gửi request: {e2}")
+                        else: print(f"⚠️ Join click thất bại trước khi gửi request: {e}")
+                    if not click_triggered: continue
                     join_attempts += 1
-                    print(f"👉 [Join attempt {join_attempts}/{max_groups}] Đang bấm 'Tham gia' nhóm: {group_name}...")
-                    btn_to_click.scroll_into_view_if_needed()
-                    time.sleep(random.uniform(0.5, 1.2))
-                    btn_to_click.click()
-                    time.sleep(random.uniform(2.5, 4.0))
+                    time.sleep(random.uniform(2.0,3.0))
 
                     # Kiểm tra xem có dialog nội quy/câu hỏi nhóm hiện ra không
                     rule_dialog = page.locator('div[role="dialog"]')

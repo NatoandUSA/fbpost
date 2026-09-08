@@ -17,6 +17,7 @@ from paths import BASE_DIR, DATA_DIR, UPLOAD_DIR, get_version
 from utils import (
     load_accounts as utils_load_accounts,
     is_recently_posted,
+    normalize_target_url,
     pick_random_photos,
 )
 from services.process_runner import ProcessRunner
@@ -235,8 +236,9 @@ def execute_automation_task(
         mode = data.get("mode", "keywords")
         urls = data.get("urls", "").strip()
         raw_keywords = data.get("keywords") or data.get("groupKeywords") or group_keywords or "Homestay Huế, Du lịch Huế"
-        # Giới hạn tối đa 2 nhóm cho mỗi profile một lần mở trình duyệt
         limit = min(max(1, int(data.get("limit", 2))), 2)
+        try: max_profiles=max(0,int(data.get("maxProfiles",0) or 0))
+        except (TypeError,ValueError): max_profiles=0
 
         # Chế độ tương tác feed & delay
         interact_feed = data.get("interactFeed", False)
@@ -261,8 +263,10 @@ def execute_automation_task(
                     all_accs = load_accounts()
                     target_id = all_accs[0].get("id") if all_accs else None
                 active_pool = [{"id": target_id, "name": target_id or "default"}]
-            total_profiles = len(active_pool)
-            join_failed = False
+            if max_profiles > 0: active_pool=active_pool[:max_profiles]
+            total_profiles=len(active_pool)
+            on_line(f"👥 Phạm vi Join: {total_profiles} profile · tối đa {limit} request/profile.\n")
+            join_failed=False
             join_success = 0
             if job_repo:
                 job_repo.update_job(job_id, progress_total=total_profiles)
@@ -308,11 +312,13 @@ def execute_automation_task(
             on_line("🛡️ [Giới hạn vận hành] Mỗi profile chỉ vào tối đa 2 nhóm/phiên mở trình duyệt & nghỉ ngẫu nhiên 1 - 3 phút.\n")
 
             if rotate_accounts and accounts_pool:
-                total_acc = len(accounts_pool)
-                join_failed = False
+                scoped_pool=accounts_pool[:max_profiles] if max_profiles > 0 else accounts_pool
+                total_acc=len(scoped_pool)
+                on_line(f"👥 Phạm vi Join: {total_acc} profile · tối đa {limit} request/profile.\n")
+                join_failed=False
                 if job_repo:
                     job_repo.update_job(job_id, progress_total=total_acc)
-                for idx, acc in enumerate(accounts_pool):
+                for idx, acc in enumerate(scoped_pool):
                     if check_cancel():
                         return False
                     acc_id = acc.get("id")
@@ -333,7 +339,7 @@ def execute_automation_task(
                     if job_repo:
                         job_repo.update_job(job_id, progress_current=idx + 1)
                     if idx < total_acc - 1:
-                        next_acc = accounts_pool[idx + 1].get("name", "profile tiếp theo")
+                        next_acc = scoped_pool[idx + 1].get("name", "profile tiếp theo")
                         if ret != 0:
                             rot_delay = 5
                             on_line(f"\n⚠️ Profile {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
@@ -499,6 +505,8 @@ def execute_automation_task(
 
     total = len(tasks)
     batch_failed = False
+    actual_runs = 0
+    skipped_duplicates = 0
     if job_repo:
         job_repo.update_job(job_id, progress_total=total)
 
@@ -539,8 +547,16 @@ def execute_automation_task(
         if skip_duplicate and cmd in ("group", "page"):
             is_dup, hours_ago, posted_at = is_recently_posted(target, hours=24.0)
             if is_dup:
+                skipped_duplicates += 1
+                recent_state="unknown"
+                try:
+                    for row in ActivityRepository().list_posted_links(limit=300):
+                        if normalize_target_url(row.get("target") or "") == normalize_target_url(target):
+                            recent_state=str(row.get("publish_state") or "unknown").lower(); break
+                except Exception: pass
+                labels={"published":"đã xuất bản","pending":"đang chờ Facebook duyệt","submitted_unverified":"có thể đã gửi nhưng chưa xác minh permalink"}
                 on_line(f"\n========== [Mục tiêu {i+1}/{total}] ==========\n")
-                on_line(f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm/Trang {target} đã được đăng lúc {posted_at} ({hours_ago}h trước). Tự động bỏ qua để tránh gửi trùng.\n")
+                on_line(f"⏭️ [Khóa retry 24h] {target}: {labels.get(recent_state,recent_state)} lúc {posted_at} ({hours_ago}h trước). Không gửi lại tự động.\n")
                 continue
 
         task_content = content
@@ -556,6 +572,13 @@ def execute_automation_task(
         elif cmd in ("group", "page"):
             from brand_profiles import apply_brand_signature
             task_content = apply_brand_signature(content, brand_key, include_signature)
+
+        if cmd in ("group", "page"):
+            has_sig="yes" if "-------------------" in task_content else "no"
+            has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
+            preview=re.sub(r"\s+"," ",task_content).strip()[:120]
+            on_line(f"🧾 [Spin Evidence] original={len(content)} chars → final={len(task_content)} chars · project={brand_key or 'none'} · signature={has_sig} · global_tags={has_tags}\n")
+            on_line(f"📝 [Final Content Preview] {preview}...\n")
 
         task_images = []
         if photo_folder and not image:
@@ -621,6 +644,7 @@ def execute_automation_task(
                 except Exception:
                     pass
 
+        actual_runs += 1
         ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR))
         outcome = "finished" if ret == 0 else "failed"
         if ret != 0:
@@ -641,8 +665,8 @@ def execute_automation_task(
                 final_queue_state = "unverified"
                 updates = {"error": structured_result.get("message") or "Facebook có thể đã nhận bài nhưng chưa xác minh được permalink; chỉ đối soát, không tự động đăng lại."}
             else:
-                final_queue_state = "approved"
-                updates = {"error": structured_result.get("message") or "Thất bại trước khi có bằng chứng bài được gửi; có thể thử lại."}
+                final_queue_state = "failed"
+                updates = {"error": structured_result.get("message") or "Thất bại trước khi có bằng chứng bài được gửi. Có thể chọn Thử lại thủ công."}
             try:
                 transitioned = CampaignRepository().transition_queue_item(
                     queue_item_id, transition_from, final_queue_state, updates,
@@ -681,6 +705,9 @@ def execute_automation_task(
             if not sleep_with_cancel(delay):
                 return False
 
+    on_line(f"📊 [Batch Summary] Tổng {total} · đã gửi/thử {actual_runs} · bỏ qua khóa retry {skipped_duplicates} · lỗi={1 if batch_failed else 0}.\n")
     on_line(f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n")
-    on_line("\n[Batch processing completed successfully!]\n" if not batch_failed else "\n[Batch processing completed with errors.]\n")
+    if batch_failed: on_line("\n[Batch processing completed with errors.]\n")
+    elif actual_runs == 0 and skipped_duplicates > 0: on_line("\n[Batch completed: 0 bài mới được gửi; tất cả mục tiêu đang bị khóa retry/đã xử lý gần đây.]\n")
+    else: on_line("\n[Batch processing completed successfully!]\n")
     return not batch_failed

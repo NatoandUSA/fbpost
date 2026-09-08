@@ -12,6 +12,15 @@ BRAND_SIGNATURES = {
 }
 
 SIGNATURE_SEPARATOR = "-------------------"
+GLOBAL_REQUIRED_HASHTAGS = ("#UMEEHomestay", "#LacasaHomestay")
+
+
+def ensure_global_brand_hashtags(content):
+    text = (content or "").strip()
+    missing = [tag for tag in GLOBAL_REQUIRED_HASHTAGS if tag.casefold() not in text.casefold()]
+    if not missing:
+        return text
+    return f"{text}\n\n{' '.join(missing)}".strip()
 
 
 def normalize_brand_key(value):
@@ -35,7 +44,7 @@ def strip_known_signature(content):
 
 
 def apply_brand_signature(content, brand_key, include_signature=True):
-    clean = strip_known_signature(content)
+    clean = ensure_global_brand_hashtags(strip_known_signature(content))
     key = normalize_brand_key(brand_key)
     if not include_signature or not key:
         return clean

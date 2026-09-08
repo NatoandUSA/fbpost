@@ -841,7 +841,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.7")
+        self.assertEqual(get_version(), "6.0.8")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1854,3 +1854,71 @@ class V607JobLifecycleRegressionTests(unittest.TestCase):
         self.assertIn("if join_attempts >= max_groups", src)
         self.assertIn("join_attempts += 1", src)
         self.assertIn("vẫn tính vào giới hạn phiên", src)
+
+
+class V608UiAndContentRegressionTests(unittest.TestCase):
+    def test_comment_button_submits_comment_job_without_post_button_bridge(self):
+        src = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        block = src[src.index("if (commentSubmitBtn)"):src.index("if (threadSubmitBtn)")]
+        self.assertIn("submitCommentJob()", block)
+        self.assertNotIn("postBtn.click()", block)
+        submit = src[src.index("async function submitCommentJob"):src.index("// ---- Post Button ----")]
+        self.assertIn("runCommand('comment'", submit)
+
+    def test_queue_is_dedicated_full_width_workspace_with_archive_filters(self):
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        css = (root / "static" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn('data-target="queue"', html)
+        self.assertIn('id="queue-section"', html)
+        self.assertIn('.workspace-grid.queue-focus', css)
+        self.assertIn("currentMode === 'queue'", js)
+        self.assertIn("queueSection.appendChild(approvalQueueCard)", js)
+        for state in ('published', 'failed', 'cancelled'):
+            self.assertIn(f'value="{state}"', html)
+
+    def test_join_group_profile_scope_is_separate_from_per_profile_limit(self):
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        executor = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        self.assertIn('id="join-group-max-profiles"', html)
+        self.assertIn("maxProfiles", js)
+        self.assertIn('data.get("maxProfiles"', executor)
+        self.assertIn('min(max(1, int(data.get("limit", 2))), 2)', executor)
+
+    def test_all_posts_keep_both_global_homestay_hashtags_and_project_signature(self):
+        from brand_profiles import apply_brand_signature
+        lacasa = apply_brand_signature("Nội dung thử", "lacasa", True)
+        umee = apply_brand_signature("Nội dung thử", "umee", True)
+        for text in (lacasa, umee):
+            self.assertIn("#UMEEHomestay", text)
+            self.assertIn("#LacasaHomestay", text)
+            self.assertIn("-------------------", text)
+        self.assertIn("Lacasa", lacasa)
+        self.assertIn("Umee", umee)
+
+    def test_v608_assets_are_cache_busted_to_current_release(self):
+        html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('styles.css?v=6.0.8', html)
+        self.assertIn('app.js?v=6.0.8', html)
+        self.assertNotIn('app.js?v=5.8.0', html)
+
+    def test_composer_verifier_requires_full_signature_block_when_expected(self):
+        from utils import verify_entered_content
+        class Fake:
+            def __init__(self, text): self.text = text
+            def inner_text(self): return self.text
+            def text_content(self): return self.text
+        from brand_profiles import apply_brand_signature
+        expected = apply_brand_signature("Nội dung thử", "lacasa", True)
+        self.assertTrue(verify_entered_content(Fake(expected), expected))
+        broken = expected.replace("https://www.lacasahomestay.com/", "")
+        self.assertFalse(verify_entered_content(Fake(broken), expected))
+
+class V608SecurityLinkageRegressionTests(unittest.TestCase):
+    def test_frontend_never_reads_raw_proxy(self):
+        src = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertNotIn("raw_proxy", src)
+        self.assertIn("proxy_hint", src)

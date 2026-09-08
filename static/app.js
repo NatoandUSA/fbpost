@@ -136,10 +136,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const profilesPanelRight = document.getElementById('profiles-panel-right');
     const settingsPanelRight = document.getElementById('settings-panel-right');
     const composerActionBar = document.getElementById('composer-action-bar');
-    const composerBottomActions = document.getElementById('composer-bottom-actions');
+    const queueSection = document.getElementById('queue-section');
+    const workspaceGrid = document.querySelector('.workspace-grid');
+    if (queueSection && approvalQueueCard && approvalQueueCard.parentElement !== queueSection) queueSection.appendChild(approvalQueueCard);
     const logCard = document.querySelector('.card.log-card') || document.querySelector('.log-card');
-    const postBtnBottom = document.getElementById('post-btn-bottom');
-    const addToQueueBtnBottom = document.getElementById('add-to-queue-btn-bottom');
     const interactSubmitBtn = document.getElementById('interact-submit-btn');
     const scrapeSubmitBtn = document.getElementById('scrape-submit-btn');
     const commentSubmitBtn = document.getElementById('comment-submit-btn');
@@ -175,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const joinGroupKeywords = document.getElementById('join-group-keywords');
     const joinGroupUrls = document.getElementById('join-group-urls');
     const joinGroupLimit = document.getElementById('join-group-limit');
+    const joinGroupMaxProfiles = document.getElementById('join-group-max-profiles');
     const joinGroupAutoRules = document.getElementById('join-group-auto-rules');
     const joinGroupInteractFeed = document.getElementById('join-group-interact-feed');
     const submitJoinGroupBtn = document.getElementById('submit-join-group-btn');
@@ -229,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.7';
+            const verText = data.version ? `v${data.version}` : 'v6.0.8';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -395,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 approved: ['✅','Đã duyệt','#DCFCE7','#166534'], draft: ['📝','Nháp','#FEF3C7','#92400E'],
                 processing: ['⚙️','Đang đăng','#DBEAFE','#1D4ED8'], reconciling: ['🔎','Đang đối soát','#E0E7FF','#3730A3'],
                 pending: ['⏳','Chờ duyệt FB','#FEF3C7','#92400E'],
-                unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#FEE2E2','#991B1B']
+                unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], failed: ['❌','Lỗi trước submit','#FEE2E2','#991B1B'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#F1F5F9','#475569']
             };
             const qs = queueStatus[item.state] || ['•', item.state || 'Không rõ','#F1F5F9','#475569'];
             const statusBadge = `<span style="background:${qs[2]};color:${qs[3]};padding:2px 7px;border-radius:10px;font-size:10px;margin-right:4px;">${qs[0]} ${qs[1]}</span>`;
@@ -446,12 +447,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 actions.appendChild(postItemBtn);
             }
 
-            const cancel = document.createElement('button');
-            cancel.className = 'btn btn-ghost btn-sm';
-            cancel.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #888; border: none; background: transparent; cursor: pointer;';
-            cancel.textContent = '🗑️ Xóa';
-            cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
-            actions.appendChild(cancel);
+            if (item.state === 'failed') {
+                const retry = document.createElement('button');
+                retry.className = 'btn btn-primary btn-sm';
+                retry.textContent = '↻ Duyệt thử lại';
+                retry.addEventListener('click', () => updateQueueItem(item.id, 'retry'));
+                actions.appendChild(retry);
+            }
+            if (['draft','approved','pending','unverified'].includes(item.state)) {
+                const cancel = document.createElement('button');
+                cancel.className = 'btn btn-ghost btn-sm';
+                cancel.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #64748B; border: none; background: transparent; cursor: pointer;';
+                cancel.textContent = '⏹ Hủy & lưu trữ';
+                cancel.addEventListener('click', () => updateQueueItem(item.id, 'cancel'));
+                actions.appendChild(cancel);
+            }
 
             row.append(title, preview, actions);
             approvalQueueList.appendChild(row);
@@ -492,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (summaryRes.ok) {
                 const q = await summaryRes.json();
                 const el = document.getElementById('queue-summary-text');
-                if (el) el.textContent = `(${q.active || 0} đang xử lý · ${q.published || 0} xong)`;
+                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.unverified||0} cần đối soát · ${archived} lưu trữ)`; }
             }
         } catch (_) { approvalQueueList.textContent = 'Không thể tải hàng đợi.'; }
     }
@@ -502,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch(`/api/queue/${id}/${action}`, { method: 'POST' });
         const data = await response.json();
         if (!response.ok) showToast(data.error || 'Không thể cập nhật hàng đợi.', 'error');
-        else { showToast(action === 'approve' ? 'Đã duyệt bài đăng.' : 'Đã hủy bài đăng.'); loadQueue(); }
+        else { const msg=action==='approve'?'Đã duyệt bài đăng.':action==='retry'?'Đã đưa bài lỗi về trạng thái Đã duyệt để thử lại thủ công.':'Đã hủy và chuyển vào lưu trữ.'; showToast(msg); loadQueue(); }
     }
 
     preflightBtn.addEventListener('click', async () => {
@@ -1036,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const typeCell = makeCell(p.browser_type || 'Chrome');
                 typeCell.firstChild.className = 'badge badge-gpm';
                 const profileCell = makeCell(p.id, 'code');
-                const proxyCell = makeCell(p.raw_proxy || 'Trực tiếp');
+                const proxyCell = makeCell(p.proxy_hint || 'Trực tiếp');
 
                 const statusCell = document.createElement('td');
                 statusCell.innerHTML = isSaved
@@ -1172,7 +1182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
                 <td style="padding: 8px 12px; font-weight: 600; color: #1E293B;">${p.name}</td>
                 <td style="padding: 8px 12px; color: #64748B;">${p.browser_type || 'Chrome'}</td>
-                <td style="padding: 8px 12px; font-family: monospace; font-size: 11px; color: #475569;">${p.raw_proxy || 'Direct'}</td>
+                <td style="padding: 8px 12px; font-family: monospace; font-size: 11px; color: #475569;">${p.proxy_hint || 'Direct'}</td>
                 <td style="padding: 8px 12px;">
                     ${isSaved
                         ? `<span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #DCFCE7; color: #15803D; font-weight: 600;">Đã lưu</span>`
@@ -1701,6 +1711,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const kwVal = joinGroupKeywords ? joinGroupKeywords.value.trim() : '';
             const urlVal = joinGroupUrls ? joinGroupUrls.value.trim() : '';
             const limitVal = joinGroupLimit ? parseInt(joinGroupLimit.value) || 2 : 2;
+            const maxProfilesVal = joinGroupMaxProfiles ? parseInt(joinGroupMaxProfiles.value) || 0 : 0;
             const autoRulesVal = joinGroupAutoRules ? joinGroupAutoRules.checked : false;
             const interactFeedVal = joinGroupInteractFeed ? joinGroupInteractFeed.checked : false;
 
@@ -1714,13 +1725,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            appendLog(`🤝 Bắt đầu lệnh tự động gia nhập Nhóm Facebook (${isUrlMode ? 'Theo danh sách URL' : 'Theo từ khóa'})...`);
+            appendLog(`🤝 Join Group: ${maxProfilesVal || 'tất cả'} profile · tối đa ${limitVal} request/profile · ${isUrlMode ? 'URL mode' : 'Keyword mode'}.`);
             await runCommand('join-group', {
                 accountId: accId,
                 mode: isUrlMode ? 'urls' : 'keywords',
                 keywords: kwVal,
                 urls: urlVal,
                 limit: limitVal,
+                maxProfiles: maxProfilesVal,
                 autoRules: autoRulesVal,
                 interactFeed: interactFeedVal
             });
@@ -2042,17 +2054,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Action button bridges
-    if (postBtnBottom) {
-        postBtnBottom.addEventListener('click', () => {
-            if (postBtn) postBtn.click();
-        });
-    }
-    if (addToQueueBtnBottom) {
-        addToQueueBtnBottom.addEventListener('click', () => {
-            if (addToQueueBtn) addToQueueBtn.click();
-        });
-    }
+    // Specialized task buttons.
     if (interactSubmitBtn) {
         interactSubmitBtn.addEventListener('click', () => {
             currentMode = 'interact';
@@ -2066,9 +2068,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     if (commentSubmitBtn) {
-        commentSubmitBtn.addEventListener('click', () => {
+        commentSubmitBtn.addEventListener('click', async () => {
             currentMode = 'comment';
-            if (postBtn) postBtn.click();
+            await submitCommentJob();
         });
     }
     if (threadSubmitBtn) {
@@ -2239,6 +2241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         profiles: '📁 Quản Lý Profiles & Tài Khoản GPM',
         'create-page': '🚩 Tự Tạo Fanpage Cá Nhân (Chuẩn Người Thật, Max 2/Ngày)',
         'join-group': '🤝 Tự Động Gia Nhập Nhóm (Join Group)',
+        queue: '📋 Hàng Đợi & Lịch Sử Đăng Bài',
         settings: '🛡️ Bảo Mật & Cấu Hình Hệ Thống'
     };
 
@@ -2246,14 +2249,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Tab Panel Isolation Logic ----
     function applyTabIsolation(mode) {
-        // 1. Approval Queue: ONLY on Group and Page
+        // 1. Approval Queue: dedicated full-width Queue workspace only.
         if (approvalQueueCard) {
-            if (mode === 'group' || mode === 'page') {
-                approvalQueueCard.classList.remove('hidden');
-            } else {
-                approvalQueueCard.classList.add('hidden');
-            }
+            if (mode === 'queue') approvalQueueCard.classList.remove('hidden');
+            else approvalQueueCard.classList.add('hidden');
         }
+        if (workspaceGrid) workspaceGrid.classList.toggle('queue-focus', mode === 'queue');
 
         // 2. Posted Links: on Group, Page, Comment
         if (postedLinksCard) {
@@ -2311,7 +2312,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 8. Log Card: Show on operational tabs, hide on profiles and settings
         if (logCard) {
-            if (mode === 'profiles' || mode === 'settings') {
+            if (mode === 'profiles' || mode === 'settings' || mode === 'queue') {
                 logCard.classList.add('hidden');
             } else {
                 logCard.classList.remove('hidden');
@@ -2320,7 +2321,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 9. Visual Progress Dashboard: Hide on profiles, settings, create-page, and join-group
         if (visualProgressDashboard) {
-            if (mode === 'profiles' || mode === 'settings' || mode === 'create-page' || mode === 'join-group') {
+            if (mode === 'profiles' || mode === 'settings' || mode === 'create-page' || mode === 'join-group' || mode === 'queue') {
                 visualProgressDashboard.classList.add('hidden');
             } else {
                 visualProgressDashboard.classList.remove('hidden');
@@ -2333,13 +2334,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 composerActionBar.classList.remove('hidden');
             } else {
                 composerActionBar.classList.add('hidden');
-            }
-        }
-        if (composerBottomActions) {
-            if (mode === 'group' || mode === 'page') {
-                composerBottomActions.classList.remove('hidden');
-            } else {
-                composerBottomActions.classList.add('hidden');
             }
         }
     }
@@ -2366,6 +2360,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (threadSection) threadSection.classList.add('hidden');
             if (createPageSection) createPageSection.classList.add('hidden');
             if (joinGroupSection) joinGroupSection.classList.add('hidden');
+            if (queueSection) queueSection.classList.add('hidden');
             if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
             if (addToPostBar) addToPostBar.classList.add('hidden');
             if (composerDividerBar) composerDividerBar.classList.remove('hidden');
@@ -2399,10 +2394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (currentMode === 'comment') {
                 if (commentSection) commentSection.classList.remove('hidden');
                 if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
-                if (postBtn) {
-                    postBtn.classList.remove('hidden');
-                    postBtn.textContent = '💬 BẮT ĐẦU BÌNH LUẬN BÀI VIẾT';
-                }
+                if (postBtn) postBtn.classList.add('hidden');
             } else if (currentMode === 'thread') {
                 if (threadSection) threadSection.classList.remove('hidden');
                 if (delaySettingsBar) delaySettingsBar.classList.remove('hidden');
@@ -2452,6 +2444,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (postBtn) postBtn.classList.add('hidden');
                 populateJoinGroupProfiles();
                 loadJoinedGroups();
+            } else if (currentMode === 'queue') {
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
+                if (queueSection) queueSection.classList.remove('hidden');
+                if (postBtn) postBtn.classList.add('hidden');
+                loadQueue();
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -3058,6 +3058,25 @@ document.addEventListener('DOMContentLoaded', () => {
         runCommand('auth');
     });
 
+    async function submitCommentJob() {
+        const rawTargets = commentTargets.value.trim();
+        const content = commentContent.value.trim();
+        if (!rawTargets || !content) { showToast('Vui lòng nhập danh sách link bài viết và nội dung bình luận!', 'error'); return; }
+        const targets = rawTargets.split('\n').map(t => t.trim()).filter(Boolean);
+        const tasks = targets.map(target => ({ target, content }));
+        const autoSpin = autoSpinCommentOpt ? autoSpinCommentOpt.checked : false;
+        const commentAntiHashOpt = document.getElementById('comment-anti-hash-opt');
+        initProgressDashboard('Bình luận bài viết theo link', targets);
+        return runCommand('comment', {
+            tasks,
+            likePost: commentLikePost ? commentLikePost.checked : false,
+            antiHashText: commentAntiHashOpt ? commentAntiHashOpt.checked : false,
+            autoSpin,
+            geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
+            accountId: accountSelector.value
+        });
+    }
+
     // ---- Post Button ----
     postBtn.addEventListener('click', async () => {
         if (currentMode === 'interact') {
@@ -3085,25 +3104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             initProgressDashboard('Quét bình luận bài viết', [target]);
             runCommand('scrape', { target, limit, accountId: accountSelector.value });
         } else if (currentMode === 'comment') {
-            const rawTargets = commentTargets.value.trim();
-            const content = commentContent.value.trim();
-            if (!rawTargets || !content) {
-                showToast('Vui lòng nhập danh sách link bài viết và nội dung bình luận!', 'error');
-                return;
-            }
-            const autoSpin = autoSpinCommentOpt ? autoSpinCommentOpt.checked : false;
-            const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
-            const tasks = targets.map(t => ({ target: t, content: content }));
-            initProgressDashboard('Bình luận bài viết theo link', targets);
-            const commentAntiHashOpt = document.getElementById('comment-anti-hash-opt');
-            runCommand('comment', {
-                tasks,
-                likePost: commentLikePost ? commentLikePost.checked : true,
-                antiHashText: commentAntiHashOpt ? commentAntiHashOpt.checked : true,
-                autoSpin: autoSpin,
-                geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
-                accountId: accountSelector.value
-            });
+            await submitCommentJob();
         } else if (currentMode === 'thread') {
             const rawTargets = (threadTargetInput?.value.trim() || targetInput.value.trim());
             const content = (threadContentInput?.value.trim() || postContent.value.trim());
@@ -4842,7 +4843,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.7';
+        let ver = 'v6.0.8';
         let build = '2026-09-08';
         try {
             const res = await fetch('/api/app-info');

@@ -115,48 +115,36 @@ def _ensure_focus(locator):
             return False
 
 def human_type(page, locator, text, multiline_key="Enter"):
-    """
-    Types text character by character with random delays and occasional simulated typos.
-    Nếu multiline_key='Shift+Enter': Xuống dòng bằng Shift+Enter để tránh bị gửi bình luận sớm trong khung comment Facebook.
-    """
-    print("Typing with human-like behavior (including possible typos)...")
+    """Enter the exact supplied text; no typo simulation or random character loss."""
+    print("Typing content reliably...")
     _ensure_focus(locator)
-    time.sleep(random.uniform(0.5, 1.0))
-    keyboard = page.keyboard
-    
-    for idx, char in enumerate(text):
-        if idx > 0 and idx % 40 == 0:
-            _ensure_focus(locator)
+    try:
+        locator.fill(str(text or ""))
+        return
+    except Exception:
+        pass
+    keyboard=page.keyboard
+    lines=str(text or "").split("\n")
+    for idx,line in enumerate(lines):
+        if line: keyboard.insert_text(line)
+        if idx < len(lines)-1: keyboard.press("Shift+Enter" if multiline_key == "Shift+Enter" else "Enter")
 
-        if char == '\n':
-            if multiline_key == "Shift+Enter":
-                keyboard.press('Shift+Enter')
-            else:
-                keyboard.press('Enter')
-            time.sleep(random.uniform(0.15, 0.35))
-            continue
 
-        # Non-BMP (emojis như 🌸, 🏡) hoặc zero-width spaces (\u200b) dùng insert_text trực tiếp để tránh lỗi gõ phím
-        if ord(char) > 0xFFFF or char in ["\u200b", "\u200c", "\u200d"]:
-            keyboard.insert_text(char)
-            time.sleep(0.01)
-            continue
+def verify_entered_content(locator, expected):
+    try:
+        actual=(locator.inner_text() or locator.text_content() or "").strip()
+    except Exception:
+        return False
+    expected=str(expected or "").strip()
+    required=[t for t in ("#UMEEHomestay", "#LacasaHomestay") if t.casefold() in expected.casefold()]
+    if "-------------------" in expected:
+        required.append("-------------------")
+        signature_part = expected.rsplit("-------------------", 1)[1]
+        required.extend([line.strip() for line in signature_part.splitlines() if line.strip()])
+    if not required:
+        return True
+    return all(t.casefold() in actual.casefold() for t in required) and len(actual) >= min(20,len(expected))
 
-        # 2% mô phỏng gõ nhầm với ký tự ASCII đơn giản
-        if char.isalpha() and ord(char) < 128 and random.random() < 0.02:
-            wrong_char = random.choice('abcdefghijklmnopqrstuvwxyz')
-            keyboard.type(wrong_char, delay=random.randint(20, 50))
-            time.sleep(random.uniform(0.08, 0.2))
-            keyboard.press("Backspace")
-            time.sleep(random.uniform(0.08, 0.15))
-
-        try:
-            keyboard.type(char, delay=random.randint(20, 50))
-        except Exception:
-            keyboard.insert_text(char)
-
-        if char in ['.', ',', '!', '?', ' '] and random.random() < 0.08:
-            time.sleep(random.uniform(0.2, 0.6))
 
 def safe_mouse_wheel(page, dx, dy):
     """
