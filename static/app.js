@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.8';
+            const verText = data.version ? `v${data.version}` : 'v6.0.9';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -2591,8 +2591,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ---- Set Running State ----
-    function setRunning(running) {
-        isRunning = running;
+    function setRunning(running, jobId = currentJobId) {
+        isRunning = Boolean(running);
+        if (isRunning && jobId) currentJobId = jobId;
+        if (!isRunning) currentJobId = null;
         postBtn.disabled = running;
         authBtn.disabled = running;
         [submitJoinGroupBtn, interactSubmitBtn, scrapeSubmitBtn, commentSubmitBtn, threadSubmitBtn, submitCreatePageBtn, postBtnBottom].forEach(btn => { if (btn) btn.disabled = running; });
@@ -2600,7 +2602,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const cancelBtn = document.getElementById('cancel-log-btn');
         if (cancelBtn) {
-            cancelBtn.style.display = running ? 'inline-flex' : 'none';
+            cancelBtn.style.display = 'inline-flex';
+            cancelBtn.disabled = !isRunning;
+            cancelBtn.style.opacity = isRunning ? '1' : '0.45';
         }
 
         if (running) {
@@ -2613,6 +2617,19 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 postBtn.textContent = 'Đăng bài ngay';
             }
+        }
+    }
+
+    async function syncActiveJobState() {
+        try {
+            const res = await fetch('/api/jobs/active', { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const active = Boolean(data && data.success && data.active && data.job);
+            setRunning(active, active ? data.job.id : null);
+            return { known: true, active, job: active ? data.job : null };
+        } catch (_) {
+            return { known: false, active: isRunning, job: null };
         }
     }
 
@@ -2631,8 +2648,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 appendLog('❌ Lỗi khi gửi lệnh dừng: ' + err.message);
             } finally {
-                cancelLogBtn.disabled = false;
                 cancelLogBtn.textContent = '🛑 Dừng lại';
+                await syncActiveJobState();
             }
         });
     }
@@ -2744,7 +2761,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Run Command ----
     async function runCommand(command, payload = {}) {
-        if (isRunning) {
+        const serverState = await syncActiveJobState();
+        if (!serverState.known) return 'unknown';
+        if (serverState.active) {
             appendLog('⚠️ Đang có một Job hoạt động; từ chối gửi Job mới để tránh chồng tiến trình.');
             showToast('Đang có tác vụ chạy. Hãy chờ hoàn tất hoặc bấm Dừng.', 'warning');
             return 'busy';
@@ -4841,9 +4860,12 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTabIsolation(currentMode);
     loadSettings();
 
+    syncActiveJobState();
+    window.setInterval(() => syncActiveJobState(), 3000);
+
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.8';
+        let ver = 'v6.0.9';
         let build = '2026-09-08';
         try {
             const res = await fetch('/api/app-info');

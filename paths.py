@@ -27,4 +27,4 @@ def get_version() -> str:
             return VERSION_FILE.read_text(encoding="utf-8-sig").strip()
         except OSError:
             pass
-    return "6.0.8"
+    return "6.0.9"
