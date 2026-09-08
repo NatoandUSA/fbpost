@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.9';
+            const verText = data.version ? `v${data.version}` : 'v6.0.10';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -2597,7 +2597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isRunning) currentJobId = null;
         postBtn.disabled = running;
         authBtn.disabled = running;
-        [submitJoinGroupBtn, interactSubmitBtn, scrapeSubmitBtn, commentSubmitBtn, threadSubmitBtn, submitCreatePageBtn, postBtnBottom].forEach(btn => { if (btn) btn.disabled = running; });
+        [submitJoinGroupBtn, interactSubmitBtn, scrapeSubmitBtn, commentSubmitBtn, threadSubmitBtn, submitCreatePageBtn].forEach(btn => { if (btn) btn.disabled = running; });
         logDot.className = running ? 'log-dot running' : 'log-dot idle';
         
         const cancelBtn = document.getElementById('cancel-log-btn');
@@ -4865,7 +4865,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.9';
+        let ver = 'v6.0.10';
         let build = '2026-09-08';
         try {
             const res = await fetch('/api/app-info');
