@@ -158,7 +158,18 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 return ActionResult(success=False, code="COMPOSER_NOT_FOUND", message="Không tìm thấy ô đăng bài. Hãy kiểm tra bạn đã tham gia nhóm hoặc nhóm có yêu cầu quyền duyệt thành viên hay không.", target_url=group_url)
 
             print("👉 Click mở ô soạn thảo bài viết...")
-            composer_box.click()
+            try:
+                composer_box.click(timeout=6000)
+            except Exception as click_err:
+                if "intercepts pointer events" not in str(click_err):
+                    raise
+                print("⚠️ Thanh điều hướng đang che ô soạn thảo; căn giữa phần tử và thử lại...")
+                try:
+                    composer_box.evaluate("el => el.scrollIntoView({block: 'center', inline: 'nearest'})")
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+                composer_box.click(force=True, timeout=5000)
             time.sleep(random.uniform(2.5, 4.0))
 
             # Chờ hộp thoại soạn bài (Dialog modal) mở hoàn toàn

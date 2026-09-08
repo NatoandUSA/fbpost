@@ -14,10 +14,12 @@ from utils import (
     safe_mouse_wheel,
     human_type,
     process_spintax,
+    normalize_target_url,
 )
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-JOINED_GROUPS_FILE = os.path.join(BASE_DIR, "joined_groups.json")
+from paths import DATA_DIR
+JOINED_GROUPS_FILE = str(DATA_DIR / "joined_groups.json")
 STATE_FILE = os.path.join(BASE_DIR, "state.json")
 
 COMMUNITY_GROUP_COMMENTS = [
@@ -123,24 +125,25 @@ def interact_with_group_feed(page, gemini_key=None):
 
 
 def load_joined_groups():
-    if os.path.exists(JOINED_GROUPS_FILE):
+    """SQLite is authoritative for the canonical runtime; patched paths use JSON."""
+    canonical_file = str(DATA_DIR / "joined_groups.json")
+    if os.path.abspath(JOINED_GROUPS_FILE) != os.path.abspath(canonical_file):
         try:
             with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                value = json.load(f)
+            return value if isinstance(value, list) else []
         except Exception:
             return []
-    import paths
-    default_file = str(paths.BASE_DIR / "joined_groups.json")
-    if os.path.abspath(JOINED_GROUPS_FILE) != os.path.abspath(default_file):
-        return []
     try:
         from repositories.group_repo import GroupRepository
-        rows = GroupRepository().list_joined_groups()
-        if rows:
-            return rows
+        return GroupRepository().list_joined_groups()
     except Exception:
-        pass
-    return []
+        try:
+            with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
+                value = json.load(f)
+            return value if isinstance(value, list) else []
+        except Exception:
+            return []
 
 
 def save_joined_groups(groups):
@@ -190,6 +193,7 @@ def search_and_join_groups(
         print(f"👤 Khởi chạy profile: {account.get('name', account_id)}")
 
     joined_count = 0
+    existing_count = 0
     browser_obj = None
     context = None
 
@@ -210,6 +214,18 @@ def search_and_join_groups(
                     break
 
                 is_direct_url = kw.lower().startswith("http")
+                canonical_kw = normalize_target_url(kw) if is_direct_url else ""
+                if is_direct_url:
+                    already = any(
+                        str(r.get("account_id") or "default") == str(account_id or "default")
+                        and normalize_target_url(r.get("url") or "") == canonical_kw
+                        and str(r.get("state") or "").lower() in {"joined", "pending"}
+                        for r in joined_records
+                    )
+                    if already:
+                        existing_count += 1
+                        print(f"⏭️ Profile {account_id or 'default'} đã có lịch sử joined/pending với nhóm này; thử nhóm kế tiếp: {kw}")
+                        continue
                 if is_direct_url:
                     target_url = kw
                     print(f"\n👉 Đang mở trực tiếp nhóm Facebook để xin tham gia: {target_url}...")
@@ -294,20 +310,34 @@ def search_and_join_groups(
                 if not candidates:
                     if is_direct_url:
                         # Direct URL mode: distinguish an existing membership/request from a true missing control.
-                        existing_state = False
+                        existing_state = ""
                         try:
                             for state_btn in page.locator('div[role="button"], button').all():
                                 if not state_btn.is_visible():
                                     continue
                                 state_text = f"{state_btn.inner_text() or ''} {state_btn.get_attribute('aria-label') or ''}".lower()
-                                if any(marker in state_text for marker in ["đã tham gia", "đã yêu cầu", "yêu cầu đã gửi", "joined", "requested", "rời khỏi", "leave", "hủy yêu cầu", "cancel request"]):
-                                    existing_state = True
+                                if any(marker in state_text for marker in ["đã tham gia", "joined", "rời khỏi", "leave"]):
+                                    existing_state = "joined"
+                                    break
+                                if any(marker in state_text for marker in ["đã yêu cầu", "yêu cầu đã gửi", "requested", "hủy yêu cầu", "cancel request"]):
+                                    existing_state = "pending"
                                     break
                         except Exception:
-                            existing_state = False
+                            existing_state = ""
                         if existing_state:
-                            joined_count += 1
-                            print(f"ℹ️ Nhóm đã ở trạng thái thành viên/chờ duyệt; tính là đã xử lý: {kw}")
+                            record = {
+                                "group_name": kw, "keyword": kw, "url": target_url,
+                                "joined_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "account_id": account_id or "default", "state": existing_state
+                            }
+                            try:
+                                from repositories.group_repo import GroupRepository
+                                GroupRepository().add_joined_group(record)
+                                joined_records.append(record)
+                            except Exception as repo_err:
+                                print(f"⚠️ Lỗi lưu trạng thái nhóm hiện có vào DB: {repo_err}")
+                            existing_count += 1
+                            print(f"ℹ️ Nhóm đã ở trạng thái {existing_state}; đã đồng bộ lịch sử và thử nhóm kế tiếp: {kw}")
                         else:
                             print(f"⚠️ Không tìm thấy nút Tham gia hoặc trạng thái thành viên/chờ duyệt tại nhóm: {kw}")
                     else:
@@ -322,7 +352,7 @@ def search_and_join_groups(
 
                 try:
                     group_name = f"Nhóm liên quan '{kw}'"
-                    group_url = target_url if is_direct_url else ""
+                    group_url = normalize_target_url(target_url) if is_direct_url else ""
                     parent_card = None
                     if is_direct_url:
                         try:
@@ -343,9 +373,10 @@ def search_and_join_groups(
                             if link_elem.count() > 0:
                                 href = link_elem.get_attribute("href") or ""
                                 if href:
-                                    group_url = href.split("?")[0]
+                                    group_url = href
                                     if not group_url.startswith("http"):
                                         group_url = f"https://www.facebook.com{group_url}"
+                                    group_url = normalize_target_url(group_url)
                         except Exception:
                             pass
 
@@ -444,6 +475,7 @@ def search_and_join_groups(
                     try:
                         from repositories.group_repo import GroupRepository
                         GroupRepository().add_joined_group(record)
+                        joined_records.append(record)
                     except Exception as repo_err:
                         print(f"⚠️ Lỗi lưu nhóm vào DB: {repo_err}")
 
@@ -454,7 +486,7 @@ def search_and_join_groups(
                                 current_json = []
                     except Exception:
                         current_json = []
-                    if not any(j.get("url") == group_url and j.get("group_name") == group_name for j in current_json):
+                    if not any(normalize_target_url(j.get("url") or "") == normalize_target_url(group_url) and str(j.get("account_id") or "default") == str(account_id or "default") for j in current_json):
                         current_json.append(record)
                         try:
                             with open(JOINED_GROUPS_FILE, "w", encoding="utf-8") as f:
@@ -486,7 +518,7 @@ def search_and_join_groups(
     finally:
         close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
 
-    return joined_count
+    return joined_count + existing_count
 
 if __name__ == "__main__":
     import argparse

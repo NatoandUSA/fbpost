@@ -21,7 +21,7 @@ Công cụ tự động hóa Facebook với Dashboard Web, hỗ trợ đăng bà
 
 > Hướng dẫn vận hành đầy đủ, bao gồm Campaign, Queue, Content Hub, Page Scheduler và phương án Cloudflare: mở file [HUONG_DAN_SU_DUNG.html](HUONG_DAN_SU_DUNG.html).
 
-> **Yêu cầu duy nhất:** Máy cần cài sẵn **Python 3** (tải tại [python.org](https://www.python.org/downloads/))
+> **Windows Portable:** dùng runtime đi kèm trong bundle; không yêu cầu Python trong PATH khi runtime đã được đóng gói đầy đủ.
 
 ### 🍎 macOS
 1. `git clone https://github.com/NatoandUSA/fbpost.git`
@@ -32,7 +32,7 @@ Công cụ tự động hóa Facebook với Dashboard Web, hỗ trợ đăng bà
 ### 🪟 Windows
 1. `git clone https://github.com/NatoandUSA/fbpost.git`
 2. Mở thư mục `fbpost`
-3. **Double-click** vào file `start_portable.bat`
+3. **Double-click** vào file `RUN_FB_AUTOMATION.bat` (launcher chính). `start_portable.bat` chỉ là alias tương thích và gọi lại launcher này.
 
 ### 🐧 Linux
 ```bash
@@ -41,7 +41,7 @@ cd fbpost
 bash START_LINUX.sh
 ```
 
-> Script sẽ tự động tạo môi trường ảo, cài thư viện, cài Chromium và mở Dashboard tại **http://127.0.0.1:5000** 🎉
+> Trên Windows Portable, launcher ưu tiên runtime đi kèm và không cài lại dependencies/Chromium nếu chúng đã có. Dashboard sẽ được mở trên cổng khả dụng do launcher xác định.
 
 ### Cấu hình Content Hub AI (tùy chọn)
 
@@ -89,7 +89,8 @@ Nếu chưa cấu hình, bạn vẫn dùng được chế độ tạo nội dung
 ```
 fbpost/
 ├── START_MAC.command      # 1-click launcher cho macOS
-├── start_portable.bat     # 1-click launcher cho Windows
+├── RUN_FB_AUTOMATION.bat # launcher chính cho Windows Portable
+├── start_portable.bat     # alias tương thích -> RUN_FB_AUTOMATION.bat
 ├── START_LINUX.sh         # 1-click launcher cho Linux
 ├── server.py              # Flask backend API
 ├── main.py                # CLI entrypoint

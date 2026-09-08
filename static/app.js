@@ -228,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.4';
+            const verText = data.version ? `v${data.version}` : 'v6.0.6';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-07';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -393,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const queueStatus = {
                 approved: ['✅','Đã duyệt','#DCFCE7','#166534'], draft: ['📝','Nháp','#FEF3C7','#92400E'],
                 processing: ['⚙️','Đang đăng','#DBEAFE','#1D4ED8'], reconciling: ['🔎','Đang đối soát','#E0E7FF','#3730A3'],
-                pending: ['⏳','Chờ duyệt FB','#FEF3C7','#92400E'], unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'],
+                pending: ['⏳','Chờ duyệt FB','#FEF3C7','#92400E'],
                 unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#FEE2E2','#991B1B']
             };
             const qs = queueStatus[item.state] || ['•', item.state || 'Không rõ','#F1F5F9','#475569'];
@@ -4802,7 +4802,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.4';
+        let ver = 'v6.0.6';
         let build = '2026-09-07';
         try {
             const res = await fetch('/api/app-info');

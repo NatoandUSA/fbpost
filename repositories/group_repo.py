@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Any, Dict, List
 from repositories.base import BaseRepository
+from utils import normalize_target_url
 
 
 class GroupRepository(BaseRepository):
@@ -57,7 +58,9 @@ class GroupRepository(BaseRepository):
         with self.transaction() as conn:
             conn.execute("DELETE FROM joined_groups")
             for idx, g in enumerate(groups):
-                gid = str(g.get("id") or f"{g.get('account_id')}_{g.get('joined_at')}_{idx}")
+                canonical_url = normalize_target_url(g.get("url") or "")
+                account_id = str(g.get("account_id") or "default")
+                gid = (f"{account_id}|{canonical_url}" if canonical_url else str(g.get("id") or f"{account_id}_{g.get('joined_at')}_{idx}"))
                 gname = g.get("group_name") or g.get("name", "")
                 state = g.get("state", "joined")
                 conn.execute(
@@ -70,7 +73,7 @@ class GroupRepository(BaseRepository):
                         gid,
                         gname,
                         g.get("keyword", ""),
-                        g.get("url", ""),
+                        canonical_url or g.get("url", ""),
                         g.get("account_id", ""),
                         g.get("joined_at", ""),
                         state,
@@ -84,7 +87,9 @@ class GroupRepository(BaseRepository):
 
     def add_joined_group(self, g: Dict[str, Any]) -> bool:
         gname = g.get("group_name") or g.get("name", "")
-        gid = str(g.get("id") or g.get("url") or f"{g.get('account_id')}_{g.get('joined_at')}_{gname}")
+        account_id = str(g.get("account_id") or "default")
+        canonical_url = normalize_target_url(g.get("url") or "")
+        gid = (f"{account_id}|{canonical_url}" if canonical_url else str(g.get("id") or f"{account_id}|{g.get('joined_at')}|{gname}"))
         state = g.get("state", "joined")
         with self.transaction() as conn:
             conn.execute(
@@ -97,7 +102,7 @@ class GroupRepository(BaseRepository):
                     gid,
                     gname,
                     g.get("keyword", ""),
-                    g.get("url", ""),
+                    canonical_url or g.get("url", ""),
                     g.get("account_id", ""),
                     g.get("joined_at", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                     state,

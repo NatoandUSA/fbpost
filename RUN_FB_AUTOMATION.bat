@@ -3,6 +3,7 @@ setlocal EnableExtensions
 chcp 65001 >nul
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
+set "PYTHONUNBUFFERED=1"
 cd /d "%~dp0"
 
 set "PYTHON_EXE="
@@ -62,16 +63,35 @@ if not exist "%VENV_DIR%\Lib\site-packages\flask" (
 )
 
 :run
-start "" http://127.0.0.1:5000
+set "LAUNCH_MODE="
+set "APP_PORT="
+for /f "tokens=1,2" %%A in ('"%PYTHON_EXE%" launcher_preflight.py') do (
+    set "LAUNCH_MODE=%%A"
+    set "APP_PORT=%%B"
+)
+if not defined APP_PORT goto :port_error
+if /I "%LAUNCH_MODE%"=="REUSE" (
+    echo [OK] Dung server cung version/root dang chay tai port %APP_PORT%.
+    start "" http://127.0.0.1:%APP_PORT%
+    exit /b 0
+)
+set "FB_AUTOMATION_PORT=%APP_PORT%"
+for /f "usebackq delims=" %%V in ("VERSION") do set "APP_VERSION=%%V"
+start "" http://127.0.0.1:%APP_PORT%
 echo.
 echo =====================================================
-echo  FB Automation Panel v5.4.7 - Build 2026-09-03 - Dang chay
-echo  Mo trinh duyet: http://127.0.0.1:5000
+echo  FB Automation Panel v%APP_VERSION% - port %APP_PORT%
+echo  Runtime root: %CD%
 echo  Bam Ctrl+C de dung server
 echo =====================================================
 echo.
 "%PYTHON_EXE%" server.py
 exit /b %errorlevel%
+
+:port_error
+echo [LOI] Khong tim duoc port 5000-5010 de khoi dong.
+pause
+exit /b 1
 
 :error
 echo.

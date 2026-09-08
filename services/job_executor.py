@@ -49,6 +49,7 @@ def execute_automation_task(
 ) -> bool:
     """Execute an automation command and return True if successful, False otherwise."""
     cfg = load_config()
+    on_line(f"RUNTIME_IDENTITY:v{server.APP_VERSION}|root={BASE_DIR.resolve()}|main={(BASE_DIR / 'main.py').resolve()}\n")
     account_id = data.get("accountId")
     gpm_api = data.get("gpmApiUrl") or cfg.get("gpm_api_url", "http://127.0.0.1:19995")
 
@@ -76,7 +77,7 @@ def execute_automation_task(
     group_keywords = str(data.get("groupKeywords") or cfg.get("group_keywords", "Homestay Huế, Du lịch Huế")).strip()
 
     def build_cmd_for_account(acc_id):
-        cmd_list = [sys.executable, "main.py"]
+        cmd_list = [sys.executable, str((BASE_DIR / "main.py").resolve())]
         if acc_id and str(acc_id).strip() not in ("__rotate__", "None", ""):
             cmd_list.extend(["--account-id", str(acc_id)])
         if gpm_api:
@@ -90,7 +91,7 @@ def execute_automation_task(
         for sec in range(seconds, 0, -1):
             if check_cancel():
                 return False
-            if sec % 5 == 0 or sec <= 5:
+            if sec == seconds or sec % 15 == 0 or sec <= 5:
                 s_m = sec // 60
                 s_s = sec % 60
                 on_line(f"... còn {s_m}p {s_s}s ({sec}s)\n")
@@ -113,7 +114,7 @@ def execute_automation_task(
                 accounts_pool = [{"id": aid, "name": aid} for aid in data.get("accountIds")]
 
         if not accounts_pool:
-            on_line("⚠️ [Cảnh báo Anti-Spam] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n")
+            on_line("⚠️ [Cảnh báo vận hành] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n")
             on_line("💡 Vui lòng nhấn nút '📥 Nhập Nick FB từ GPM' để chọn lọc các nick Facebook mong muốn trước khi bật luân phiên.\n")
             on_line("RUN_RESULT:failed\n")
             return False
@@ -138,6 +139,8 @@ def execute_automation_task(
         target_accs = accounts_pool if (rotate_accounts and accounts_pool) else ([{"id": account_id}] if account_id else [{"id": None}])
         total_accs = len(target_accs)
         interact_failed = False
+        interact_success_count = 0
+        interact_fail_count = 0
 
         if job_repo:
             job_repo.update_job(job_id, progress_total=total_accs)
@@ -170,19 +173,26 @@ def execute_automation_task(
             outcome = "finished" if ret == 0 else "failed"
             if ret != 0:
                 interact_failed = True
+                interact_fail_count += 1
+            else:
+                interact_success_count += 1
             record_profile_activity(cur_id, "interact", target="newsfeed", content=cur_comments, outcome=outcome)
 
             if job_repo:
                 job_repo.update_job(job_id, progress_current=acc_idx + 1)
 
             if acc_idx < total_accs - 1:
-                delay = random.randint(delay_min, delay_max)
+                delay = 5 if ret != 0 else random.randint(delay_min, delay_max)
                 mins = delay // 60
                 secs = delay % 60
-                on_line(f"\n⏳ [Anti-Spam] Nghỉ {delay}s ({mins}p {secs}s) trước khi đổi sang Profile tiếp theo...\n")
+                if ret != 0:
+                    on_line(f"\n⚠️ Profile {acc_name} lỗi hạ tầng/thực thi. Nghỉ nhanh {delay}s trước profile tiếp theo...\n")
+                else:
+                    on_line(f"\n⏳ [Giãn cách] Nghỉ {delay}s ({mins}p {secs}s) trước khi đổi sang Profile tiếp theo...\n")
                 if not sleep_with_cancel(delay):
                     return False
 
+        on_line(f"📊 [Interact Summary] Thành công: {interact_success_count}/{total_accs} profile · Lỗi: {interact_fail_count}/{total_accs} profile.\n")
         on_line(f"RUN_RESULT:{'failed' if interact_failed else 'finished'}\n")
         return not interact_failed
 
@@ -216,18 +226,14 @@ def execute_automation_task(
         if gemini_api_key:
             delay_args.extend(["--gemini-key", str(gemini_api_key)])
 
-        # URL Mode: chia thành các đợt tối đa 2 URLs / profile và xoay vòng profile
+        # URL Mode: mỗi profile nhận toàn bộ danh sách và dừng sau tối đa limit nhóm mới.
         if mode == "urls" and urls:
             urls_list = [u.strip() for u in re.split(r"[\r\n,;]+", urls) if u.strip()]
-            on_line(f"🔗 Bắt đầu kiểm tra & tự động xin gia nhập danh sách {len(urls_list)} link nhóm Facebook...\n")
-            on_line("🛡️ [Quy chuẩn An toàn] Mỗi profile chỉ vào tối đa 2 nhóm/phiên mở trình duyệt & nghỉ ngẫu nhiên 1 - 3 phút.\n")
-
-            # Chia chunks tối đa 2 URLs mỗi đợt
-            chunk_size = 2
-            url_chunks = [urls_list[i:i + chunk_size] for i in range(0, len(urls_list), chunk_size)]
-            total_chunks = len(url_chunks)
-
-            # Xác định danh sách tài khoản thực hiện xoay tua
+            if not urls_list:
+                on_line("Error: Danh sách URL nhóm đang trống.\n")
+                on_line("RUN_RESULT:failed\n")
+                return False
+            on_line(f"🔗 Bắt đầu xử lý {len(urls_list)} link nhóm cho từng profile; tối đa {limit} nhóm mới/profile.\n")
             active_pool = accounts_pool if (rotate_accounts and accounts_pool) else []
             if not active_pool:
                 target_id = account_id
@@ -235,47 +241,42 @@ def execute_automation_task(
                     all_accs = load_accounts()
                     target_id = all_accs[0].get("id") if all_accs else None
                 active_pool = [{"id": target_id, "name": target_id or "default"}]
-
-            pool_len = len(active_pool)
+            total_profiles = len(active_pool)
             join_failed = False
+            join_success = 0
             if job_repo:
-                job_repo.update_job(job_id, progress_total=total_chunks)
-
-            for chunk_idx, chunk in enumerate(url_chunks):
+                job_repo.update_job(job_id, progress_total=total_profiles)
+            shared_targets = ",".join(urls_list)
+            for idx, acc in enumerate(active_pool):
                 if check_cancel():
                     return False
-                acc = active_pool[chunk_idx % pool_len]
                 acc_id = acc.get("id")
                 acc_name = acc.get("name", acc_id)
-                chunk_targets = ",".join(chunk)
-
-                on_line(f"\n========== [Đợt {chunk_idx + 1}/{total_chunks} | Profile: {acc_name} (Xử lý {len(chunk)} nhóm)] ==========\n")
+                on_line(f"\n========== [Profile {idx + 1}/{total_profiles}: {acc_name} | tối đa {limit}/{len(urls_list)} nhóm] ==========\n")
                 full_cmd = (
                     build_cmd_for_account(acc_id)
-                    + ["join-group", "--keywords", chunk_targets, "--limit", str(len(chunk))]
-                    + feed_flag
-                    + rules_flag
-                    + delay_args
+                    + ["join-group", "--keywords", shared_targets, "--limit", str(limit)]
+                    + feed_flag + rules_flag + delay_args
                 )
                 ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
                 outcome = "finished" if ret == 0 else "failed"
-                if ret != 0:
+                if ret == 0:
+                    join_success += 1
+                else:
                     join_failed = True
-                record_profile_activity(acc_id, "join-group", target=chunk_targets[:100], outcome=outcome)
+                record_profile_activity(acc_id, "join-group", target=shared_targets[:100], outcome=outcome)
                 if job_repo:
-                    job_repo.update_job(job_id, progress_current=chunk_idx + 1)
-
-                if chunk_idx < total_chunks - 1:
-                    next_acc = active_pool[(chunk_idx + 1) % pool_len].get("name", "profile tiếp theo")
+                    job_repo.update_job(job_id, progress_current=idx + 1)
+                if idx < total_profiles - 1:
+                    next_name = active_pool[idx + 1].get("name", "profile tiếp theo")
+                    rot_delay = 5 if ret != 0 else random.randint(60, 180)
                     if ret != 0:
-                        rot_delay = 5
-                        on_line(f"\n⚠️ Đợt chạy của {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
+                        on_line(f"\n⚠️ Profile {acc_name} chưa xác nhận được nhóm mới. Nghỉ {rot_delay}s trước {next_name}.\n")
                     else:
-                        rot_delay = random.randint(60, 180)
-                        on_line(f"\n⏳ [Anti-Spam] Đã hoàn thành đợt của {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
+                        on_line(f"\n⏳ [Giãn cách] Hoàn tất {acc_name}. Nghỉ {rot_delay}s trước {next_name}.\n")
                     if not sleep_with_cancel(rot_delay):
                         return False
-
+            on_line(f"📊 [Join Summary] Profiles hoàn tất: {join_success}/{total_profiles} · Có lỗi: {total_profiles - join_success}/{total_profiles}.\n")
             on_line(f"RUN_RESULT:{'failed' if join_failed else 'finished'}\n")
             return not join_failed
 
@@ -284,7 +285,7 @@ def execute_automation_task(
             kw_list = [k.strip() for k in re.split(r"[\r\n,;]+", str(raw_keywords)) if k.strip() and k.strip() != "None"]
             input_targets = ", ".join(kw_list) if kw_list else "Homestay Huế, Du lịch Huế"
             on_line(f"🔍 Bắt đầu tìm kiếm & tự động xin gia nhập nhóm Facebook theo từ khóa: '{input_targets}'...\n")
-            on_line("🛡️ [Quy chuẩn An toàn] Mỗi profile chỉ vào tối đa 2 nhóm/phiên mở trình duyệt & nghỉ ngẫu nhiên 1 - 3 phút.\n")
+            on_line("🛡️ [Giới hạn vận hành] Mỗi profile chỉ vào tối đa 2 nhóm/phiên mở trình duyệt & nghỉ ngẫu nhiên 1 - 3 phút.\n")
 
             if rotate_accounts and accounts_pool:
                 total_acc = len(accounts_pool)
@@ -318,7 +319,7 @@ def execute_automation_task(
                             on_line(f"\n⚠️ Profile {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
                         else:
                             rot_delay = random.randint(60, 180)
-                            on_line(f"\n⏳ [Anti-Spam] Đã hoàn tất profile {acc_name}. Nghỉ an toàn {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
+                            on_line(f"\n⏳ [Giãn cách] Đã hoàn tất profile {acc_name}. Nghỉ {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
                         if not sleep_with_cancel(rot_delay):
                             return False
                 on_line(f"RUN_RESULT:{'failed' if join_failed else 'finished'}\n")
@@ -441,10 +442,10 @@ def execute_automation_task(
                 delay = random.randint(delay_min, delay_max)
                 mins = delay // 60
                 secs = delay % 60
-                on_line(f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n")
+                on_line(f"\n⏳ [Giãn cách] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n")
                 if auto_join_groups and group_keywords:
                     on_line(f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n")
-                    on_line("⏳ [GPM Cooldown] Nghỉ an toàn 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
+                    on_line("⏳ [GPM Cooldown] Nghỉ 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
                     if not sleep_with_cancel(7):
                         return False
                     if check_cancel():
@@ -453,7 +454,7 @@ def execute_automation_task(
                     process_runner.run_command_sync(jg_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
                     if not sleep_with_cancel(5):
                         return False
-                    on_line("⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n")
+                    on_line("⏳ Tiếp tục đếm ngược thời gian nghỉ...\n")
                 if not sleep_with_cancel(delay):
                     return False
 
@@ -519,7 +520,7 @@ def execute_automation_task(
             is_dup, hours_ago, posted_at = is_recently_posted(target, hours=24.0)
             if is_dup:
                 on_line(f"\n========== [Mục tiêu {i+1}/{total}] ==========\n")
-                on_line(f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm/Trang {target} đã được đăng lúc {posted_at} ({hours_ago}h trước). Tự động bỏ qua để bảo vệ tài khoản.\n")
+                on_line(f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm/Trang {target} đã được đăng lúc {posted_at} ({hours_ago}h trước). Tự động bỏ qua để tránh gửi trùng.\n")
                 continue
 
         task_content = content
@@ -644,10 +645,10 @@ def execute_automation_task(
             if ret != 0:
                 on_line(f"\n⚠️ Target {i+1} lỗi trước khi hoàn tất. Nghỉ nhanh {delay}s trước target tiếp theo.\n")
             else:
-                on_line(f"\n⏳ [Anti-Spam An Toàn] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
+                on_line(f"\n⏳ [Giãn cách] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
             if auto_join_groups and group_keywords:
                 on_line(f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n")
-                on_line("⏳ [GPM Cooldown] Nghỉ an toàn 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
+                on_line("⏳ [GPM Cooldown] Nghỉ 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
                 if not sleep_with_cancel(7):
                     return False
                 if check_cancel():
@@ -656,7 +657,7 @@ def execute_automation_task(
                 process_runner.run_command_sync(jg_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
                 if not sleep_with_cancel(5):
                     return False
-                on_line("⏳ Tiếp tục đếm ngược thời gian nghỉ an toàn...\n")
+                on_line("⏳ Tiếp tục đếm ngược thời gian nghỉ...\n")
             if not sleep_with_cancel(delay):
                 return False
 

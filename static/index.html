@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Workspace v6.0.4 [Build: 2026-09-07]</title>
-    <link rel="stylesheet" href="styles.css?v=6.0.4">
+    <title>FB Automation Workspace v6.0.6 [Build: 2026-09-07]</title>
+    <link rel="stylesheet" href="styles.css?v=6.0.6">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.0.4</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.0.6</span>
                     </div>
                     <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-07</span>
                 </div>
@@ -100,7 +100,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="build-info" id="build-info">UI v6.0.4 · Build 2026-09-07</div>
+                <div class="build-info" id="build-info">UI v6.0.6 · Build 2026-09-07</div>
             </div>
         </aside>
 
@@ -116,7 +116,7 @@
                 <div class="header-right">
                     <div id="header-build-badge" style="display:flex; align-items:center; gap:8px; background:#EFF6FF; border:1px solid #BFDBFE; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; color:#1E40AF; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                         <span style="display:inline-block; width:8px; height:8px; background:#10B981; border-radius:50%; box-shadow:0 0 6px #10B981;"></span>
-                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.0.4</span>
+                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.0.6</span>
                         <span style="color:#93C5FD;">|</span>
                         <span id="header-build-time-text" style="color:#3B82F6; font-weight:600;">Build: 2026-09-07</span>
                     </div>
@@ -275,7 +275,7 @@
                             </div>
                             <select id="account-selector" class="field-input">
                                 <option value="">-- Mặc định (Sử dụng state.json toàn cục) --</option>
-                                <option value="__rotate__">🔄 Luân phiên tất cả Profile GPM (Xoay vòng chống spam)</option>
+                                <option value="__rotate__">🔄 Luân phiên tất cả Profile GPM (Xoay vòng profile)</option>
                             </select>
                             <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
                                 <button id="open-selected-profile-btn" class="btn btn-secondary btn-xs" type="button" title="Mở trình duyệt cho Profile đang được chọn">🚀 Mở nhanh trình duyệt Profile này</button>
@@ -347,12 +347,12 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <!-- Anti-Spam Safe Delay Bar & Auto Join Group Option (Hiển thị trực diện ngay trên nút Đăng) -->
                         <div class="field-group" id="delay-settings-bar" style="margin-top: 12px; margin-bottom: 12px; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #1E293B;">⏱️ Giãn cách an toàn giữa các bài (Chống spam Facebook)</label>
+                                <label class="field-label" style="margin-bottom: 0; font-weight: 700; color: #1E293B;">⏱️ Giãn cách an toàn giữa các bài (Giãn cách tác vụ)</label>
                                 <span id="delay-preview-badge" style="font-size: 11px; background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 2px 8px; border-radius: 10px;">5 - 10 phút (Khuyến nghị)</span>
                             </div>
                             <select id="delay-preset-select" class="field-input" style="padding: 7px 10px; font-size: 13px; font-weight: 600;">
                                 <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
-                                <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
+                                <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Tương tác định kỳ)</option>
                                 <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chạy nhanh)</option>
                                 <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test nhanh giữa các bài)</option>
                                 <option value="custom">⚙️ Tùy chỉnh số phút theo ý muốn...</option>
@@ -375,7 +375,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     <label class="field-label" style="font-size: 12px; font-weight: 700; color: #1E40AF; margin-bottom: 4px;">Từ khóa tìm kiếm nhóm Facebook (cách nhau bằng dấu phẩy):</label>
                                     <input type="text" id="auto-join-keywords" class="field-input" value="Homestay Huế, Du lịch Huế, Thuê phòng Huế" placeholder="Từ khóa tìm nhóm (cách nhau bởi dấu phẩy)" style="font-size: 12px; padding: 7px 10px; background: #ffffff;">
                                     <p class="field-hint" style="font-size: 11px; margin-top: 4px; color: #2563EB; line-height: 1.4;">
-                                        💡 <strong>Cơ chế tự động:</strong> Trong khoảng thời gian nghỉ 5 - 10 phút giữa bài 1 và bài 2, nick Facebook sẽ tự động tìm kiếm group theo các từ khóa trên và gửi yêu cầu tham gia 1 nhóm để tăng tệp group mà không bị Facebook quét checkpoint!
+                                        💡 <strong>Cơ chế tự động:</strong> Trong khoảng thời gian nghỉ 5 - 10 phút giữa bài 1 và bài 2, nick Facebook sẽ tự động tìm kiếm group theo các từ khóa trên và gửi yêu cầu tham gia 1 nhóm để mở rộng danh sách nhóm theo cấu hình đã chọn.
                                     </p>
                                 </div>
                             </div>
@@ -401,7 +401,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <textarea id="interact-comments" class="field-textarea" rows="4" placeholder="Tuyệt vời quá!;Bài viết hay quá!;Like mạnh!">{Tuyệt vời quá|Bài viết rất hay|Quá đỉnh ạ};{Cảm ơn bạn đã chia sẻ|Thông tin rất hữu ích|Like mạnh nha};{Chúc bạn ngày mới vui vẻ|Chúc một ngày tốt lành|Tuyệt vời luôn bạn ơi}</textarea>
                                 <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
                                     <label class="checkbox-label" style="font-weight:600; color:#2563EB; font-size:12px; margin-bottom:0;">
-                                        <input type="checkbox" id="interact-rotate-opt"> 🔄 Luân phiên tất cả Profile GPM khi nuôi nick (Xoay tua chống spam)
+                                        <input type="checkbox" id="interact-rotate-opt"> 🔄 Luân phiên tất cả Profile GPM khi nuôi nick (Xoay tua profile)
                                     </label>
                                     <label class="checkbox-label" style="font-weight:600; color:#7C3AED; font-size:12px; margin-bottom:0;">
                                         <input type="checkbox" id="interact-auto-spin-opt"> 🤖 Tự động xào bình luận mới trước mỗi Profile
@@ -699,8 +699,8 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <div class="card-title-group">
                                     <span style="font-size: 20px;">🚩</span>
                                     <div>
-                                        <h3 style="color: white; margin: 0; font-size: 16px;">Tự động tạo Fanpage cá nhân chuẩn như người thật</h3>
-                                        <p style="color: #DBEAFE; margin: 2px 0 0 0; font-size: 12px;">Hệ thống tự động điền Tên, Hạng mục, Tiểu sử, và upload Avatar & Cover để Fanpage có độ trust cao, chống checkpoint.</p>
+                                        <h3 style="color: white; margin: 0; font-size: 16px;">Tạo Fanpage cá nhân theo cấu hình</h3>
+                                        <p style="color: #DBEAFE; margin: 2px 0 0 0; font-size: 12px;">Hệ thống tự động điền Tên, Hạng mục, Tiểu sử, và upload Avatar & Cover để Fanpage có độ trust cao, giảm thao tác dồn dập.</p>
                                     </div>
                                 </div>
                                 <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px; padding: 4px 10px; border-radius: 12px;">Tối đa 02 Page / 24h</span>
@@ -762,7 +762,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                         <p style="color: #DBEAFE; margin: 2px 0 0 0; font-size: 12px;">Hỗ trợ tìm theo từ khóa hoặc dán danh sách link Nhóm trực tiếp. Tự động trả lời câu hỏi và đồng ý quy tắc nhóm.</p>
                                     </div>
                                 </div>
-                                <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px; padding: 4px 10px; border-radius: 12px;">Chống Checkpoint</span>
+                                <span class="badge" style="background:#DCFCE7; color:#15803D; font-weight:700; font-size:12px; padding: 4px 10px; border-radius: 12px;">Giới hạn thao tác</span>
                             </div>
                             <div style="padding: 16px;">
                                 <!-- Chọn Profile thực hiện -->
@@ -805,10 +805,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
 
                                 <!-- Cấu hình số lượng, chống spam & tự động tương tác -->
                                 <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1E40AF; line-height: 1.5;">
-                                    🛡️ <b>Cơ chế An toàn & Nuôi Nick Chống Checkpoint:</b><br>
+                                    🛡️ <b>Giới hạn vận hành & tương tác tùy chọn:</b><br>
                                     • Giãn cách an toàn ngẫu nhiên <b>1 - 3 phút</b> (60 - 180s) giữa các nhóm và giữa các lượt đổi profile.<br>
                                     • Mỗi profile chỉ vào <b>tối đa 2 nhóm</b> mỗi lần mở trình duyệt rồi tự động xoay sang profile tiếp theo.<br>
-                                    • Trong khi mở nhóm, tự động lướt và <b>Like / Bình luận AI</b> vào bài viết để mô phỏng người dùng thật.
+                                    • Trong khi mở nhóm, tự động lướt và <b>Like / Bình luận AI</b> vào bài viết để thực hiện tương tác tùy chọn.
                                 </div>
 
                                 <div class="grid2" style="margin-bottom: 12px;">
@@ -855,7 +855,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     <span id="settings-gpm-status-badge" class="badge" style="background:#F1F5F9; color:#475569; font-weight:700; font-size:11px; padding:3px 8px; border-radius:12px;">Chưa kiểm tra</span>
                                 </div>
                                 <div style="padding: 16px;">
-                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Hệ thống kết nối trực tiếp qua cổng API cục bộ của GPMLogin để lấy Profile và mở trình duyệt an toàn không bị Meta phát hiện bot.</p>
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Hệ thống kết nối trực tiếp qua cổng API cục bộ của GPMLogin để lấy Profile và mở trình duyệt an toàn theo đúng profile đã chọn.</p>
                                     <div class="field-group">
                                         <label class="field-label">GPM API URL</label>
                                         <div style="display:flex; gap:8px;">
@@ -874,7 +874,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                     <span id="settings-gemini-status-badge" class="badge" style="background:#F3E8FF; color:#7E22CE; font-weight:700; font-size:11px; padding:3px 8px; border-radius:12px;">Đang kiểm tra...</span>
                                 </div>
                                 <div style="padding: 16px;">
-                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Dùng để tự động xào bài (AI Spin) độc nhất và tạo bình luận nuôi nick tự nhiên, chống Meta quét trùng lặp nội dung. Nếu để trống, hệ thống dùng thuật toán Local Smart Spinner thông minh hoàn toàn miễn phí.</p>
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Dùng để tự động xào bài (AI Spin) độc nhất và tạo bình luận nuôi nick tự nhiên, tạo biến thể nội dung. Nếu để trống, hệ thống dùng thuật toán Local Smart Spinner thông minh hoàn toàn miễn phí.</p>
                                     <div class="field-group">
                                         <label class="field-label">Gemini API Key</label>
                                         <div style="display:flex; gap:8px;">
@@ -892,15 +892,15 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <!-- Thẻ 3: Cấu hình Giãn cách an toàn mặc định -->
                             <div class="card" style="margin-bottom: 14px;">
                                 <div class="card-header">
-                                    <div class="card-title-group"><span>⏱️</span><h3>3. Giãn cách an toàn mặc định (Anti-Spam Delay)</h3></div>
+                                    <div class="card-title-group"><span>⏱️</span><h3>3. Giãn cách an toàn mặc định (Giãn cách tác vụ)</h3></div>
                                 </div>
                                 <div style="padding: 16px;">
-                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Thiết lập khoảng thời gian nghỉ an toàn giữa hai bài đăng liên tiếp để tài khoản không bị Facebook checkpoint.</p>
+                                    <p class="field-hint" style="margin-bottom: 10px; color:#475569;">Thiết lập khoảng thời gian nghỉ an toàn giữa hai bài đăng liên tiếp để tránh dồn nhiều thao tác liên tiếp.</p>
                                     <div class="field-group">
                                         <label class="field-label">Mức giãn cách mặc định</label>
                                         <select id="settings-delay-preset" class="field-input">
                                             <option value="safe" selected>🛡️ Giãn cách an toàn: 5 - 10 phút (Khuyến nghị tài khoản bền vững)</option>
-                                            <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Nuôi nick thường xuyên)</option>
+                                            <option value="moderate">⏱️ Giãn cách vừa phải: 2 - 5 phút (Tương tác định kỳ)</option>
                                             <option value="fast">⚡ Giãn cách nhanh: 30 - 60 giây (Chỉ dùng khi cần gấp)</option>
                                             <option value="test">🧪 Kiểm tra thử nghiệm: 10 - 20 giây (Test tính năng)</option>
                                         </select>
@@ -1138,7 +1138,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                             <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <div style="font-weight: 700; color: #166534; font-size: 13px;">🛡️ Hạn mức an toàn 24h</div>
-                                    <div style="font-size: 11px; color: #15803D; margin-top: 2px;">Tối đa 2 Fanpage / 24h / nick để bảo vệ Profile Facebook chống checkpoint.</div>
+                                    <div style="font-size: 11px; color: #15803D; margin-top: 2px;">Tối đa 2 Fanpage / 24h / nick để bảo vệ Profile Facebook giảm thao tác dồn dập.</div>
                                 </div>
                                 <div style="text-align: right;">
                                     <span id="created-pages-quota-badge" style="background: #16A34A; color: white; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 13px; display: inline-block;">0 / 2 Page</span>
@@ -1274,7 +1274,7 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <!-- 5 Golden Rules Card -->
                         <div class="card" style="background:#F8FAFC; border:1px solid #CBD5E1;">
                             <div class="card-header" style="background:#F1F5F9;">
-                                <div class="card-title-group"><span>📜</span><h3>5 Nguyên tắc vàng bảo vệ nick chống checkpoint</h3></div>
+                                <div class="card-title-group"><span>📜</span><h3>5 Nguyên tắc vàng bảo vệ nick giảm thao tác dồn dập</h3></div>
                             </div>
                             <div style="padding: 14px; font-size: 13px; color: #334155; line-height: 1.6;">
                                 <ul style="padding-left: 18px; display:flex; flex-direction:column; gap:6px;">

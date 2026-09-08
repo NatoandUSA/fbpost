@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-07 v6.0.4"
+BUILD_TIME = "2026-09-07 v6.0.6"
 
 
 def app_build_info():
@@ -95,7 +95,11 @@ def app_build_info():
         "version": APP_VERSION,
         "built_at": BUILD_TIME,
         "source_updated_at": source_mtime.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        "runtime_root": str(BASE_DIR.resolve()),
+        "main_path": str((BASE_DIR / "main.py").resolve()),
+        "process_id": os.getpid(),
         "group_manager_available": True,
+        "entrypoint": str(Path(__file__).resolve()),
     }
 
 def load_config():
@@ -1212,41 +1216,34 @@ JOINED_GROUPS_FILE = str(DATA_DIR / "joined_groups.json")
 
 @app.route('/api/joined-groups', methods=['GET', 'DELETE'])
 def api_joined_groups():
+    canonical_file = str(DATA_DIR / "joined_groups.json")
     if request.method == 'DELETE':
         try:
-            try:
-                from repositories.group_repo import GroupRepository
+            if os.path.abspath(JOINED_GROUPS_FILE) == os.path.abspath(canonical_file):
                 GroupRepository().clear_joined_groups()
-            except Exception:
-                pass
             with open(JOINED_GROUPS_FILE, "w", encoding="utf-8") as f:
                 json.dump([], f)
             return jsonify({"status": "cleared", "count": 0})
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    if os.path.exists(JOINED_GROUPS_FILE):
+    if os.path.abspath(JOINED_GROUPS_FILE) != os.path.abspath(canonical_file):
         try:
             with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return jsonify(data if isinstance(data, list) else [])
+            return jsonify(data if isinstance(data, list) else [])
         except Exception:
             return jsonify([])
-
-    default_file = str(BASE_DIR / "joined_groups.json")
-    if os.path.abspath(JOINED_GROUPS_FILE) != os.path.abspath(default_file):
-        return jsonify([])
-
-    # Ưu tiên 1: Đọc từ SQLite GroupRepository
     try:
-        from repositories.group_repo import GroupRepository
-        db_groups = GroupRepository().list_joined_groups()
-        if db_groups:
-            return jsonify(db_groups)
+        return jsonify(GroupRepository().list_joined_groups())
     except Exception as ge:
-        print(f"⚠️ Không thể đọc joined_groups từ DB: {ge}")
-
-    return jsonify([])
+        print(f"⚠️ Không thể đọc joined_groups từ SQLite: {ge}")
+        try:
+            with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return jsonify(data if isinstance(data, list) else [])
+        except Exception:
+            return jsonify([])
 
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
@@ -1484,6 +1481,7 @@ if __name__ == '__main__':
         from scheduler import start_scheduler
         start_scheduler(config.get("scheduler_interval_minutes", 5))
 
-    print("Starting Facebook Automation Dashboard...")
-    print("Access the dashboard at: http://127.0.0.1:5000")
-    app.run(host='127.0.0.1', port=5000)
+    port = int(os.getenv("FB_AUTOMATION_PORT", "5000"))
+    print(f"Starting Facebook Automation Dashboard v{APP_VERSION} from {BASE_DIR.resolve()}...")
+    print(f"Access the dashboard at: http://127.0.0.1:{port}")
+    app.run(host='127.0.0.1', port=port)

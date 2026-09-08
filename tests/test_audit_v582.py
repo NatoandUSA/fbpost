@@ -221,16 +221,20 @@ class AuditV582RegressionTests(unittest.TestCase):
 
     # 11. test_join_repo_does_not_replace_all_records
     def test_join_repo_does_not_replace_all_records(self):
-        repo = GroupRepository()
-        t = int(time.time()*1000)
-        g1 = {"id": f"g1_{t}", "group_name": "Group 1", "keyword": "k1", "url": f"https://fb.com/g/1_{t}", "state": "joined"}
-        g2 = {"id": f"g2_{t}", "group_name": "Group 2", "keyword": "k2", "url": f"https://fb.com/g/2_{t}", "state": "joined"}
-        repo.add_joined_group(g1)
-        repo.add_joined_group(g2)
+        from db import init_db
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "app.db"
+            init_db(db_file)
+            repo = GroupRepository(db_file)
+            t = int(time.time()*1000)
+            g1 = {"id": f"g1_{t}", "group_name": "Group 1", "keyword": "k1", "url": f"https://fb.com/g/1_{t}", "state": "joined"}
+            g2 = {"id": f"g2_{t}", "group_name": "Group 2", "keyword": "k2", "url": f"https://fb.com/g/2_{t}", "state": "joined"}
+            repo.add_joined_group(g1)
+            repo.add_joined_group(g2)
 
-        groups = [g["url"] for g in repo.list_joined_groups()]
-        self.assertIn(g1["url"], groups)
-        self.assertIn(g2["url"], groups)
+            groups = [g["url"] for g in repo.list_joined_groups()]
+            self.assertIn(g1["url"], groups)
+            self.assertIn(g2["url"], groups)
 
     # 12. test_create_page_home_redirect_is_not_success
     def test_create_page_home_redirect_is_not_success(self):

@@ -841,7 +841,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.4")
+        self.assertEqual(get_version(), "6.0.6")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1693,3 +1693,127 @@ class V604FinalProductionInvariantTests(unittest.TestCase):
         self.assertNotIn('proxy', profile)
         self.assertEqual(profile['proxy_hint'], '1.2.3.4:5555')
         self.assertNotIn('pass', str(data))
+    def test_runtime_identity_uses_absolute_main_path(self):
+        src = Path('services/job_executor.py').read_text(encoding='utf-8')
+        self.assertIn('RUNTIME_IDENTITY:', src)
+        self.assertIn('str((BASE_DIR / "main.py").resolve())', src)
+
+    def test_interact_failure_uses_fast_recovery_and_summary(self):
+        src = Path('services/job_executor.py').read_text(encoding='utf-8')
+        self.assertIn('delay = 5 if ret != 0 else random.randint(delay_min, delay_max)', src)
+        self.assertIn('[Interact Summary]', src)
+
+    def test_launcher_preflight_requires_runtime_root(self):
+        src = Path('launcher_preflight.py').read_text(encoding='utf-8')
+        self.assertIn("runtime_root = str(info.get('runtime_root') or '').strip()", src)
+        self.assertIn('same_root = bool(runtime_root)', src)
+        build = Path('BUILD_PORTABLE.ps1').read_text(encoding='utf-8')
+        self.assertIn('launcher_preflight.py', build)
+
+
+class V606JoinRotationTests(unittest.TestCase):
+    def test_url_mode_runs_every_selected_profile(self):
+        import services.job_executor as executor
+        accounts = [{"id": f"acc-{i}", "name": f"M{i}"} for i in range(1, 9)]
+        urls = [f"https://facebook.com/groups/{i}" for i in range(1, 6)]
+
+        class Runner:
+            def __init__(self): self.calls = []
+            def is_cancelled(self, _job_id): return False
+            def run_command_sync(self, cmd, **kwargs):
+                self.calls.append(cmd)
+                return 0
+
+        runner = Runner()
+        logs = []
+        with patch.object(executor, "load_accounts", return_value=accounts), \
+             patch.object(executor, "load_config", return_value={}), \
+             patch.object(executor, "record_profile_activity"), \
+             patch.object(executor.time, "sleep", return_value=None), \
+             patch.object(executor.random, "randint", return_value=5):
+            ok = executor.execute_automation_task(
+                "job-v606", "join-group",
+                {"rotateAccounts": True, "mode": "urls", "urls": "\n".join(urls), "limit": 2},
+                logs.append, runner,
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(len(runner.calls), 8)
+        for call in runner.calls:
+            joined = " ".join(call)
+            for url in urls:
+                self.assertIn(url, joined)
+            self.assertIn("--limit 2", joined)
+        self.assertTrue(any("Profiles hoàn tất: 8/8" in line for line in logs))
+
+    def test_joined_group_identity_is_profile_plus_url(self):
+        from db import init_db
+        from repositories.group_repo import GroupRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "app.db"
+            init_db(db_file)
+            repo = GroupRepository(db_file)
+            base = {"group_name": "Hue Group", "url": "https://facebook.com/groups/123/", "state": "pending"}
+            repo.add_joined_group({**base, "account_id": "M4", "joined_at": "2026-09-07 16:00:00"})
+            repo.add_joined_group({**base, "account_id": "M14", "joined_at": "2026-09-07 16:01:00"})
+            rows = repo.list_joined_groups()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({r["account_id"] for r in rows}, {"M4", "M14"})
+
+    def test_joined_groups_api_prefers_sqlite_authority(self):
+        client = server.app.test_client()
+        with patch.object(server, "GroupRepository") as repo_cls:
+            repo_cls.return_value.list_joined_groups.return_value = [
+                {"group_name": "DB Group", "url": "https://facebook.com/groups/db", "account_id": "M4", "state": "joined"}
+            ]
+            res = client.get("/api/joined-groups")
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.get_json()[0]["group_name"], "DB Group")
+
+
+class V606ReviewP1RegressionTests(unittest.TestCase):
+    def test_joined_group_url_variants_collapse_per_profile(self):
+        from db import init_db
+        from repositories.group_repo import GroupRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "app.db"
+            init_db(db_file)
+            repo = GroupRepository(db_file)
+            variants = [
+                "https://www.facebook.com/groups/123/",
+                "https://facebook.com/groups/123?ref=share",
+                "https://m.facebook.com/groups/123/#top",
+            ]
+            for idx, url in enumerate(variants):
+                repo.add_joined_group({
+                    "account_id": "M4", "url": url, "group_name": "Group 123",
+                    "state": "joined" if idx == 0 else "pending",
+                })
+            rows = repo.list_joined_groups()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["account_id"], "M4")
+            self.assertEqual(rows[0]["url"], "https://facebook.com/groups/123")
+            repo.add_joined_group({
+                "account_id": "M14", "url": variants[1], "group_name": "Group 123",
+                "state": "joined",
+            })
+            rows = repo.list_joined_groups()
+            self.assertEqual(len(rows), 2)
+            self.assertEqual({r["account_id"] for r in rows}, {"M4", "M14"})
+
+    def test_windows_portable_launcher_uses_bundled_runtime_fast_path(self):
+        root = Path(__file__).resolve().parents[1]
+        wrapper = (root / "start_portable.bat").read_text(encoding="utf-8").lower()
+        canonical = (root / "RUN_FB_AUTOMATION.bat").read_text(encoding="utf-8").lower()
+        self.assertIn("call run_fb_automation.bat", wrapper)
+        self.assertNotIn("python --version", wrapper)
+        self.assertNotIn("pip", wrapper)
+        self.assertNotIn("playwright", wrapper)
+        runtime_check = 'if exist "%venv_dir%\\scripts\\python.exe"'
+        path_fallback = "where py"
+        self.assertIn(runtime_check, canonical)
+        self.assertIn(path_fallback, canonical)
+        self.assertLess(canonical.index(runtime_check), canonical.index(path_fallback))
+        check_libs = canonical.split("\n:check_libs\n", 1)[1].split("\n:run\n", 1)[0]
+        self.assertIn('if not exist "%venv_dir%\\lib\\site-packages\\flask"', check_libs)
+        self.assertNotIn("playwright.exe install chromium", check_libs)

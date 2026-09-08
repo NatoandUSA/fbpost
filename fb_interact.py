@@ -48,6 +48,8 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
             time.sleep(random.uniform(3.0, 5.0))
             
             interacted_count = 0
+            articles_seen = 0
+            like_candidates_seen = 0
             
             for scroll_step in range(limit * 3):
                 if interacted_count >= limit:
@@ -55,12 +57,14 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     
                 scroll_y = random.randint(300, 700)
                 safe_mouse_wheel(page, 0, scroll_y)
-                print(f"Đang lướt Newsfeed... (Cuộn xuống {scroll_y}px)")
+                if scroll_step == 0 or (scroll_step + 1) % 3 == 0:
+                    print(f"Đang quét Newsfeed... bước {scroll_step + 1}/{limit * 3}")
                 time.sleep(random.uniform(2.5, 4.5))
                 
                 articles = page.locator("div[role='article']").all()
                 if not articles:
                     continue
+                articles_seen = max(articles_seen, len(articles))
                     
                 article = random.choice(articles)
                 
@@ -69,9 +73,14 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     time.sleep(random.uniform(1.0, 2.0))
                     
                     if random.random() < 0.6:
-                        like_btn = article.locator("div[role='button']").filter(
+                        like_btn = article.locator("div[role='button'], button").filter(
                             has_text=re.compile("^(Thích|Like)$", re.IGNORECASE)
-                        ).first
+                        ).or_(article.locator("[aria-label='Thích'], [aria-label='Like']")).first
+                        try:
+                            if like_btn.count() > 0:
+                                like_candidates_seen += 1
+                        except Exception:
+                            pass
                         
                         if like_btn.is_visible() and like_btn.is_enabled():
                             print("👉 Thả biểu cảm thích (Like) bài viết...")
@@ -103,6 +112,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     continue
                     
             print(f"✅ Hoàn thành tương tác Newsfeed. Đã tương tác: {interacted_count}/{limit} bài viết.")
+            print(f"📊 Feed diagnostics: articles_seen={articles_seen}, like_candidates={like_candidates_seen}")
             return True
             
         except Exception as e:
