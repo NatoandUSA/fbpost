@@ -2928,7 +2928,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const brandProjectSelectRun = document.getElementById('brand-project-select');
             const brandSignatureOptRun = document.getElementById('brand-signature-opt');
             payload.brandKey = brandProjectSelectRun ? brandProjectSelectRun.value : '';
-            payload.includeSignature = brandSignatureOptRun ? brandSignatureOptRun.checked : false;
+            payload.includeSignature = !!payload.brandKey; // Project selected => canonical signature required.
 
             const photoFolderInput = document.getElementById('photo-folder-input');
             payload.photoFolder = photoFolderInput ? photoFolderInput.value.trim() : '';
@@ -3396,7 +3396,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         mode: 'post',
                         apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
                         brandKey: brandProjectSelect ? brandProjectSelect.value : '',
-                        includeSignature: brandSignatureOpt ? brandSignatureOpt.checked : false
+                        includeSignature: !!(brandProjectSelect && brandProjectSelect.value)
                     })
                 });
                 const data = await res.json();

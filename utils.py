@@ -290,6 +290,25 @@ def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):
     raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
 
 
+def _normalize_single_interactive_page(context):
+    """Keep exactly one normal page in a GPM context; close restored/stale windows/tabs."""
+    pages = []
+    for pg in list(getattr(context, "pages", []) or []):
+        try:
+            if not pg.is_closed():
+                pages.append(pg)
+        except Exception:
+            pass
+    keep = pages[0] if pages else context.new_page()
+    for pg in pages[1:]:
+        try:
+            pg.close(run_before_unload=False)
+        except Exception:
+            try: pg.close()
+            except Exception: pass
+    return keep
+
+
 def _ensure_gpm_service_reachable(api_url, timeout=3.0):
     import socket
     parsed = urllib.parse.urlparse(api_url or "http://127.0.0.1:19995")
@@ -446,16 +465,11 @@ def launch_browser(account, p, api_url=None):
             raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
             
         context = browser.contexts[0]
-        page = None
-        for p_item in context.pages:
-            try:
-                if not p_item.is_closed():
-                    page = p_item
-                    break
-            except Exception:
-                pass
-        if not page:
-            page = context.new_page()
+        page = _normalize_single_interactive_page(context)
+        try:
+            print(f"[Profile Session] Single-page invariant active: {account.get('name', profile_id)} · pages={len(context.pages)}")
+        except Exception:
+            pass
         
         # Bỏ qua lỗi SSL / Certificate từ Proxy (ERR_CERT_COMMON_NAME_INVALID)
         try:
@@ -1769,6 +1783,87 @@ def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> s
     return ""
 
 
+
+def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
+    """Resolve a post permalink using Facebook's native Share -> Copy link action."""
+    if not content:
+        return ""
+    share_button = None
+    dialog = None
+    try:
+        snippet = re.sub(r"\s+", " ", content).strip()[:90]
+        if len(snippet) < 12:
+            return ""
+        node = page.get_by_text(snippet, exact=False).first
+        if not node.count() or not node.is_visible(timeout=1500):
+            return ""
+        try:
+            node.scroll_into_view_if_needed(timeout=2500)
+        except Exception:
+            pass
+        current = node
+        for _ in range(16):
+            current = current.locator("xpath=..")
+            try:
+                current_text = current.inner_text(timeout=800) or ""
+                if not text_similarity_match(content, current_text):
+                    continue
+                buttons = current.locator("[role='button'], button")
+                for idx in range(min(buttons.count(), 50)):
+                    candidate = buttons.nth(idx)
+                    label = (candidate.get_attribute("aria-label") or "").lower()
+                    if ("g\u1eedi n\u1ed9i dung n\u00e0y cho b\u1ea1n b\u00e8" in label or
+                            "send this to friends" in label or
+                            "share this content" in label):
+                        share_button = candidate
+                        break
+                if share_button:
+                    break
+            except Exception:
+                continue
+        if not share_button:
+            return ""
+        try:
+            page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin="https://www.facebook.com")
+        except Exception:
+            pass
+        try:
+            share_button.evaluate("el => el.click()")
+        except Exception:
+            share_button.click(force=True, timeout=1800)
+        time.sleep(0.8)
+        dialog = page.locator("[role='dialog']").last
+        copy_button = dialog.get_by_text(re.compile("^(Sao ch\u00e9p li\u00ean k\u1ebft|Copy link)$", re.I), exact=True).first
+        if not copy_button.count() or not copy_button.is_visible(timeout=1800):
+            return ""
+        try:
+            copy_button.evaluate("el => el.click()")
+        except Exception:
+            copy_button.click(force=True, timeout=1800)
+        time.sleep(0.4)
+        copied = page.evaluate("async () => await navigator.clipboard.readText()") or ""
+        clean = clean_facebook_post_url(copied.strip())
+        if not clean:
+            return ""
+        target_group = _group_key_from_url(target)
+        copied_group = _group_key_from_url(clean)
+        if target_group and copied_group and target_group != copied_group:
+            return ""
+        parsed = urllib.parse.urlparse(clean)
+        is_post_route = bool(re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+", parsed.path, re.I))
+        qs = urllib.parse.parse_qs(parsed.query)
+        if not is_post_route and "multi_permalinks" not in qs:
+            return ""
+        return clean
+    except Exception:
+        return ""
+    finally:
+        if dialog is not None:
+            try:
+                page.keyboard.press("Escape")
+            except Exception:
+                pass
+
 def _has_pending_post_notice(page) -> bool:
     try:
         pending_notice = page.locator(
@@ -1826,6 +1921,8 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
                 page.reload(wait_until="domcontentloaded", timeout=15000)
                 time.sleep(2.5)
                 clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=12)
+                if not clean_href:
+                    clean_href = _copy_post_permalink_via_share_sheet(page, target=target, content=content)
                 if clean_href:
                     print(f"POSTED_LINK:{clean_href}")
                     record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")

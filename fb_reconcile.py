@@ -5,6 +5,7 @@ from utils import (
     ActionResult,
     _has_pending_post_notice,
     _scan_post_permalink_once,
+    _copy_post_permalink_via_share_sheet,
     close_browser,
     launch_browser,
     record_posted_link,
@@ -34,6 +35,8 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
 
             for attempt in range(2):
                 permalink = _scan_post_permalink_once(page, target=target_url, content=content, max_articles=15)
+                if not permalink and attempt == 1:
+                    permalink = _copy_post_permalink_via_share_sheet(page, target=target_url, content=content)
                 if permalink:
                     record_posted_link(
                         target_url, permalink, content, note="Đã xuất bản (đối soát)",

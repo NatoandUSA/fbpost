@@ -49,3 +49,13 @@ def apply_brand_signature(content, brand_key, include_signature=True):
     if not include_signature or not key:
         return clean
     return f"{clean}\n\n{SIGNATURE_SEPARATOR}\n{BRAND_SIGNATURES[key]['signatureText']}".strip()
+
+
+def validate_brand_signature(content, brand_key):
+    key = normalize_brand_key(brand_key)
+    if not key:
+        return True, []
+    text = (content or "")
+    required = [SIGNATURE_SEPARATOR] + [line.strip() for line in BRAND_SIGNATURES[key]["signatureText"].splitlines() if line.strip()]
+    missing = [part for part in required if part.casefold() not in text.casefold()]
+    return (not missing), missing

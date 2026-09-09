@@ -1260,7 +1260,7 @@ def api_ai_spin():
     api_key = data.get("apiKey", "").strip()
     mode = data.get("mode", "post")
     brand_key = data.get("brandKey", "")
-    include_signature = bool(data.get("includeSignature", False))
+    include_signature = bool(brand_key)  # Project selected => canonical signature required.
     if not content and mode != "interact":
         return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
     try:

@@ -252,3 +252,47 @@ class V610ReconcileWiringTests(unittest.TestCase):
         guarded = block.split('structured_result = {}', 1)[0]
         self.assertIn('--no-anti-hash-text', guarded)
         self.assertIn('if cmd != "reconcile-post":', guarded)
+
+
+class V610NativePermalinkResolverTests(unittest.TestCase):
+    def test_share_sheet_permalink_resolver_is_wired(self):
+        root = Path(__file__).resolve().parents[1]
+        utils_src = (root / "utils.py").read_text(encoding="utf-8")
+        reconcile_src = (root / "fb_reconcile.py").read_text(encoding="utf-8")
+        self.assertIn("def _copy_post_permalink_via_share_sheet", utils_src)
+        self.assertIn("Copy link", utils_src)
+        self.assertIn("clipboard-read", utils_src)
+        self.assertIn("(?:posts|permalink)", utils_src)
+        self.assertIn("_copy_post_permalink_via_share_sheet", reconcile_src)
+
+
+class V610FinalLaunchInvariantsTests(unittest.TestCase):
+    def test_project_selection_requires_signature(self):
+        from brand_profiles import apply_brand_signature, validate_brand_signature
+        text = apply_brand_signature("Hello Hue", "lacasa", include_signature=True)
+        ok, missing = validate_brand_signature(text, "lacasa")
+        self.assertTrue(ok)
+        self.assertEqual([], missing)
+        ok2, missing2 = validate_brand_signature("Hello Hue", "lacasa")
+        self.assertFalse(ok2)
+        self.assertTrue(missing2)
+
+    def test_executor_forces_signature_when_project_selected(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        self.assertIn("include_signature = bool(brand_key)", src)
+        self.assertIn("FINAL_CONTENT_SIGNATURE_MISSING", src)
+
+    def test_gpm_session_normalizes_to_single_page(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "utils.py").read_text(encoding="utf-8")
+        self.assertIn("def _normalize_single_interactive_page", src)
+        self.assertIn("pages[1:]", src)
+        self.assertIn("Single-page invariant active", src)
+
+
+class V610SignatureApiContractTests(unittest.TestCase):
+    def test_ai_spin_api_requires_signature_for_selected_project(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "server.py").read_text(encoding="utf-8")
+        self.assertIn("include_signature = bool(brand_key)", src)

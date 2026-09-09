@@ -105,7 +105,8 @@ def execute_automation_task(
     clean_exif = data.get("cleanExif", True)
     anti_hash_text = data.get("antiHashText", False)
     brand_key = str(data.get("brandKey") or "").strip().lower()
-    include_signature = bool(data.get("includeSignature", False))
+    # Final-content contract: selecting a Project always requires its canonical signature.
+    include_signature = bool(brand_key)
 
     auto_join_groups = data.get("autoJoinGroups", cfg.get("auto_join_groups", False))
     group_keywords = str(data.get("groupKeywords") or cfg.get("group_keywords", "Homestay Huế, Du lịch Huế")).strip()
@@ -677,6 +678,14 @@ def execute_automation_task(
             task_content = apply_brand_signature(content, brand_key, include_signature)
 
         if cmd in ("group", "page"):
+            from brand_profiles import validate_brand_signature
+            sig_ok, sig_missing = validate_brand_signature(task_content, brand_key)
+            if brand_key and not sig_ok:
+                batch_failed = True
+                on_line(f"❌ [FINAL_CONTENT_SIGNATURE_MISSING] Project={brand_key}; thiếu: {', '.join(sig_missing)}. Dừng trước khi mở Facebook.\n")
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
             has_sig="yes" if "-------------------" in task_content else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
