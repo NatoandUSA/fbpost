@@ -241,3 +241,14 @@ class V610ComposerSelectionTests(unittest.TestCase):
         self.assertIn("def _pick_interactable(locator):", source)
         self.assertIn('box["y"] < viewport["h"]', source)
         self.assertIn("composer_box = _pick_interactable(buttons)", source)
+
+
+class V610ReconcileWiringTests(unittest.TestCase):
+    def test_reconcile_post_does_not_receive_post_only_flags(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        self.assertIn('if cmd != "reconcile-post":', source)
+        block = source[source.index('full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]'):]
+        guarded = block.split('structured_result = {}', 1)[0]
+        self.assertIn('--no-anti-hash-text', guarded)
+        self.assertIn('if cmd != "reconcile-post":', guarded)

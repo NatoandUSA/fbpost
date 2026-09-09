@@ -732,18 +732,19 @@ def execute_automation_task(
         )
 
         full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]
-        if image:
-            full_cmd.extend(["--image", image])
-        elif task_images:
-            full_cmd.extend(["--images"] + task_images)
-        if task_feeling:
-            full_cmd.append("--feeling")
-        if task_checkin:
-            full_cmd.append("--checkin")
-        if not clean_exif:
-            full_cmd.append("--no-clean-exif")
-        if not anti_hash_text:
-            full_cmd.append("--no-anti-hash-text")
+        if cmd != "reconcile-post":
+            if image:
+                full_cmd.extend(["--image", image])
+            elif task_images:
+                full_cmd.extend(["--images"] + task_images)
+            if task_feeling:
+                full_cmd.append("--feeling")
+            if task_checkin:
+                full_cmd.append("--checkin")
+            if not clean_exif:
+                full_cmd.append("--no-clean-exif")
+            if not anti_hash_text:
+                full_cmd.append("--no-anti-hash-text")
 
         structured_result = {}
         def _capture_post_line(line):
