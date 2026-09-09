@@ -290,7 +290,9 @@ class V610FinalLaunchInvariantsTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         src = (root / "utils.py").read_text(encoding="utf-8")
         self.assertIn("def _normalize_single_interactive_page", src)
-        self.assertIn("pages[1:]", src)
+        self.assertIn("settle_seconds=10.0", src)
+        self.assertIn("GPM_PAGE_SINGLETON_FAILED", src)
+        self.assertIn("keep.wait_for_timeout(250)", src)
         self.assertIn("Single-page invariant active", src)
 
 

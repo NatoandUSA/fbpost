@@ -291,22 +291,47 @@ def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):
     raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
 
 
-def _normalize_single_interactive_page(context):
-    """Keep exactly one normal page in a GPM context; close restored/stale windows/tabs."""
-    pages = []
-    for pg in list(getattr(context, "pages", []) or []):
+def _normalize_single_interactive_page(context, settle_seconds=10.0):
+    """Enforce one page after asynchronous GPM session restore settles."""
+    deadline = time.time() + max(1.0, float(settle_seconds))
+    keep = None
+    stable_since = None
+    while time.time() < deadline:
+        pages = []
+        for pg in list(getattr(context, "pages", []) or []):
+            try:
+                if not pg.is_closed():
+                    pages.append(pg)
+            except Exception:
+                pass
+        if keep is None or keep.is_closed():
+            keep = pages[0] if pages else context.new_page()
+        for pg in pages:
+            if pg is keep:
+                continue
+            try:
+                pg.close(run_before_unload=False)
+            except Exception:
+                try: pg.evaluate("window.close()")
+                except Exception: pass
         try:
-            if not pg.is_closed():
-                pages.append(pg)
+            live = [pg for pg in list(context.pages) if not pg.is_closed()]
         except Exception:
-            pass
-    keep = pages[0] if pages else context.new_page()
-    for pg in pages[1:]:
+            live = [keep] if keep else []
+        if len(live) == 1 and live[0] is keep:
+            stable_since = stable_since or time.time()
+        else:
+            stable_since = None
         try:
-            pg.close(run_before_unload=False)
+            keep.wait_for_timeout(250)
         except Exception:
-            try: pg.close()
-            except Exception: pass
+            time.sleep(0.25)
+    try:
+        remaining = len([pg for pg in list(context.pages) if not pg.is_closed()])
+    except Exception:
+        remaining = -1
+    if remaining != 1:
+        raise RuntimeError(f"GPM_PAGE_SINGLETON_FAILED: expected 1 live page, found {remaining}")
     return keep
 
 
@@ -585,7 +610,15 @@ def launch_browser(account, p, api_url=None):
 
         try:
             page.on("dialog", _auto_accept_dialog)
-            context.on("page", lambda p_new: p_new.on("dialog", _auto_accept_dialog))
+            def _guard_new_page(p_new):
+                try:
+                    p_new.on("dialog", _auto_accept_dialog)
+                    if p_new is not page and not p_new.is_closed():
+                        print("[Profile Session] Closing unexpected restored/new page to preserve singleton.")
+                        p_new.close(run_before_unload=False)
+                except Exception:
+                    pass
+            context.on("page", _guard_new_page)
             context.add_init_script("""
                 try {
                     window.onbeforeunload = null;
@@ -1996,56 +2029,75 @@ def _has_published_toast(page) -> bool:
 
 
 def scrape_post_link(page, target="", content="", account_id="") -> ActionResult:
-    """Resolve the newly submitted post into published/pending/unverified with bounded retries."""
+    """Resolve a submitted post with native permalink fallback before and after refresh."""
     print("Đang quét tìm liên kết của bài đăng vừa tạo...")
     fallback_url = target or (page.url if hasattr(page, "url") else "")
     target_type = "group" if "/groups/" in fallback_url else ("page" if fallback_url else "unknown")
+
+    def _published(clean_href, message):
+        print(f"POSTED_LINK:{clean_href}")
+        record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id,
+                           url_type="post", publish_state="published")
+        return ActionResult(True, "POST_PUBLISHED", message, state="published", target_url=target,
+                            result_url=clean_href, url_type="post")
+
     try:
         time.sleep(1.5)
         for attempt in range(3):
-            clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=10)
+            clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=12)
+            if not clean_href and target_type == "group" and attempt >= 1:
+                clean_href = _copy_post_permalink_via_share_sheet(page, target=target, content=content)
             if clean_href:
-                print(f"POSTED_LINK:{clean_href}")
-                record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
-                return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=clean_href, url_type="post", message="Đã đăng bài và trích xuất thành công liên kết bài viết.")
+                return _published(clean_href, "Đã đăng bài và trích xuất thành công permalink.")
             if _has_pending_post_notice(page):
-                record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
-                print(f"💾 Đã ghi nhận bài đăng vào Lịch sử: {fallback_url} [Đang chờ admin duyệt]")
-                return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đã được tiếp nhận [Đang chờ admin duyệt]")
+                record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id,
+                                   url_type=target_type, publish_state="pending")
+                return ActionResult(True, "POST_PENDING", "Bài đăng đang chờ admin duyệt.", state="pending",
+                                    target_url=target, url_type=target_type)
             if _has_published_toast(page):
-                record_posted_link(target, fallback_url, content, note="Đã xuất bản (xác nhận qua thông báo Facebook)", account_id=account_id, url_type=target_type, publish_state="published")
-                print(f"💾 Đã xác nhận bài đăng xuất bản thành công qua thông báo Facebook: {fallback_url}")
-                return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=fallback_url, url_type=target_type, message="Đã đăng bài thành công (xác nhận qua thông báo Facebook).")
+                # Toast confirms submission but not identity; continue trying for a permalink.
+                print("✅ Facebook đã xác nhận submit; tiếp tục lấy permalink canonical...")
             if attempt < 2:
                 time.sleep(2.0)
 
-        # Một lần refresh có kiểm soát giúp feed hiển thị bài mới khi composer đã đóng nhưng DOM chưa cập nhật.
         if target_type == "group":
+            print("🔄 Chưa thấy permalink; refresh Group một lần rồi tiếp tục native resolver...")
             try:
-                print("🔄 Chưa thấy permalink trong DOM; làm mới Group một lần để đối soát bài vừa đăng...")
-                page.reload(wait_until="domcontentloaded", timeout=15000)
-                time.sleep(2.5)
-                clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=12)
+                page.reload(wait_until="domcontentloaded", timeout=20000)
+            except Exception as reload_err:
+                current = (page.url or "").lower()
+                try:
+                    body_chars = len(page.locator("body").inner_text(timeout=3000).strip())
+                except Exception:
+                    body_chars = 0
+                if "facebook.com" not in current or body_chars < 20:
+                    raise
+                print(f"⚠️ Reload timeout nhưng DOM Facebook vẫn còn ({body_chars} chars); tiếp tục: {reload_err}")
+            time.sleep(3.0)
+            for attempt in range(3):
+                clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=18)
                 if not clean_href:
                     clean_href = _copy_post_permalink_via_share_sheet(page, target=target, content=content)
                 if clean_href:
-                    print(f"POSTED_LINK:{clean_href}")
-                    record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id, url_type="post", publish_state="published")
-                    return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=clean_href, url_type="post", message="Đã đối soát và trích xuất permalink sau refresh.")
+                    return _published(clean_href, "Đã đối soát và trích xuất permalink canonical.")
                 if _has_pending_post_notice(page):
-                    record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
-                    return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đang chờ admin duyệt.")
-                if _has_published_toast(page):
-                    record_posted_link(target, fallback_url, content, note="Đã xuất bản (xác nhận qua thông báo Facebook)", account_id=account_id, url_type=target_type, publish_state="published")
-                    return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=fallback_url, url_type=target_type, message="Đã đăng bài thành công (xác nhận qua thông báo Facebook).")
-            except Exception as refresh_err:
-                print(f"⚠️ Không thể refresh để đối soát permalink: {refresh_err}")
+                    record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id,
+                                       url_type=target_type, publish_state="pending")
+                    return ActionResult(True, "POST_PENDING", "Bài đăng đang chờ admin duyệt.", state="pending",
+                                        target_url=target, url_type=target_type)
+                if attempt < 2:
+                    time.sleep(2.0)
 
         note_status = "Đã gửi đăng (Chưa trích xuất được link bài)"
-        record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id, url_type=target_type, publish_state="submitted_unverified")
+        record_posted_link(target, fallback_url, content, note=note_status, account_id=account_id,
+                           url_type=target_type, publish_state="submitted_unverified")
         print(f"⚠️ Bài đăng chưa được xác thực permalink: {fallback_url} [{note_status}]")
-        return ActionResult(success=False, code="POST_SUBMITTED_UNVERIFIED", state="submitted_unverified", target_url=target, result_url="", url_type=target_type, message="Bài đăng đã gửi nhưng chưa trích xuất được permalink xác thực.")
+        return ActionResult(False, "POST_SUBMITTED_UNVERIFIED",
+                            "Bài đăng đã gửi nhưng chưa trích xuất được permalink xác thực.",
+                            state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
     except Exception as e:
         print(f"⚠️ Cảnh báo: Lỗi khi quét liên kết bài đăng: {e}")
-        record_posted_link(target, fallback_url, content, note="Đã gửi đăng (lỗi quét)", account_id=account_id, url_type=target_type, publish_state="submitted_unverified")
-        return ActionResult(success=False, code="POST_SUBMITTED_UNVERIFIED", state="submitted_unverified", target_url=target, result_url="", url_type=target_type, message=f"Đã gửi đăng (gặp lỗi khi quét link: {e})")
+        record_posted_link(target, fallback_url, content, note="Đã gửi đăng (lỗi quét)", account_id=account_id,
+                           url_type=target_type, publish_state="submitted_unverified")
+        return ActionResult(False, "POST_SUBMITTED_UNVERIFIED", f"Đã gửi đăng (gặp lỗi khi quét link: {e})",
+                            state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
