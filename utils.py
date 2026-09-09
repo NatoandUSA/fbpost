@@ -9,6 +9,10 @@ import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from datetime import datetime
+from services.profile_session_manager import (
+    acquire_profile, attach_runtime, release_profile, runtime_snapshot,
+    wait_endpoint_closed, ProfileLeaseError,
+)
 
 # GPM profiles with proxies/extensions can take longer than 15s to start.
 GPM_START_TIMEOUT_SECONDS = 30
@@ -321,6 +325,13 @@ def launch_browser(account, p, api_url=None):
         if profile_id_match:
             profile_id = profile_id_match.group(0)
 
+        try:
+            acquire_profile(profile_id, timeout=20.0)
+            attach_runtime(profile_id, api_url=api_base)
+            print(f"🔒 [Profile Lease] Đã khóa độc quyền profile {account.get('name', profile_id)}.")
+        except ProfileLeaseError as lease_err:
+            raise Exception(f"PROFILE_BUSY: {lease_err}")
+
         api_is_v1 = api_url.rstrip("/").endswith("/api/v1")
         if api_is_v1:
             try:
@@ -330,6 +341,7 @@ def launch_browser(account, p, api_url=None):
                 data = payload.get("data") if isinstance(payload, dict) else None
                 ws_endpoint = data.get("websocket_debugging_url") if isinstance(data, dict) else None
                 if payload.get("success") and ws_endpoint:
+                    attach_runtime(profile_id, cdp_endpoint=ws_endpoint)
                     browser = connect_over_cdp_when_ready(p, ws_endpoint)
                 elif isinstance(payload, dict):
                     msg = str(payload.get('message', ''))
@@ -346,6 +358,7 @@ def launch_browser(account, p, api_url=None):
                             retry_data = retry_payload.get("data") if isinstance(retry_payload, dict) else None
                             ws_endpoint = retry_data.get("websocket_debugging_url") if isinstance(retry_data, dict) else None
                             if retry_payload.get("success") and ws_endpoint:
+                                attach_runtime(profile_id, cdp_endpoint=ws_endpoint)
                                 browser = connect_over_cdp_when_ready(p, ws_endpoint)
                             else:
                                 gpm_error = f"GPM Local API retry: {retry_payload.get('message', 'no connection data returned')}"
@@ -369,6 +382,7 @@ def launch_browser(account, p, api_url=None):
                 cdp_address = data.get("remote_debugging_address") if isinstance(data, dict) else None
                 if cdp_address and (payload.get("success") or payload.get("status") or True):
                     cdp_url = cdp_address if cdp_address.startswith("http") else f"http://{cdp_address}"
+                    attach_runtime(profile_id, cdp_endpoint=cdp_url)
                     browser = connect_over_cdp_when_ready(p, cdp_url)
                 elif isinstance(payload, dict):
                     msg = str(payload.get('message', ''))
@@ -390,6 +404,7 @@ def launch_browser(account, p, api_url=None):
                             retry_cdp = retry_data.get("remote_debugging_address") if isinstance(retry_data, dict) else None
                             if retry_cdp:
                                 cdp_url = retry_cdp if retry_cdp.startswith("http") else f"http://{retry_cdp}"
+                                attach_runtime(profile_id, cdp_endpoint=cdp_url)
                                 browser = connect_over_cdp_when_ready(p, cdp_url)
                             else:
                                 gpm_error = f"GPM Login v4 retry failed: {retry_payload.get('message', 'no CDP address returned')}"
@@ -416,6 +431,7 @@ def launch_browser(account, p, api_url=None):
                 browser_url = data.get("browser_url") if isinstance(data, dict) else None
                 if browser_url:
                     cdp_url = browser_url if browser_url.startswith("http") else f"http://{browser_url}"
+                    attach_runtime(profile_id, cdp_endpoint=cdp_url)
                     browser = connect_over_cdp_when_ready(p, cdp_url)
             except Exception as e:
                 if not gpm_error:
@@ -426,6 +442,7 @@ def launch_browser(account, p, api_url=None):
                     pass
                 
         if not browser:
+            release_profile(profile_id)
             raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
             
         context = browser.contexts[0]
@@ -588,6 +605,8 @@ def close_browser(browser_or_context, account=None, api_url=None):
         profile_id_match = re.search(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", profile_id)
         if profile_id_match:
             profile_id = profile_id_match.group(0)
+        lease_meta = runtime_snapshot(profile_id)
+        cdp_endpoint = str(lease_meta.get("cdp_endpoint") or "")
         if api_url.rstrip("/").endswith("/api/v1"):
             try:
                 requests.get(f"{api_url.rstrip('/')}/profiles/stop/{profile_id}", timeout=5)
@@ -606,8 +625,14 @@ def close_browser(browser_or_context, account=None, api_url=None):
             requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=5)
         except Exception:
             pass
-        # Cho phép Chrome và GPM giải phóng port/file lock
+        # Chờ Chrome/GPM giải phóng CDP trước khi cho profile được dùng lại.
         time.sleep(1.0)
+        teardown_verified = wait_endpoint_closed(cdp_endpoint, timeout=15.0)
+        if teardown_verified:
+            print(f"✅ [Profile Lease] Đã xác minh GPM/CDP đóng: {account.get('name', profile_id)}")
+        else:
+            print(f"❌ [Profile Lease] CDP vẫn còn sống sau teardown: {cdp_endpoint}. Profile tiếp theo sẽ bị chặn.")
+        release_profile(profile_id)
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 
@@ -1750,13 +1775,24 @@ def _has_pending_post_notice(page) -> bool:
             "div[role='alert'], div[role='status'], div[role='dialog']"
         ).filter(
             has_text=re.compile(
-                r"(bài viết.*chờ.*duyệt|post.*pending.*approval|submitted.*approval|đang chờ.*phê duyệt|awaiting.*approval)",
+                r"(bài viết.*(chờ|quản trị|phê duyệt|xét duyệt)|post.*(pending|approval|admin)|submitted.*approval|đang chờ.*(phê duyệt|duyệt|xét)|awaiting.*approval|sẽ hiển thị sau khi|quản trị viên.*duyệt)",
                 re.I,
             )
         )
         return pending_notice.count() > 0
     except Exception:
         return False
+
+
+def _has_published_toast(page) -> bool:
+    try:
+        for container in page.locator("div[role='alert'], div[role='status']").all():
+            c_text = container.inner_text(timeout=400) or ""
+            if TOAST_CONFIRM_RE.search(c_text):
+                return True
+    except Exception:
+        pass
+    return False
 
 
 def scrape_post_link(page, target="", content="", account_id="") -> ActionResult:
@@ -1776,6 +1812,10 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
                 record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
                 print(f"💾 Đã ghi nhận bài đăng vào Lịch sử: {fallback_url} [Đang chờ admin duyệt]")
                 return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đã được tiếp nhận [Đang chờ admin duyệt]")
+            if _has_published_toast(page):
+                record_posted_link(target, fallback_url, content, note="Đã xuất bản (xác nhận qua thông báo Facebook)", account_id=account_id, url_type=target_type, publish_state="published")
+                print(f"💾 Đã xác nhận bài đăng xuất bản thành công qua thông báo Facebook: {fallback_url}")
+                return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=fallback_url, url_type=target_type, message="Đã đăng bài thành công (xác nhận qua thông báo Facebook).")
             if attempt < 2:
                 time.sleep(2.0)
 
@@ -1793,6 +1833,9 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
                 if _has_pending_post_notice(page):
                     record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt", account_id=account_id, url_type=target_type, publish_state="pending")
                     return ActionResult(success=True, code="POST_PENDING", state="pending", target_url=target, result_url="", url_type=target_type, message="Bài đăng đang chờ admin duyệt.")
+                if _has_published_toast(page):
+                    record_posted_link(target, fallback_url, content, note="Đã xuất bản (xác nhận qua thông báo Facebook)", account_id=account_id, url_type=target_type, publish_state="published")
+                    return ActionResult(success=True, code="POST_PUBLISHED", state="published", target_url=target, result_url=fallback_url, url_type=target_type, message="Đã đăng bài thành công (xác nhận qua thông báo Facebook).")
             except Exception as refresh_err:
                 print(f"⚠️ Không thể refresh để đối soát permalink: {refresh_err}")
 

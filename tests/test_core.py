@@ -841,7 +841,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.0.10")
+        self.assertEqual(get_version(), "6.1.0")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1874,7 +1874,10 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         self.assertIn('id="queue-section"', html)
         self.assertIn('.workspace-grid.queue-focus', css)
         self.assertIn("currentMode === 'queue'", js)
-        self.assertIn("queueSection.appendChild(approvalQueueCard)", js)
+        self.assertTrue(
+            "queueSection.appendChild(approvalQueueCard)" in js or
+            "queueSection.insertBefore(approvalQueueCard, queueSection.firstChild)" in js
+        )
         for state in ('published', 'failed', 'cancelled'):
             self.assertIn(f'value="{state}"', html)
 
@@ -1901,8 +1904,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.0.10', html)
-        self.assertIn('app.js?v=6.0.10', html)
+        self.assertIn('styles.css?v=6.1.0', html)
+        self.assertIn('app.js?v=6.1.0', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):

@@ -24,6 +24,7 @@ from services.process_runner import ProcessRunner
 from repositories.job_repo import JobRepository
 from repositories.settings_repo import SettingsRepository
 from repositories.activity_repo import ActivityRepository
+from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
 def load_config():
     try:
@@ -276,18 +277,42 @@ def execute_automation_task(
                     return False
                 acc_id = acc.get("id")
                 acc_name = acc.get("name", acc_id)
+                wf_task_id = workflow_start_task(
+                    job_id=job_id,
+                    action="join-group",
+                    profile_id=acc_id,
+                    target_url=shared_targets[:300],
+                    metadata={"mode": "urls", "limit": limit, "profile_name": acc_name}
+                )
                 on_line(f"\n========== [Profile {idx + 1}/{total_profiles}: {acc_name} | tối đa {limit}/{len(urls_list)} nhóm] ==========\n")
                 full_cmd = (
                     build_cmd_for_account(acc_id)
                     + ["join-group", "--keywords", shared_targets, "--limit", str(limit)]
                     + feed_flag + rules_flag + delay_args
                 )
-                ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+                join_summary_res = {}
+                def _capture_join_line(line):
+                    on_line(line)
+                    clean = (line or "").strip()
+                    if clean.startswith("JOIN_RESULT:"):
+                        try:
+                            join_summary_res.update(json.loads(clean[len("JOIN_RESULT:"):]))
+                        except Exception:
+                            pass
+                ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_join_line, cwd=str(BASE_DIR))
                 outcome = "finished" if ret == 0 else "failed"
                 if ret == 0:
                     join_success += 1
                 else:
                     join_failed = True
+                confirmed = int(join_summary_res.get("joined_confirmed", 0)) + int(join_summary_res.get("existing_confirmed", 0))
+                uncertain = int(join_summary_res.get("unverified_attempts", 0))
+                if confirmed > 0 and uncertain == 0:
+                    workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=shared_targets[:300])
+                elif uncertain > 0 or ret == 0:
+                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=shared_targets[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                else:
+                    workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
                 record_profile_activity(acc_id, "join-group", target=shared_targets[:100], outcome=outcome)
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=idx + 1)
@@ -323,6 +348,13 @@ def execute_automation_task(
                         return False
                     acc_id = acc.get("id")
                     acc_name = acc.get("name", acc_id)
+                    wf_task_id = workflow_start_task(
+                        job_id=job_id,
+                        action="join-group",
+                        profile_id=acc_id,
+                        target_url=str(input_targets)[:300],
+                        metadata={"mode": "keywords", "limit": limit, "profile_name": acc_name}
+                    )
                     on_line(f"\n========== [Profile {idx+1}/{total_acc}: {acc_name} (Tối đa 2 nhóm)] ==========\n")
                     full_cmd = (
                         build_cmd_for_account(acc_id)
@@ -331,10 +363,27 @@ def execute_automation_task(
                         + rules_flag
                         + delay_args
                     )
-                    ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+                    join_kw_res = {}
+                    def _capture_kw_join_line(line):
+                        on_line(line)
+                        clean = (line or "").strip()
+                        if clean.startswith("JOIN_RESULT:"):
+                            try:
+                                join_kw_res.update(json.loads(clean[len("JOIN_RESULT:"):]))
+                            except Exception:
+                                pass
+                    ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_kw_join_line, cwd=str(BASE_DIR))
                     outcome = "finished" if ret == 0 else "failed"
                     if ret != 0:
                         join_failed = True
+                    confirmed = int(join_kw_res.get("joined_confirmed", 0)) + int(join_kw_res.get("existing_confirmed", 0))
+                    uncertain = int(join_kw_res.get("unverified_attempts", 0))
+                    if confirmed > 0 and uncertain == 0:
+                        workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=str(input_targets)[:300])
+                    elif uncertain > 0 or ret == 0:
+                        workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                    else:
+                        workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
                     record_profile_activity(acc_id, "join-group", target=str(input_targets)[:100], outcome=outcome)
                     if job_repo:
                         job_repo.update_job(job_id, progress_current=idx + 1)
@@ -355,14 +404,38 @@ def execute_automation_task(
                 if not target_id or str(target_id).strip() in ("__rotate__", "None", ""):
                     all_accs = load_accounts()
                     target_id = all_accs[0].get("id") if all_accs else None
+                wf_task_id = workflow_start_task(
+                    job_id=job_id,
+                    action="join-group",
+                    profile_id=target_id,
+                    target_url=str(input_targets)[:300],
+                    metadata={"mode": "keywords", "limit": limit}
+                )
                 full_cmd = (
                     build_cmd_for_account(target_id)
                     + ["join-group", "--keywords", str(input_targets), "--limit", str(limit)]
                     + feed_flag
                     + delay_args
                 )
-                ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+                join_single_res = {}
+                def _capture_single_join_line(line):
+                    on_line(line)
+                    clean = (line or "").strip()
+                    if clean.startswith("JOIN_RESULT:"):
+                        try:
+                            join_single_res.update(json.loads(clean[len("JOIN_RESULT:"):]))
+                        except Exception:
+                            pass
+                ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_single_join_line, cwd=str(BASE_DIR))
                 outcome = "finished" if ret == 0 else "failed"
+                confirmed = int(join_single_res.get("joined_confirmed", 0)) + int(join_single_res.get("existing_confirmed", 0))
+                uncertain = int(join_single_res.get("unverified_attempts", 0))
+                if confirmed > 0 and uncertain == 0:
+                    workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=str(input_targets)[:300])
+                elif uncertain > 0 or ret == 0:
+                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                else:
+                    workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
                 on_line(f"RUN_RESULT:{outcome}\n")
                 record_profile_activity(target_id, "join-group", target=str(input_targets)[:100], outcome=outcome)
                 return ret == 0
@@ -446,6 +519,13 @@ def execute_automation_task(
                 except Exception:
                     task_comment = comment_text
 
+            wf_task_id = workflow_start_task(
+                job_id=job_id,
+                action="comment",
+                profile_id=curr_acc_id,
+                target_url=target_url,
+                metadata={"like_post": like_post, "comment_preview": task_comment[:80]}
+            )
             on_line(f"\n========== [Bài viết {i+1}/{total}] ==========\n")
             on_line(f"Đang mở bài viết: {target_url}\n")
 
@@ -455,10 +535,27 @@ def execute_automation_task(
             if not anti_hash_text:
                 full_cmd.append("--no-anti-hash-text")
 
-            ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+            structured_comment_res = {}
+            def _capture_comment_line(line):
+                on_line(line)
+                clean = (line or "").strip()
+                if clean.startswith("ACTION_RESULT:"):
+                    try:
+                        structured_comment_res.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                    except Exception:
+                        pass
+
+            ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_comment_line, cwd=str(BASE_DIR))
             outcome = "finished" if ret == 0 else "failed"
             if ret != 0:
                 batch_failed = True
+            comment_state = str(structured_comment_res.get("state") or "")
+            if comment_state == "commented" and ret == 0:
+                workflow_finish_task(wf_task_id, state="completed", submission_status="SUBMIT_CONFIRMED", verification_status="COMMENT_VERIFIED", result_url=structured_comment_res.get("result_url") or target_url)
+            elif comment_state == "unverified" or structured_comment_res.get("code") in {"COMMENT_UNVERIFIED", "SUBMIT_UNVERIFIED"}:
+                workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="COMMENT_UNVERIFIED", result_url=target_url, error_code=structured_comment_res.get("code") or "COMMENT_UNVERIFIED", error_message=structured_comment_res.get("message") or "Comment submitted but not verified.")
+            else:
+                workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=structured_comment_res.get("code") or "COMMENT_FAILED", error_message=structured_comment_res.get("message") or "Comment failed before verified submission.")
             record_profile_activity(curr_acc_id, "comment", target=target_url, content=task_comment, outcome=outcome)
 
             if job_repo:
@@ -620,6 +717,14 @@ def execute_automation_task(
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
 
+        wf_task_id = workflow_start_task(
+            job_id=job_id,
+            action=cmd,
+            profile_id=curr_acc_id,
+            target_url=target,
+            metadata={"queue_item_id": queue_item_id, "brand_key": brand_key, "action_name": cmd}
+        )
+
         full_cmd = build_cmd_for_account(curr_acc_id) + [cmd, target, task_content]
         if image:
             full_cmd.extend(["--image", image])
@@ -651,9 +756,18 @@ def execute_automation_task(
             batch_failed = True
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
+        action_state = str(structured_result.get("state") or "")
+        if action_state == "published" and ret == 0:
+            workflow_finish_task(wf_task_id, state="published", submission_status="SUBMIT_CONFIRMED", verification_status="PERMALINK_FOUND", result_url=structured_result.get("result_url") or "")
+        elif action_state == "pending":
+            workflow_finish_task(wf_task_id, state="pending", submission_status="PENDING_APPROVAL", verification_status="PENDING_EVIDENCE", result_url=structured_result.get("result_url") or "")
+        elif action_state in ("submitted_unverified", "unverified"):
+            workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="NO_PERMALINK", result_url=structured_result.get("result_url") or "", error_code=structured_result.get("code") or "SUBMITTED_NO_PERMALINK", error_message=structured_result.get("message") or "Submitted but permalink is not verified.")
+        else:
+            workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=structured_result.get("code") or "FAILED_BEFORE_SUBMIT", error_message=structured_result.get("message") or "Task failed before verified submission.")
+
         if queue_item_id:
             from repositories.campaign_repo import CampaignRepository
-            action_state = structured_result.get("state") or ""
             transition_from = ("reconciling",) if cmd == "reconcile-post" else ("processing",)
             if action_state == "published" and ret == 0:
                 final_queue_state = "published"

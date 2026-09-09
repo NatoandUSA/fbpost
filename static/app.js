@@ -138,8 +138,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const composerActionBar = document.getElementById('composer-action-bar');
     const queueSection = document.getElementById('queue-section');
     const workspaceGrid = document.querySelector('.workspace-grid');
-    if (queueSection && approvalQueueCard && approvalQueueCard.parentElement !== queueSection) queueSection.appendChild(approvalQueueCard);
+    if (queueSection && approvalQueueCard && approvalQueueCard.parentElement !== queueSection) queueSection.insertBefore(approvalQueueCard, queueSection.firstChild);
     const logCard = document.querySelector('.card.log-card') || document.querySelector('.log-card');
+    const logCardHome = logCard ? logCard.parentElement : null;
+    const workflowTaskBody = document.getElementById('workflow-task-body');
+    const workflowSummary = document.getElementById('workflow-summary');
+    const workflowFilter = document.getElementById('workflow-filter');
+    const refreshWorkflowsBtn = document.getElementById('refresh-workflows-btn');
+    const workflowEventPanel = document.getElementById('workflow-event-panel');
+    const workflowEventList = document.getElementById('workflow-event-list');
     const interactSubmitBtn = document.getElementById('interact-submit-btn');
     const scrapeSubmitBtn = document.getElementById('scrape-submit-btn');
     const commentSubmitBtn = document.getElementById('comment-submit-btn');
@@ -230,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.0.10';
+            const verText = data.version ? `v${data.version}` : 'v6.1.0';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -493,6 +500,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function loadWorkflowEvents(taskId) {
+        if (!workflowEventPanel || !workflowEventList || !taskId) return;
+        try {
+            const res = await fetch(`/api/workflows/tasks/${encodeURIComponent(taskId)}/events`);
+            const data = await res.json();
+            const events = Array.isArray(data.events) ? data.events : [];
+            workflowEventList.innerHTML = events.length ? events.map(e => `<div class="workflow-event-row"><span class="workflow-event-seq">#${escapeHtml(e.seq)}</span><strong>${escapeHtml(e.event_type)}</strong><span>${escapeHtml(e.phase || '')}</span><span>${escapeHtml(e.message || '')}</span><time>${escapeHtml(e.created_at || '')}</time></div>`).join('') : '<div class="empty">Ch?a c? evidence event.</div>';
+            workflowEventPanel.classList.remove('hidden');
+        } catch (err) {
+            workflowEventList.innerHTML = `<div class="empty">Kh?ng t?i ???c timeline: ${escapeHtml(err.message || err)}</div>`;
+            workflowEventPanel.classList.remove('hidden');
+        }
+    }
+
+    async function loadWorkflowTasks() {
+        if (!workflowTaskBody) return;
+        const filter = workflowFilter?.value || 'active';
+        const stateMap = {active:'queued,running,unverified,pending', all:'', published:'published', pending:'pending', unverified:'unverified', failed:'failed', cancelled:'cancelled'};
+        const states = stateMap[filter] ?? '';
+        const query = states ? `?states=${encodeURIComponent(states)}` : '';
+        try {
+            const res = await fetch('/api/workflows/tasks' + query);
+            const data = await res.json();
+            const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+            if (workflowSummary) workflowSummary.textContent = `${tasks.length} task`;
+            workflowTaskBody.innerHTML = tasks.length ? tasks.map(t => {
+                const target = String(t.target_url || '');
+                const result = t.result_url ? 'M? k?t qu?' : (t.error_code || t.error_message || '?');
+                return `<tr class="workflow-task-row" data-task-id="${escapeHtml(t.id)}"><td>${escapeHtml(t.profile_id || '?')}</td><td title="${escapeHtml(target)}">${escapeHtml(target.slice(0,55) || '?')}</td><td>${escapeHtml(t.action || '')}</td><td>${escapeHtml(t.phase || '')}</td><td><span class="workflow-state workflow-state-${escapeHtml(t.state || 'unknown')}">${escapeHtml(t.state || 'unknown')}</span></td><td>${escapeHtml(t.verification_status || '')}</td><td>${Number(t.progress || 0)}%</td><td>${t.result_url ? `<a href="${escapeHtml(t.result_url)}" target="_blank" rel="noopener">${result}</a>` : escapeHtml(result)}</td></tr>`;
+            }).join('') : '<tr><td colspan="8" class="empty">Ch?a c? workflow task theo b? l?c n?y.</td></tr>';
+        } catch (err) {
+            workflowTaskBody.innerHTML = `<tr><td colspan="8" class="empty">Kh?ng t?i ???c ti?n tr?nh: ${escapeHtml(err.message || err)}</td></tr>`;
+        }
+    }
+
     async function loadQueue() {
         try {
             const filter = document.getElementById('queue-filter')?.value || 'active';
@@ -528,10 +570,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         if (!response.ok) return showToast(data.error || 'Không thể tạo hàng đợi.', 'error');
         showToast('Đã thêm bài vào hàng đợi để duyệt.');
+        const queueTab = document.getElementById('tab-queue');
+        if (queueTab) queueTab.click();
         loadQueue();
     });
 
     refreshQueueBtn.addEventListener('click', loadQueue);
+    if (refreshWorkflowsBtn) refreshWorkflowsBtn.addEventListener('click', loadWorkflowTasks);
+    if (workflowFilter) workflowFilter.addEventListener('change', loadWorkflowTasks);
+    if (workflowTaskBody) workflowTaskBody.addEventListener('click', (event) => {
+        const row = event.target.closest('tr[data-task-id]');
+        if (row) loadWorkflowEvents(row.dataset.taskId);
+    });
 
     // ---- Add to Queue (Đưa vào Hàng đợi duyệt) from Composer ----
     const addToQueueBtn = document.getElementById('add-to-queue-btn');
@@ -577,7 +627,9 @@ document.addEventListener('DOMContentLoaded', () => {
             addToQueueBtn.innerHTML = originalText;
 
             if (addedCount > 0) {
-                showToast(`Đã đưa ${addedCount} bài vào Hàng đợi cần duyệt! Hãy bấm nút '✅ Duyệt bài này' để duyệt.`);
+                showToast(`Đã đưa ${addedCount} bài vào Hàng đợi! Vui lòng bấm '✅ Duyệt' để tiến hành đăng.`);
+                const queueTab = document.getElementById('tab-queue');
+                if (queueTab) queueTab.click();
                 loadQueue();
             } else {
                 showToast('Không thể thêm bài vào hàng đợi.', 'error');
@@ -2312,7 +2364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 8. Log Card: Show on operational tabs, hide on profiles and settings
         if (logCard) {
-            if (mode === 'profiles' || mode === 'settings' || mode === 'queue') {
+            if (mode === 'profiles' || mode === 'settings') {
                 logCard.classList.add('hidden');
             } else {
                 logCard.classList.remove('hidden');
@@ -2343,6 +2395,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.composer-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             currentMode = tab.dataset.target;
+            if (currentMode !== 'queue' && logCard && logCardHome && logCard.parentElement !== logCardHome) {
+                logCardHome.appendChild(logCard);
+            }
 
             // Update workspace title
             if (workspaceTitleEl) {
@@ -2451,7 +2506,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
                 if (queueSection) queueSection.classList.remove('hidden');
                 if (postBtn) postBtn.classList.add('hidden');
+                if (logCard && queueSection && logCard.parentElement !== queueSection) queueSection.appendChild(logCard);
+                if (logCard) logCard.classList.remove('hidden');
                 loadQueue();
+                loadWorkflowTasks();
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -4862,11 +4920,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     syncActiveJobState();
     window.setInterval(() => syncActiveJobState(), 3000);
+    window.setInterval(() => { if (currentMode === 'queue') loadWorkflowTasks(); }, 3000);
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.0.10';
-        let build = '2026-09-08';
+        let ver = 'v6.1.0';
+        let build = '2026-09-09';
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();

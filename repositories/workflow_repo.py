@@ -1,0 +1,86 @@
+"""Persistence helpers for task state and event timelines."""
+from __future__ import annotations
+
+import json
+import uuid
+from datetime import datetime, timezone
+
+from repositories.base import BaseRepository
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class WorkflowRepository(BaseRepository):
+    def get_task(self, task_id: str):
+        conn = self.get_conn()
+        try:
+            row = conn.execute("SELECT * FROM workflow_tasks WHERE id=?", (task_id,)).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+    def create_task(self, job_id=None, action="", profile_id=None, target_url="", task_key=None, metadata=None):
+        task_id = uuid.uuid4().hex
+        key = task_key or f"{job_id or 'manual'}:{action}:{profile_id or ''}:{task_id[:8]}"
+        now = now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO workflow_tasks (id,job_id,task_key,action,profile_id,target_url,phase,submission_status,verification_status,state,progress,metadata_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (task_id, job_id, key, action, profile_id, target_url, "QUEUED",
+                 "NOT_SUBMITTED", "NOT_STARTED", "queued", 0,
+                 json.dumps(metadata or {}, ensure_ascii=False), now, now),
+            )
+        return self.get_task(task_id)
+
+    def update_task(self, task_id: str, **fields):
+        allowed = {"phase","submission_status","verification_status","state","progress","result_url","error_code","error_message","evidence_dir","metadata_json","started_at","finished_at"}
+        clean = {k: v for k, v in fields.items() if k in allowed}
+        if not clean:
+            return self.get_task(task_id)
+        clean["updated_at"] = now_iso()
+        names = list(clean)
+        sql = "UPDATE workflow_tasks SET " + ", ".join(f"{name}=?" for name in names) + " WHERE id=?"
+        values = [clean[name] for name in names] + [task_id]
+        with self.transaction() as conn:
+            conn.execute(sql, values)
+        return self.get_task(task_id)
+
+    def add_event(self, task_id: str, event_type: str, phase: str = "", message: str = "", payload=None):
+        with self.transaction() as conn:
+            row = conn.execute("SELECT COALESCE(MAX(seq),0)+1 AS next_seq FROM workflow_events WHERE task_id=?", (task_id,)).fetchone()
+            seq = int(row["next_seq"])
+            conn.execute(
+                "INSERT INTO workflow_events(task_id,seq,event_type,phase,message,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                (task_id, seq, event_type, phase, message,
+                 json.dumps(payload or {}, ensure_ascii=False), now_iso()),
+            )
+        return seq
+    def list_tasks(self, job_id=None, states=None, limit=500):
+        conn = self.get_conn()
+        try:
+            clauses = []
+            params = []
+            if job_id:
+                clauses.append("job_id=?")
+                params.append(job_id)
+            if states:
+                marks = ",".join("?" for _ in states)
+                clauses.append(f"state IN ({marks})")
+                params.extend(states)
+            where = " WHERE " + " AND ".join(clauses) if clauses else ""
+            rows = conn.execute(
+                f"SELECT * FROM workflow_tasks{where} ORDER BY updated_at DESC LIMIT ?",
+                (*params, int(limit)),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def list_events(self, task_id: str):
+        conn = self.get_conn()
+        try:
+            rows = conn.execute("SELECT * FROM workflow_events WHERE task_id=? ORDER BY seq", (task_id,)).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()

@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-08 v6.0.10"
+BUILD_TIME = "2026-09-09 v6.1.0"
 
 
 def app_build_info():
@@ -1479,6 +1479,32 @@ def api_backup_database():
         return jsonify({"success": True, "backup_file": str(backup_file), "message": "Sao lưu cơ sở dữ liệu SQLite thành công!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/group-catalog/defaults', methods=['GET'])
+def api_default_group_catalog():
+    from services.default_catalog import load_default_group_rows
+    rows = load_default_group_rows()
+    return jsonify({'count': len(rows), 'groups': rows})
+
+@app.route('/api/profile-presets/default', methods=['GET'])
+def api_default_profile_preset():
+    from services.default_catalog import DEFAULT_PROFILE_NAMES
+    accounts = {str(a.get('name') or ''): _public_account(a) for a in load_accounts()}
+    profiles = [accounts[name] for name in DEFAULT_PROFILE_NAMES if name in accounts]
+    missing = [name for name in DEFAULT_PROFILE_NAMES if name not in accounts]
+    return jsonify({'name': '8 Profile Test Hue', 'profiles': profiles, 'missing': missing})
+
+@app.route('/api/workflows/tasks', methods=['GET'])
+def api_workflow_tasks():
+    from repositories.workflow_repo import WorkflowRepository
+    states = [x for x in request.args.get('states', '').split(',') if x]
+    rows = WorkflowRepository().list_tasks(job_id=request.args.get('job_id') or None, states=states or None, limit=500)
+    return jsonify({'count': len(rows), 'tasks': rows})
+
+@app.route('/api/workflows/tasks/<task_id>/events', methods=['GET'])
+def api_workflow_events(task_id):
+    from repositories.workflow_repo import WorkflowRepository
+    return jsonify({'task_id': task_id, 'events': WorkflowRepository().list_events(task_id)})
 
 if __name__ == '__main__':
     # All routes are registered before the development server starts.

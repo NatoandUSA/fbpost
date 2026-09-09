@@ -11,7 +11,7 @@ $zip = Join-Path $artifactRoot "$bundleName-Windows-x64.zip"
 New-Item -ItemType Directory -Path $stagingRoot,$artifactRoot -Force | Out-Null
 if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
 New-Item -ItemType Directory -Path $bundle -Force | Out-Null
-$dirs = @('api','migrations','repositories','services','static')
+$dirs = @('api','migrations','repositories','services','static','seeds')
 foreach ($d in $dirs) { Copy-Item (Join-Path $root $d) $bundle -Recurse -Force }
 $files = @('ai_spinner.py','brand_profiles.py','db.py','fb_auth.py','fb_comment.py','fb_create_page.py','fb_group.py','fb_interact.py','fb_join_group.py','fb_page.py','fb_reconcile.py','launcher_preflight.py','fb_page_api.py','fb_scraper.py','fb_thread.py','main.py','paths.py','scheduler.py','server.py','utils.py','README.md','HUONG_DAN_SU_DUNG.html','requirements.txt','RUN_FB_AUTOMATION.bat','START_LINUX.sh','START_MAC.command','start_portable.bat','VERSION')
 foreach ($f in $files) { if (Test-Path (Join-Path $root $f)) { Copy-Item (Join-Path $root $f) $bundle -Force } }

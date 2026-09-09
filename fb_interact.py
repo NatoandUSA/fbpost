@@ -74,8 +74,8 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     
                     if random.random() < 0.6:
                         like_btn = article.locator("div[role='button'], button").filter(
-                            has_text=re.compile("^(Thích|Like)$", re.IGNORECASE)
-                        ).or_(article.locator("[aria-label='Thích'], [aria-label='Like']")).first
+                            has_text=re.compile(r"^\s*(Thích|Like)(\s+\d+)?\s*$", re.IGNORECASE)
+                        ).or_(article.locator("[aria-label*='Thích' i], [aria-label*='Like' i]")).first
                         try:
                             if like_btn.count() > 0:
                                 like_candidates_seen += 1

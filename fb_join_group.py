@@ -82,8 +82,8 @@ def interact_with_group_feed(page, gemini_key=None):
         if random.random() < 0.70:
             try:
                 like_btn = target_article.locator("div[role='button']").filter(
-                    has_text=re.compile(r"^(Thích|Like)$", re.IGNORECASE)
-                ).first
+                    has_text=re.compile(r"^\s*(Thích|Like)(\s+\d+)?\s*$", re.IGNORECASE)
+                ).or_(target_article.locator("div[role='button'][aria-label*='Thích' i], div[role='button'][aria-label*='Like' i]")).first
                 if like_btn.is_visible(timeout=2000) and like_btn.is_enabled():
                     print("👍 [Group Feed] Thả Like bài viết cộng đồng trong nhóm...")
                     like_btn.click()
@@ -385,17 +385,21 @@ def search_and_join_groups(
 
                     attempt_no=join_attempts+1
                     print(f"👉 [Join attempt {attempt_no}/{max_groups}] Đang bấm 'Tham gia' nhóm: {group_name}...")
-                    click_triggered=False
                     try:
-                        btn_to_click.scroll_into_view_if_needed(); btn_to_click.click(timeout=4000); click_triggered=True
+                        btn_to_click.scroll_into_view_if_needed()
+                        btn_to_click.click(timeout=4000)
+                        click_triggered = True
                     except Exception as e:
-                        if "intercepts pointer events" in str(e):
-                            print("ℹ️ Banner Facebook che nút Join; căn giữa và thử click trực tiếp một lần.")
-                            try:
-                                btn_to_click.evaluate("el => el.scrollIntoView({block:'center',inline:'center'})")
-                                if _is_join_button(btn_to_click): btn_to_click.click(force=True,timeout=3000); click_triggered=True
-                            except Exception as e2: print(f"⚠️ Join fallback thất bại trước khi gửi request: {e2}")
-                        else: print(f"⚠️ Join click thất bại trước khi gửi request: {e}")
+                        print(f"ℹ️ Playwright click bị cản trở ({e}); kích hoạt qua Native DOM Dispatch...")
+                        try:
+                            btn_to_click.evaluate("""el => {
+                                el.scrollIntoView({block: 'center', inline: 'center'});
+                                el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
+                                if (typeof el.click === 'function') el.click();
+                            }""")
+                            click_triggered = True
+                        except Exception as e2:
+                            print(f"⚠️ Native DOM Dispatch thất bại trước khi gửi request: {e2}")
                     if not click_triggered: continue
                     join_attempts += 1
                     time.sleep(random.uniform(2.0,3.0))
@@ -532,6 +536,14 @@ def search_and_join_groups(
     finally:
         close_browser(browser_obj if browser_obj else context, account, gpm_api_url)
 
+    result_summary = {
+        "joined_confirmed": joined_count,
+        "existing_confirmed": existing_count,
+        "join_attempts": join_attempts,
+        "unverified_attempts": max(0, join_attempts - joined_count),
+        "account_id": account_id or "default",
+    }
+    print("JOIN_RESULT:" + json.dumps(result_summary, ensure_ascii=False))
     return joined_count + existing_count
 
 if __name__ == "__main__":

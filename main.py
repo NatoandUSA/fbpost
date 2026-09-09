@@ -170,7 +170,10 @@ def main():
                 urls = [l.strip() for l in f if l.strip()]
             success = bool(comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text))
         elif args.url and args.content:
-            success = bool(comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text))
+            result = comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
+            if hasattr(result, "to_dict"):
+                print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+            success = bool(result)
         else:
             comment_parser.print_help()
             success = False

@@ -67,8 +67,8 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             if like_post:
                 try:
                     like_btn = page.locator("div[role='button']").filter(
-                        has_text=re.compile(r"^(Thích|Like)$", re.IGNORECASE)
-                    ).first
+                        has_text=re.compile(r"^\s*(Thích|Like)(\s+\d+)?\s*$", re.IGNORECASE)
+                    ).or_(page.locator("div[role='button'][aria-label*='Thích' i], div[role='button'][aria-label*='Like' i]")).first
                     if like_btn.is_visible(timeout=3500):
                         aria_pressed = like_btn.get_attribute("aria-pressed")
                         if aria_pressed != "true":
