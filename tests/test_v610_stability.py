@@ -210,3 +210,9 @@ class V610ProductionLinkageTests(unittest.TestCase):
         ]:
             self.assertIn(marker, source)
         self.assertNotIn('verification_status="CONFIRMED" if', source)
+    def test_join_click_has_trusted_force_fallback(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "fb_join_group.py").read_text(encoding="utf-8")
+        self.assertIn("btn_to_click.click(timeout=3000, force=True)", source)
+        self.assertIn("page.mouse.click", source)
+        self.assertIn("Native DOM fallback", source)

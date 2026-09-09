@@ -390,16 +390,32 @@ def search_and_join_groups(
                         btn_to_click.click(timeout=4000)
                         click_triggered = True
                     except Exception as e:
-                        print(f"ℹ️ Playwright click bị cản trở ({e}); kích hoạt qua Native DOM Dispatch...")
+                        print(f"?? Playwright click b? c?n tr? ({e}); th? force-click sau khi c?n n?t v?o viewport...")
                         try:
-                            btn_to_click.evaluate("""el => {
-                                el.scrollIntoView({block: 'center', inline: 'center'});
-                                el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));
-                                if (typeof el.click === 'function') el.click();
-                            }""")
+                            btn_to_click.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'})")
+                            page.wait_for_timeout(250)
+                            btn_to_click.click(timeout=3000, force=True)
                             click_triggered = True
-                        except Exception as e2:
-                            print(f"⚠️ Native DOM Dispatch thất bại trước khi gửi request: {e2}")
+                            print("? Force-click n?t Tham gia ?? ???c g?i qua Playwright.")
+                        except Exception as force_err:
+                            print(f"?? Force-click ch?a th?nh c?ng ({force_err}); d?ng t?a ?? chu?t th?t tr??c Native DOM fallback...")
+                            try:
+                                box = btn_to_click.bounding_box()
+                                if box and box.get('width', 0) > 0 and box.get('height', 0) > 0:
+                                    page.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                                    click_triggered = True
+                                    print("? Mouse click n?t Tham gia ?? ???c g?i qua Playwright.")
+                            except Exception as mouse_err:
+                                print(f"?? Mouse click ch?a th?nh c?ng ({mouse_err}); chuy?n sang Native DOM fallback...")
+                        if not click_triggered:
+                            try:
+                                btn_to_click.evaluate("""el => {
+                                    el.scrollIntoView({block: 'center', inline: 'center'});
+                                    if (typeof el.click === 'function') el.click();
+                                }""")
+                                click_triggered = True
+                            except Exception as e2:
+                                print(f"?? Native DOM fallback th?t b?i tr??c khi g?i request: {e2}")
                     if not click_triggered: continue
                     join_attempts += 1
                     time.sleep(random.uniform(2.0,3.0))
