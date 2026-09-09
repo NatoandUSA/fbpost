@@ -1,4 +1,5 @@
 import time
+
 from playwright.sync_api import sync_playwright
 
 from utils import (
@@ -52,7 +53,17 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                     )
                     return ActionResult(True, "RECONCILE_PENDING", "Bài đang chờ duyệt.", state="pending", target_url=target_url)
                 if attempt == 0:
-                    page.reload(wait_until="domcontentloaded", timeout=15000)
+                    try:
+                        page.reload(wait_until="domcontentloaded", timeout=20000)
+                    except Exception as reload_err:
+                        current = (page.url or "").lower()
+                        try:
+                            body_chars = len(page.locator("body").inner_text(timeout=3000).strip())
+                        except Exception:
+                            body_chars = 0
+                        if "facebook.com" not in current or body_chars < 20:
+                            raise
+                        print(f"⚠️ Reload timeout nhưng Facebook DOM vẫn còn ({body_chars} chars); tiếp tục native permalink resolver: {reload_err}")
                     time.sleep(2.5)
 
             return ActionResult(False, "RECONCILE_NOT_FOUND", "Chưa tìm thấy bài hoặc permalink; giữ trạng thái chưa xác minh.",

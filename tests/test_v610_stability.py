@@ -226,12 +226,15 @@ class V610FinalLiveGuardTests(unittest.TestCase):
         self.assertIn("page.mouse.click", source)
         self.assertIn('composer_box.evaluate("el => el.click()")', source)
 
-    def test_close_browser_keeps_lease_when_cdp_alive(self):
+    def test_close_browser_keeps_lease_when_teardown_incomplete(self):
         root = Path(__file__).resolve().parents[1]
         source = (root / "utils.py").read_text(encoding="utf-8")
-        block = source[source.index("if teardown_verified:"):source.index("# ---- Advanced Composer Features")]
-        self.assertIn("release_profile(profile_id)", block.split("else:", 1)[0])
-        self.assertNotIn("release_profile(profile_id)", block.split("else:", 1)[1])
+        start = source.index("if cdp_closed and roots_closed:")
+        block = source[start:source.index("# ---- Advanced Composer Features")]
+        success_branch, failure_branch = block.split("else:", 1)
+        self.assertIn("release_profile(profile_id)", success_branch)
+        self.assertNotIn("release_profile(profile_id)", failure_branch)
+        self.assertIn("Keeping lease to block profile reuse", failure_branch)
 
 
 class V610ComposerSelectionTests(unittest.TestCase):
@@ -296,3 +299,31 @@ class V610SignatureApiContractTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         src = (root / "server.py").read_text(encoding="utf-8")
         self.assertIn("include_signature = bool(brand_key)", src)
+
+
+class V610LaunchRepairTests(unittest.TestCase):
+    def test_job_repo_preserves_business_keys(self):
+        from repositories.job_repo import JobRepository
+        repo = JobRepository()
+        job_id = "test-brand-key-preserved"
+        repo.create_job({"id": job_id, "state": "queued", "payload": {
+            "brandKey": "lacasa", "groupKeywords": "homestay hue",
+            "geminiApiKey": "secret-value", "pageAccessToken": "token-value",
+        }})
+        saved = repo.get_job(job_id)["payload"]
+        self.assertEqual(saved["brandKey"], "lacasa")
+        self.assertEqual(saved["groupKeywords"], "homestay hue")
+        self.assertEqual(saved["geminiApiKey"], "***REDACTED***")
+        self.assertEqual(saved["pageAccessToken"], "***REDACTED***")
+
+    def test_invalid_brand_key_fails_signature_contract(self):
+        from brand_profiles import validate_brand_signature
+        ok, missing = validate_brand_signature("hello", "***REDACTED***")
+        self.assertFalse(ok)
+        self.assertIn("INVALID_BRAND_KEY", missing)
+
+    def test_gpm_process_singleton_helpers_wired(self):
+        import utils
+        self.assertTrue(callable(utils._gpm_root_processes))
+        self.assertTrue(callable(utils._ensure_clean_gpm_process_state))
+        self.assertTrue(callable(utils._wait_gpm_roots_closed))

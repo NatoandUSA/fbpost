@@ -16,11 +16,19 @@ class JobRepository(BaseRepository):
         state = job.get("state", "queued")
         payload = job.get("payload") or {}
         def _redact_secrets(val):
+            # Redact credential fields only. Business fields such as brandKey,
+            # groupKeywords and keywords must survive persistence because the
+            # executor reads the persisted payload, not the original request.
+            secret_exact = {
+                "geminiapikey", "apikey", "api_key", "pageaccesstoken",
+                "accesstoken", "access_token", "token", "password",
+                "secret", "clientsecret", "client_secret", "cookie", "cookies",
+            }
             if isinstance(val, dict):
                 res = {}
                 for k, v in val.items():
-                    k_lower = str(k).lower()
-                    if any(s in k_lower for s in ("key", "token", "password", "secret", "cookie")):
+                    k_lower = str(k).strip().lower()
+                    if k_lower in secret_exact or k_lower.endswith("password") or k_lower.endswith("token") or k_lower.endswith("secret"):
                         res[k] = "***REDACTED***"
                     else:
                         res[k] = _redact_secrets(v)

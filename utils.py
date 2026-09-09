@@ -6,6 +6,7 @@ import sys
 import json
 import tempfile
 import urllib.parse
+import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from datetime import datetime
@@ -309,6 +310,80 @@ def _normalize_single_interactive_page(context):
     return keep
 
 
+def _gpm_root_processes(profile_id):
+    """Return root GPM Chrome processes that own this profile on Windows."""
+    if sys.platform != "win32" or not profile_id:
+        return []
+    escaped = str(profile_id).replace("'", "''")
+    script = (
+        "$p=Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'chrome.exe' "
+        f"-and $_.CommandLine -like '*{escaped}*' -and $_.CommandLine -notlike '*--type=*' }} | "
+        "Select-Object ProcessId,CommandLine; if($p){$p|ConvertTo-Json -Compress}"
+    )
+    try:
+        raw = subprocess.check_output(
+            ["powershell.exe", "-NoProfile", "-Command", script],
+            stderr=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", timeout=8,
+        ).strip()
+        if not raw:
+            return []
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            data = [data]
+        return [x for x in data if isinstance(x, dict) and x.get("ProcessId")]
+    except Exception:
+        return []
+
+
+def _kill_gpm_root_processes(profile_id):
+    killed = []
+    for proc in _gpm_root_processes(profile_id):
+        pid = int(proc.get("ProcessId") or 0)
+        if not pid:
+            continue
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+            killed.append(pid)
+        except Exception:
+            pass
+    return killed
+
+
+def _wait_gpm_roots_closed(profile_id, timeout=12.0):
+    deadline = time.time() + max(0.5, float(timeout))
+    while time.time() < deadline:
+        if not _gpm_root_processes(profile_id):
+            return True
+        time.sleep(0.5)
+    return not _gpm_root_processes(profile_id)
+
+
+def _ensure_clean_gpm_process_state(profile_id, api_base):
+    """Before a new Start, guarantee no previous root browser for the profile survives."""
+    roots = _gpm_root_processes(profile_id)
+    if not roots:
+        return
+    print(f"[Profile Process] Phát hiện {len(roots)} GPM root process cũ; đóng sạch trước khi Start.")
+    import requests
+    for url in (
+        f"{api_base}/api/v3/profiles/close/{profile_id}",
+        f"{api_base}/api/v3/profiles/stop/{profile_id}",
+        f"{api_base}/api/v2/close?profileId={profile_id}",
+    ):
+        try:
+            requests.get(url, timeout=5)
+        except Exception:
+            pass
+    if not _wait_gpm_roots_closed(profile_id, timeout=8.0):
+        killed = _kill_gpm_root_processes(profile_id)
+        if killed:
+            print(f"[Profile Process] Force-closed stale GPM process PID(s): {killed}")
+        _wait_gpm_roots_closed(profile_id, timeout=5.0)
+    remaining = _gpm_root_processes(profile_id)
+    if remaining:
+        raise RuntimeError(f"GPM_STALE_PROCESS: profile {profile_id} còn {len(remaining)} root process sau cleanup")
+
+
 def _ensure_gpm_service_reachable(api_url, timeout=3.0):
     import socket
     parsed = urllib.parse.urlparse(api_url or "http://127.0.0.1:19995")
@@ -348,8 +423,12 @@ def launch_browser(account, p, api_url=None):
             acquire_profile(profile_id, timeout=20.0)
             attach_runtime(profile_id, api_url=api_base)
             print(f"🔒 [Profile Lease] Đã khóa độc quyền profile {account.get('name', profile_id)}.")
+            _ensure_clean_gpm_process_state(profile_id, api_base)
         except ProfileLeaseError as lease_err:
             raise Exception(f"PROFILE_BUSY: {lease_err}")
+        except Exception:
+            release_profile(profile_id)
+            raise
 
         api_is_v1 = api_url.rstrip("/").endswith("/api/v1")
         if api_is_v1:
@@ -463,7 +542,26 @@ def launch_browser(account, p, api_url=None):
         if not browser:
             release_profile(profile_id)
             raise Exception(gpm_error or "Không thể khởi chạy profile GPM. Dùng URL http://127.0.0.1:19995 và API v3 trong GPM Login v4.")
-            
+
+        if sys.platform == "win32":
+            roots = []
+            for _ in range(6):
+                roots = _gpm_root_processes(profile_id)
+                if len(roots) == 1:
+                    break
+                time.sleep(0.5)
+            if len(roots) != 1:
+                print(f"[Profile Process] INVALID root process count for {account.get('name', profile_id)}: {len(roots)}")
+                try:
+                    requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=5)
+                    requests.get(f"{api_base}/api/v3/profiles/stop/{profile_id}", timeout=5)
+                except Exception:
+                    pass
+                _kill_gpm_root_processes(profile_id)
+                release_profile(profile_id)
+                raise RuntimeError(f"GPM_PROCESS_SINGLETON_FAILED: expected 1 root Chrome, found {len(roots)}")
+            print(f"[Profile Process] Singleton verified: {account.get('name', profile_id)} · root_pid={roots[0].get('ProcessId')}")
+
         context = browser.contexts[0]
         page = _normalize_single_interactive_page(context)
         try:
@@ -639,14 +737,21 @@ def close_browser(browser_or_context, account=None, api_url=None):
             requests.get(f"{api_base}/api/v2/close?profileId={profile_id}", timeout=5)
         except Exception:
             pass
-        # Chờ Chrome/GPM giải phóng CDP trước khi cho profile được dùng lại.
+        # Chờ cả CDP endpoint và root GPM Chrome thực sự chết trước khi release lease.
         time.sleep(1.0)
-        teardown_verified = wait_endpoint_closed(cdp_endpoint, timeout=15.0)
-        if teardown_verified:
-            print(f"[Profile Lease] GPM/CDP teardown verified: {account.get('name', profile_id)}")
+        cdp_closed = wait_endpoint_closed(cdp_endpoint, timeout=15.0)
+        roots_closed = _wait_gpm_roots_closed(profile_id, timeout=8.0)
+        if not roots_closed:
+            killed = _kill_gpm_root_processes(profile_id)
+            if killed:
+                print(f"[Profile Process] Force-closed leftover root PID(s) during teardown: {killed}")
+            roots_closed = _wait_gpm_roots_closed(profile_id, timeout=5.0)
+        if cdp_closed and roots_closed:
+            print(f"[Profile Lease] GPM/CDP/process teardown verified: {account.get('name', profile_id)}")
             release_profile(profile_id)
         else:
-            print(f"[Profile Lease] CDP still alive after teardown: {cdp_endpoint}. Keeping lease to block profile reuse.")
+            remaining = len(_gpm_root_processes(profile_id))
+            print(f"[Profile Lease] Teardown incomplete: cdp_closed={cdp_closed}, root_processes={remaining}. Keeping lease to block profile reuse.")
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 

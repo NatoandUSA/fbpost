@@ -205,7 +205,39 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                     click_errors.append(str(dom_err))
             if not composer_opened:
                 raise RuntimeError("COMPOSER_CLICK_FAILED: " + " | ".join(click_errors[-3:]))
-            time.sleep(random.uniform(2.5, 4.0))
+            time.sleep(random.uniform(2.0, 3.0))
+
+            def _composer_editor_visible():
+                try:
+                    editors = page.locator("div[role='textbox'], div[contenteditable='true'][data-lexical-editor='true']")
+                    for ei in range(min(editors.count(), 12)):
+                        e = editors.nth(ei)
+                        if not e.is_visible():
+                            continue
+                        label = ((e.get_attribute("aria-label") or "") + " " + (e.get_attribute("aria-placeholder") or "")).lower()
+                        if "bình luận" not in label and "comment" not in label:
+                            return True
+                except Exception:
+                    pass
+                return False
+
+            # Một số Group render nhiều opener giống nhau; click đầu có thể trúng
+            # element ghost/stale dù Playwright báo thành công. Chỉ chấp nhận opener
+            # khi editor thật xuất hiện, nếu chưa thì thử các candidate còn lại bằng DOM click.
+            if not _composer_editor_visible():
+                for ci in range(min(buttons.count(), 10)):
+                    candidate = buttons.nth(ci)
+                    try:
+                        if not candidate.is_visible():
+                            continue
+                        candidate.evaluate("el => el.click()")
+                        time.sleep(1.2)
+                        if _composer_editor_visible():
+                            print(f"[Composer] Editor verified after candidate {ci + 1}.")
+                            break
+                    except Exception:
+                        continue
+            time.sleep(random.uniform(1.0, 1.8))
 
             # Chờ hộp thoại soạn bài (Dialog modal) mở hoàn toàn
             dialog = None

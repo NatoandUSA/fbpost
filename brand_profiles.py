@@ -52,7 +52,10 @@ def apply_brand_signature(content, brand_key, include_signature=True):
 
 
 def validate_brand_signature(content, brand_key):
-    key = normalize_brand_key(brand_key)
+    raw_key = str(brand_key or "").strip()
+    key = normalize_brand_key(raw_key)
+    if raw_key and not key:
+        return False, ["INVALID_BRAND_KEY"]
     if not key:
         return True, []
     text = (content or "")

@@ -54,7 +54,25 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             
             # Di chuyển chuột ngẫu nhiên
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            page.goto(post_url, wait_until="domcontentloaded")
+            # multi_permalinks thường chậm và hay timeout dù nội dung đã render.
+            canonical_url = post_url
+            m = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", post_url, re.IGNORECASE)
+            if m:
+                canonical_url = f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
+                print(f"🔗 Chuẩn hóa permalink comment: {canonical_url}")
+            try:
+                page.goto(canonical_url, wait_until="domcontentloaded", timeout=35000)
+            except Exception as nav_err:
+                # Facebook có thể giữ connection mở quá lâu; chỉ coi là fatal khi
+                # trang thực sự không đi tới Facebook hoặc không có DOM hữu dụng.
+                current = (page.url or "").lower()
+                try:
+                    body_chars = len(page.locator("body").inner_text(timeout=3000).strip())
+                except Exception:
+                    body_chars = 0
+                if "facebook.com" not in current or body_chars < 20:
+                    raise
+                print(f"⚠️ Navigation timeout nhưng Facebook DOM đã tải ({body_chars} chars); tiếp tục tìm comment box: {nav_err}")
             time.sleep(random.uniform(3.0, 5.0))
 
             # Cuộn trang nhẹ nhàng mô phỏng hành vi đọc bài viết
@@ -108,7 +126,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 "div[role='textbox'][aria-placeholder*='bình luận' i]",
                 "div[role='textbox'][aria-placeholder*='comment' i]",
                 "div[role='textbox'][data-lexical-editor='true']",
-                "div[contenteditable='true'][role='textbox']"
+                "div[contenteditable='true'][role='textbox']",
+                "div[contenteditable='true'][data-lexical-editor='true']",
+                "form div[contenteditable='true']"
             ]
 
             for selector in selectors:
