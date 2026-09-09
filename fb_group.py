@@ -130,28 +130,43 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             combined_regex = re.compile("|".join(composer_patterns), re.IGNORECASE)
 
             # Cách 1: Tìm qua role button có text phù hợp
-            buttons = page.locator("div[role='button']").filter(has_text=combined_regex)
-            if buttons.count() > 0:
-                for idx in range(buttons.count()):
-                    btn = buttons.nth(idx)
-                    if btn.is_visible():
-                        composer_box = btn
-                        break
+            def _pick_interactable(locator):
+                try:
+                    viewport = page.evaluate("() => ({w: window.innerWidth, h: window.innerHeight})")
+                except Exception:
+                    viewport = {"w": 1920, "h": 1080}
+                fallback = None
+                for idx in range(locator.count()):
+                    item = locator.nth(idx)
+                    try:
+                        if not item.is_visible():
+                            continue
+                        if fallback is None:
+                            fallback = item
+                        box = item.bounding_box()
+                        if not box:
+                            continue
+                        if (box["x"] + box["width"] > 0 and box["x"] < viewport["w"]
+                                and box["y"] + box["height"] > 0 and box["y"] < viewport["h"]):
+                            return item
+                    except Exception:
+                        continue
+                return fallback
 
-            # Cách 2: Fallback tìm get_by_text
+            buttons = page.locator("div[role='button']").filter(has_text=combined_regex)
+            composer_box = _pick_interactable(buttons)
+
             if not composer_box:
                 try:
-                    fallback_box = page.get_by_text(combined_regex).first
-                    if fallback_box.is_visible():
-                        composer_box = fallback_box
+                    composer_box = _pick_interactable(page.get_by_text(combined_regex))
                 except Exception:
                     pass
 
-            # Cách 3: Fallback qua aria-label
             if not composer_box:
-                fallback_aria = page.locator("div[aria-label*='Tạo bài viết' i], div[aria-label*='Create a post' i]").first
-                if fallback_aria.is_visible():
-                    composer_box = fallback_aria
+                try:
+                    composer_box = _pick_interactable(page.locator("div[aria-label*='T?o b?i vi?t' i], div[aria-label*='Create a post' i]"))
+                except Exception:
+                    pass
 
             if not composer_box:
                 print("❌ Không tìm thấy ô đăng bài. Hãy kiểm tra bạn đã tham gia nhóm hoặc nhóm có yêu cầu quyền duyệt thành viên hay không.")

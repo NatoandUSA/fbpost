@@ -232,3 +232,12 @@ class V610FinalLiveGuardTests(unittest.TestCase):
         block = source[source.index("if teardown_verified:"):source.index("# ---- Advanced Composer Features")]
         self.assertIn("release_profile(profile_id)", block.split("else:", 1)[0])
         self.assertNotIn("release_profile(profile_id)", block.split("else:", 1)[1])
+
+
+class V610ComposerSelectionTests(unittest.TestCase):
+    def test_group_composer_prefers_viewport_intersection(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "fb_group.py").read_text(encoding="utf-8")
+        self.assertIn("def _pick_interactable(locator):", source)
+        self.assertIn('box["y"] < viewport["h"]', source)
+        self.assertIn("composer_box = _pick_interactable(buttons)", source)
