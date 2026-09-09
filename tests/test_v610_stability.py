@@ -216,3 +216,19 @@ class V610ProductionLinkageTests(unittest.TestCase):
         self.assertIn("btn_to_click.click(timeout=3000, force=True)", source)
         self.assertIn("page.mouse.click", source)
         self.assertIn("Native DOM fallback", source)
+
+
+class V610FinalLiveGuardTests(unittest.TestCase):
+    def test_group_composer_has_viewport_fallback_chain(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "fb_group.py").read_text(encoding="utf-8")
+        self.assertIn("composer_box.click(force=True", source)
+        self.assertIn("page.mouse.click", source)
+        self.assertIn('composer_box.evaluate("el => el.click()")', source)
+
+    def test_close_browser_keeps_lease_when_cdp_alive(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "utils.py").read_text(encoding="utf-8")
+        block = source[source.index("if teardown_verified:"):source.index("# ---- Advanced Composer Features")]
+        self.assertIn("release_profile(profile_id)", block.split("else:", 1)[0])
+        self.assertNotIn("release_profile(profile_id)", block.split("else:", 1)[1])

@@ -629,10 +629,10 @@ def close_browser(browser_or_context, account=None, api_url=None):
         time.sleep(1.0)
         teardown_verified = wait_endpoint_closed(cdp_endpoint, timeout=15.0)
         if teardown_verified:
-            print(f"✅ [Profile Lease] Đã xác minh GPM/CDP đóng: {account.get('name', profile_id)}")
+            print(f"[Profile Lease] GPM/CDP teardown verified: {account.get('name', profile_id)}")
+            release_profile(profile_id)
         else:
-            print(f"❌ [Profile Lease] CDP vẫn còn sống sau teardown: {cdp_endpoint}. Profile tiếp theo sẽ bị chặn.")
-        release_profile(profile_id)
+            print(f"[Profile Lease] CDP still alive after teardown: {cdp_endpoint}. Keeping lease to block profile reuse.")
 
 # ---- Advanced Composer Features (Image, Feeling, Checkin, Link Scraping) ----
 

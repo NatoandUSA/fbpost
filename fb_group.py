@@ -157,19 +157,39 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 print("❌ Không tìm thấy ô đăng bài. Hãy kiểm tra bạn đã tham gia nhóm hoặc nhóm có yêu cầu quyền duyệt thành viên hay không.")
                 return ActionResult(success=False, code="COMPOSER_NOT_FOUND", message="Không tìm thấy ô đăng bài. Hãy kiểm tra bạn đã tham gia nhóm hoặc nhóm có yêu cầu quyền duyệt thành viên hay không.", target_url=group_url)
 
-            print("👉 Click mở ô soạn thảo bài viết...")
+            print("Opening post composer...")
+            composer_opened = False
+            click_errors = []
             try:
-                composer_box.click(timeout=6000)
+                composer_box.click(timeout=3500)
+                composer_opened = True
             except Exception as click_err:
-                if "intercepts pointer events" not in str(click_err):
-                    raise
-                print("⚠️ Thanh điều hướng đang che ô soạn thảo; căn giữa phần tử và thử lại...")
+                click_errors.append(str(click_err))
+                print(f"Standard composer click blocked ({click_err}); using trusted fallback...")
+            if not composer_opened:
                 try:
-                    composer_box.evaluate("el => el.scrollIntoView({block: 'center', inline: 'nearest'})")
-                    time.sleep(0.5)
-                except Exception:
-                    pass
-                composer_box.click(force=True, timeout=5000)
+                    composer_box.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'})")
+                    time.sleep(0.4)
+                    composer_box.click(force=True, timeout=3500)
+                    composer_opened = True
+                except Exception as force_err:
+                    click_errors.append(str(force_err))
+            if not composer_opened:
+                try:
+                    box = composer_box.bounding_box()
+                    if box:
+                        page.mouse.click(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+                        composer_opened = True
+                except Exception as mouse_err:
+                    click_errors.append(str(mouse_err))
+            if not composer_opened:
+                try:
+                    composer_box.evaluate("el => el.click()")
+                    composer_opened = True
+                except Exception as dom_err:
+                    click_errors.append(str(dom_err))
+            if not composer_opened:
+                raise RuntimeError("COMPOSER_CLICK_FAILED: " + " | ".join(click_errors[-3:]))
             time.sleep(random.uniform(2.5, 4.0))
 
             # Chờ hộp thoại soạn bài (Dialog modal) mở hoàn toàn
