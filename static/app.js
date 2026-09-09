@@ -204,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let cooldownInterval = null;
 
     let currentMode = 'group'; // group, page, thread, interact, scrape, content-hub
+    let defaultJoinProfileIds = [];
     let isCsvMode = false;
     let isRunning = false;
     let currentJobId = null;
@@ -506,10 +507,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`/api/workflows/tasks/${encodeURIComponent(taskId)}/events`);
             const data = await res.json();
             const events = Array.isArray(data.events) ? data.events : [];
-            workflowEventList.innerHTML = events.length ? events.map(e => `<div class="workflow-event-row"><span class="workflow-event-seq">#${escapeHtml(e.seq)}</span><strong>${escapeHtml(e.event_type)}</strong><span>${escapeHtml(e.phase || '')}</span><span>${escapeHtml(e.message || '')}</span><time>${escapeHtml(e.created_at || '')}</time></div>`).join('') : '<div class="empty">Ch?a c? evidence event.</div>';
+            workflowEventList.innerHTML = events.length ? events.map(e => `<div class="workflow-event-row"><span class="workflow-event-seq">#${escapeHtml(e.seq)}</span><strong>${escapeHtml(e.event_type)}</strong><span>${escapeHtml(e.phase || '')}</span><span>${escapeHtml(e.message || '')}</span><time>${escapeHtml(e.created_at || '')}</time></div>`).join('') : '<div class="empty">Ch\u01b0a c\u00f3 evidence event.</div>';
             workflowEventPanel.classList.remove('hidden');
         } catch (err) {
-            workflowEventList.innerHTML = `<div class="empty">Kh?ng t?i ???c timeline: ${escapeHtml(err.message || err)}</div>`;
+            workflowEventList.innerHTML = `<div class="empty">Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c timeline: ${escapeHtml(err.message || err)}</div>`;
             workflowEventPanel.classList.remove('hidden');
         }
     }
@@ -527,11 +528,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (workflowSummary) workflowSummary.textContent = `${tasks.length} task`;
             workflowTaskBody.innerHTML = tasks.length ? tasks.map(t => {
                 const target = String(t.target_url || '');
-                const result = t.result_url ? 'M? k?t qu?' : (t.error_code || t.error_message || '?');
+                const result = t.result_url ? 'M\u1edf k\u1ebft qu\u1ea3' : (t.error_code || t.error_message || '?');
                 return `<tr class="workflow-task-row" data-task-id="${escapeHtml(t.id)}"><td>${escapeHtml(t.profile_id || '?')}</td><td title="${escapeHtml(target)}">${escapeHtml(target.slice(0,55) || '?')}</td><td>${escapeHtml(t.action || '')}</td><td>${escapeHtml(t.phase || '')}</td><td><span class="workflow-state workflow-state-${escapeHtml(t.state || 'unknown')}">${escapeHtml(t.state || 'unknown')}</span></td><td>${escapeHtml(t.verification_status || '')}</td><td>${Number(t.progress || 0)}%</td><td>${t.result_url ? `<a href="${escapeHtml(t.result_url)}" target="_blank" rel="noopener">${result}</a>` : escapeHtml(result)}</td></tr>`;
-            }).join('') : '<tr><td colspan="8" class="empty">Ch?a c? workflow task theo b? l?c n?y.</td></tr>';
+            }).join('') : '<tr><td colspan="8" class="empty">Ch\u01b0a c\u00f3 workflow task theo b\u1ed9 l\u1ecdc n\u00e0y.</td></tr>';
         } catch (err) {
-            workflowTaskBody.innerHTML = `<tr><td colspan="8" class="empty">Kh?ng t?i ???c ti?n tr?nh: ${escapeHtml(err.message || err)}</td></tr>`;
+            workflowTaskBody.innerHTML = `<tr><td colspan="8" class="empty">Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c ti\u1ebfn tr\u00ecnh: ${escapeHtml(err.message || err)}</td></tr>`;
         }
     }
 
@@ -1628,6 +1629,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function loadDefaultProductionSetup() {
+        try {
+            const [groupsRes, presetRes] = await Promise.all([
+                fetch('/api/group-catalog/defaults'),
+                fetch('/api/profile-presets/default')
+            ]);
+            if (groupsRes.ok) {
+                const data = await groupsRes.json();
+                const groups = Array.isArray(data.groups) ? data.groups : [];
+                const urls = groups.map(g => g.url).filter(Boolean);
+                if (joinGroupUrls && !joinGroupUrls.value.trim() && urls.length) {
+                    joinGroupUrls.value = urls.join('\n');
+                    if (joinModeUrls) joinModeUrls.checked = true;
+                    if (joinModeKw) joinModeKw.checked = false;
+                    if (joinUrlsGroup) joinUrlsGroup.classList.remove('hidden');
+                    if (joinKwGroup) joinKwGroup.classList.add('hidden');
+                }
+            }
+            if (presetRes.ok) {
+                const data = await presetRes.json();
+                const profiles = Array.isArray(data.profiles) ? data.profiles : [];
+                defaultJoinProfileIds = profiles.map(p => p.id).filter(Boolean);
+                if (joinGroupMaxProfiles && defaultJoinProfileIds.length) {
+                    joinGroupMaxProfiles.value = String(Math.min(defaultJoinProfileIds.length, 8));
+                }
+                populateJoinGroupProfiles();
+                if (joinGroupProfileSelect && defaultJoinProfileIds.length > 1) {
+                    const rotate = joinGroupProfileSelect.querySelector('option[value="__rotate__"]');
+                    if (rotate) joinGroupProfileSelect.value = '__rotate__';
+                }
+            }
+        } catch (err) {
+            console.warn('Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c c\u1ea5u h\u00ecnh production m\u1eb7c \u0111\u1ecbnh:', err);
+        }
+    }
+
     function populateJoinGroupProfiles() {
         if (!joinGroupProfileSelect) return;
         joinGroupProfileSelect.innerHTML = '';
@@ -1785,6 +1822,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 urls: urlVal,
                 limit: limitVal,
                 maxProfiles: maxProfilesVal,
+                accountIds: accId === '__rotate__' ? defaultJoinProfileIds.slice(0, maxProfilesVal || defaultJoinProfileIds.length) : [],
                 autoRules: autoRulesVal,
                 interactFeed: interactFeedVal
             });
@@ -4677,7 +4715,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Initial Check & Loads ----
     checkStatus();
-    loadAccounts();
+    loadAccounts().then(loadDefaultProductionSetup);
     loadSavedLinks();
     loadQueue();
     loadCampaigns();

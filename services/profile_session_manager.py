@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from paths import DATA_DIR
 
-LOCK_DIR = DATA_DIR / "profile_locks"
+LOCK_DIR = Path(os.getenv("FB_PROFILE_LOCK_DIR", str(DATA_DIR / "profile_locks")))
 LOCK_DIR.mkdir(parents=True, exist_ok=True)
 
 class ProfileLeaseError(RuntimeError):
@@ -72,20 +72,26 @@ class ProfileLease:
         self.profile_id = str(profile_id)
         self.timeout = timeout
         self.path = LOCK_DIR / f"{_safe_id(profile_id)}.lock"
+        self.meta_path = LOCK_DIR / f"{_safe_id(profile_id)}.meta"
         self.handle = None
 
     def acquire(self) -> "ProfileLease":
         deadline = time.monotonic() + self.timeout
         self.path.parent.mkdir(parents=True, exist_ok=True)
         while time.monotonic() < deadline:
+            # Keep the locked byte immutable. Truncating/replacing a locked file on
+            # Windows can invalidate the region lock and allow a second process in.
             handle = open(self.path, "a+b")
             handle.seek(0, os.SEEK_END)
             if handle.tell() == 0:
                 handle.write(b"0")
                 handle.flush()
             if _try_lock(handle):
-                handle.seek(0)
-                previous = handle.read().decode("utf-8", errors="ignore")
+                previous = ""
+                try:
+                    previous = self.meta_path.read_text(encoding="utf-8")
+                except OSError:
+                    pass
                 previous_endpoint = ""
                 for line in previous.splitlines():
                     if line.startswith("endpoint="):
@@ -98,15 +104,22 @@ class ProfileLease:
                         f"Profile {self.profile_id} still has a live browser endpoint: {previous_endpoint}"
                     )
                 self.handle = handle
-                handle.seek(0)
-                handle.truncate()
-                meta = f"pid={os.getpid()} profile={self.profile_id} acquired={time.time()}\nendpoint=\n"
-                handle.write(meta.encode("utf-8"))
-                handle.flush()
+                try:
+                    self._write_meta(endpoint="")
+                except Exception:
+                    self.release()
+                    raise
                 return self
             handle.close()
             time.sleep(0.25)
         raise ProfileLeaseError(f"Profile {self.profile_id} is already owned by another automation process.")
+
+    def _write_meta(self, endpoint: str = "") -> None:
+        meta = f"pid={os.getpid()} profile={self.profile_id} acquired={time.time()}\nendpoint={endpoint}\n"
+        tmp = self.meta_path.with_suffix(self.meta_path.suffix + f".{os.getpid()}.tmp")
+        tmp.write_text(meta, encoding="utf-8")
+        os.replace(tmp, self.meta_path)
+
     def release(self) -> None:
         if not self.handle:
             return
@@ -138,15 +151,7 @@ def attach_runtime(profile_id: str, **metadata) -> None:
         lease = _active_leases.get(key)
         endpoint = str(metadata.get("cdp_endpoint") or "")
         if lease and lease.handle and endpoint:
-            current = _runtime.get(key, {})
-            lease.handle.seek(0)
-            lease.handle.truncate()
-            meta = (
-                f"pid={os.getpid()} profile={key} acquired={current.get('acquired_at', time.time())}\n"
-                f"endpoint={endpoint}\n"
-            )
-            lease.handle.write(meta.encode("utf-8"))
-            lease.handle.flush()
+            lease._write_meta(endpoint=endpoint)
 
 
 def runtime_snapshot(profile_id: str | None = None):

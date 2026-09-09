@@ -61,6 +61,18 @@ def is_uploaded_image(value: str) -> bool:
         return False
 
 
+def _select_rotation_pool(all_accs, data):
+    """Resolve an explicit profile preset in caller order, else all saved accounts."""
+    requested = [str(x) for x in (data.get("accountIds") or []) if str(x).strip()]
+    if requested:
+        by_id = {str(a.get("id")): a for a in all_accs if a.get("id")}
+        return [by_id[profile_id] for profile_id in requested if profile_id in by_id]
+    supplied = data.get("accounts") or []
+    if supplied:
+        return [a for a in supplied if isinstance(a, dict) and a.get("id")]
+    return [a for a in all_accs if a.get("id")]
+
+
 def execute_automation_task(
     job_id: str,
     cmd: str,
@@ -125,15 +137,9 @@ def execute_automation_task(
     if rotate_accounts and cmd != "auth":
         try:
             all_accs = load_accounts()
-            accounts_pool = [a for a in all_accs if a.get("id")]
+            accounts_pool = _select_rotation_pool(all_accs, data)
         except Exception:
             accounts_pool = []
-
-        if not accounts_pool and (data.get("accountIds") or data.get("accounts")):
-            if data.get("accounts"):
-                accounts_pool = data.get("accounts")
-            elif data.get("accountIds"):
-                accounts_pool = [{"id": aid, "name": aid} for aid in data.get("accountIds")]
 
         if not accounts_pool:
             on_line("⚠️ [Cảnh báo vận hành] Bạn đã bật chế độ Luân phiên nhưng chưa có tài khoản Facebook nào trong danh sách 'Tài khoản đã lưu'.\n")

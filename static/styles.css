@@ -1480,3 +1480,29 @@ select.field-input { cursor: pointer; }
   .manual-group-queue-form { grid-template-columns: 1fr; }
   .vault-form, .vault-toolbar { grid-template-columns: 1fr; }
 }
+
+/* v6.1.0 Execution Manager */
+.execution-manager-section { display: grid; gap: 14px; width: 100%; }
+#workflow-manager-card { overflow: visible; }
+.workflow-summary { color: var(--muted); font-size: 11px; font-weight: 700; }
+.workflow-table-wrap { overflow-x: auto; width: 100%; }
+.workflow-table { border-collapse: collapse; min-width: 980px; width: 100%; }
+.workflow-table th, .workflow-table td { border-bottom: 1px solid var(--border); padding: 10px 12px; text-align: left; vertical-align: middle; }
+.workflow-table th { background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 800; position: sticky; top: 0; z-index: 1; }
+.workflow-table td { color: var(--text); font-size: 12px; }
+.workflow-task-row { cursor: pointer; transition: background .15s ease; }
+.workflow-task-row:hover { background: #F8FAFC; }
+.workflow-state { border-radius: 999px; display: inline-flex; font-size: 10px; font-weight: 800; padding: 3px 8px; white-space: nowrap; }
+.workflow-state-running, .workflow-state-queued { background: #DBEAFE; color: #1D4ED8; }
+.workflow-state-published, .workflow-state-completed { background: #DCFCE7; color: #15803D; }
+.workflow-state-pending { background: #FEF3C7; color: #A16207; }
+.workflow-state-unverified { background: #FFEDD5; color: #C2410C; }
+.workflow-state-failed, .workflow-state-cancelled { background: #FEE2E2; color: #B91C1C; }
+.workflow-event-panel { border-top: 1px solid var(--border); padding: 12px 14px 14px; }
+.workflow-event-title { color: #334155; font-size: 12px; font-weight: 800; margin-bottom: 8px; }
+.workflow-event-row { align-items: center; border-bottom: 1px dashed #E2E8F0; display: grid; gap: 8px; grid-template-columns: 52px 150px 120px minmax(220px,1fr) 170px; padding: 8px 0; }
+.workflow-event-row:last-child { border-bottom: 0; }
+.workflow-event-row span, .workflow-event-row strong, .workflow-event-row time { font-size: 11px; overflow-wrap: anywhere; }
+.workflow-event-seq { color: #64748B; font-family: 'JetBrains Mono', monospace; }
+.workspace-grid.queue-focus #queue-section > .log-card { margin-top: 0; width: 100%; }
+@media (max-width: 900px) { .workflow-event-row { grid-template-columns: 46px 1fr; } .workflow-event-row time { grid-column: 2; } }

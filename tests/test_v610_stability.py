@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,6 +38,26 @@ class ProfileSessionManagerTests(unittest.TestCase):
         # Should succeed without error
         psm.acquire_profile("M20", timeout=0.2)
         psm.release_profile("M20")
+
+    def test_cross_process_lease_blocks_second_owner(self):
+        env = os.environ.copy()
+        env["FB_PROFILE_LOCK_DIR"] = str(psm.LOCK_DIR)
+        code = (
+            "from services.profile_session_manager import acquire_profile,release_profile;"
+            "import time; acquire_profile('M21',timeout=1); print('READY',flush=True);"
+            "time.sleep(4); release_profile('M21')"
+        )
+        proc = subprocess.Popen(
+            [sys.executable, "-c", code], cwd=str(Path(__file__).resolve().parents[1]),
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+        try:
+            self.assertEqual(proc.stdout.readline().strip(), "READY")
+            with self.assertRaises(psm.ProfileLeaseError):
+                psm.acquire_profile("M21", timeout=0.5)
+        finally:
+            proc.terminate()
+            proc.communicate(timeout=5)
 
 
 class GroupCandidateTests(unittest.TestCase):
@@ -139,3 +162,51 @@ class WorkflowRepositoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class V610ProductionLinkageTests(unittest.TestCase):
+    def test_rotation_pool_honors_explicit_preset_order(self):
+        from services.job_executor import _select_rotation_pool
+        accounts = [
+            {"id": "x", "name": "Other"},
+            {"id": "m20", "name": "M20"},
+            {"id": "m21", "name": "M21"},
+        ]
+        pool = _select_rotation_pool(accounts, {"accountIds": ["m21", "m20"]})
+        self.assertEqual([a["name"] for a in pool], ["M21", "M20"])
+
+    def test_frontend_loads_default_catalog_and_preset(self):
+        root = Path(__file__).resolve().parents[1]
+        app = (root / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("/api/group-catalog/defaults", app)
+        self.assertIn("/api/profile-presets/default", app)
+        self.assertIn("accountIds: accId === '__rotate__'", app)
+        self.assertIn("loadAccounts().then(loadDefaultProductionSetup)", app)
+
+    def test_execution_manager_dom_and_css_linkage(self):
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        css = (root / "static" / "styles.css").read_text(encoding="utf-8")
+        app = (root / "static" / "app.js").read_text(encoding="utf-8")
+        for element_id in ["workflow-task-body", "workflow-filter", "workflow-event-panel", "workflow-event-list"]:
+            self.assertIn(f'id="{element_id}"', html)
+            self.assertIn(f"getElementById('{element_id}')", app)
+        self.assertIn(".workflow-table", css)
+        self.assertIn(".workflow-event-row", css)
+        self.assertIn("queueSection.appendChild(logCard)", app)
+
+    def test_evidence_first_state_mapping_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        source = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        for marker in [
+            'verification_status="MEMBERSHIP_CONFIRMED"',
+            'verification_status="REQUEST_UNVERIFIED"',
+            'verification_status="COMMENT_VERIFIED"',
+            'verification_status="COMMENT_UNVERIFIED"',
+            'verification_status="PERMALINK_FOUND"',
+            'verification_status="PENDING_EVIDENCE"',
+            'verification_status="NO_PERMALINK"',
+            '"FAILED_BEFORE_SUBMIT"',
+        ]:
+            self.assertIn(marker, source)
+        self.assertNotIn('verification_status="CONFIRMED" if', source)
