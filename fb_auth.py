@@ -3,9 +3,10 @@ import time
 import os
 from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
+from paths import DATA_DIR
 
-STATE_FILE = "state.json"
-AUTH_STATUS_FILE = "auth_status.json"
+STATE_FILE = str(DATA_DIR / "state.json")
+AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 
 
 def facebook_session_detected(context):
@@ -72,9 +73,8 @@ def login_account(account_id=None, gpm_api_url=None):
         login()
         return True
         
-    from utils import load_accounts, launch_browser, close_browser
-    accounts = load_accounts()
-    account = next((a for a in accounts if a["id"] == account_id), None)
+    from utils import resolve_account, launch_browser, close_browser
+    account = resolve_account(account_id, gpm_api_url)
     if not account:
         print(f"❌ Error: Account ID '{account_id}' not found in accounts.json.")
         return False

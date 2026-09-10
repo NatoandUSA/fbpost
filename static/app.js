@@ -3191,7 +3191,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ---- Auth Button ----
     authBtn.addEventListener('click', () => {
-        runCommand('auth');
+        runCommand('auth', { accountId: accountSelector ? accountSelector.value : '' });
     });
 
     async function submitCommentJob() {
@@ -3251,7 +3251,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const targets = rawTargets.split('\n').map(t => t.trim()).filter(t => t);
             const tasks = targets.map(t => ({ target: t, content: content, image: null }));
             initProgressDashboard('Gửi tin nhắn Thread', targets);
-            runCommand('thread', { tasks });
+            runCommand('thread', { tasks, accountId: accountSelector ? accountSelector.value : '' });
         } else {
             // Standard posting modes (Group, Page)
             let tasks = [];

@@ -8,11 +8,12 @@ from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted,
-    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content
+    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox
 )
 from ai_spinner import generate_unique_variant
+from paths import DATA_DIR
 
-STATE_FILE = "state.json"
+STATE_FILE = str(DATA_DIR / "state.json")
 
 def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
                   photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False,
@@ -22,7 +23,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
         is_dup, hours_ago, posted_at = is_recently_posted(group_url)
         if is_dup:
             print(f"⏭️ [Bỏ qua trùng lặp 24h] Nhóm {group_url} đã được đăng lúc {posted_at} ({hours_ago}h trước). Bỏ qua theo cài đặt bảo vệ tài khoản.")
-            return ActionResult(success=True, code="SKIPPED_DUPLICATE", message=f"Nhóm {group_url} đã được đăng lúc {posted_at}.", target_url=group_url)
+            return ActionResult(success=True, code="SKIPPED_DUPLICATE", state="skipped_duplicate", message=f"Nhóm {group_url} đã được đăng lúc {posted_at}.", target_url=group_url)
 
     # 2. Xào bài viết qua AI Content Spinner nếu bật
     if auto_spin:
@@ -247,32 +248,8 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             except Exception:
                 dialog = page.locator("div[role='dialog']").last
 
-            textbox = None
-            if dialog and dialog.is_visible():
-                try:
-                    dialog.wait_for_selector("div[role='textbox']", timeout=4000)
-                except Exception:
-                    pass
-                # Tìm textbox bên trong dialog
-                candidates = dialog.locator("div[role='textbox']")
-                for idx in range(candidates.count()):
-                    c = candidates.nth(idx)
-                    label = (c.get_attribute("aria-label") or "") + " " + (c.get_attribute("aria-placeholder") or "")
-                    if "bình luận" not in label.lower() and "comment" not in label.lower():
-                        textbox = c
-                        break
-                if not textbox and candidates.count() > 0:
-                    textbox = candidates.first
-
-            # Fallback nếu không có dialog: quét textbox trên trang và loại bỏ ô bình luận
-            if not textbox:
-                candidates = page.locator("div[role='textbox']")
-                for idx in range(candidates.count()):
-                    c = candidates.nth(idx)
-                    label = (c.get_attribute("aria-label") or "") + " " + (c.get_attribute("aria-placeholder") or "")
-                    if "bình luận" not in label.lower() and "comment" not in label.lower() and c.is_visible():
-                        textbox = c
-                        break
+            # Shared scoped resolver: never fall back to arbitrary page-level chat/search/comment editors.
+            textbox = find_post_composer_textbox(page, dialog)
 
             # 1. Nhập nội dung bài viết trước để tránh bị nuốt phím khi gắn ảnh
             print("✍️ Đang nhập nội dung bài viết...")

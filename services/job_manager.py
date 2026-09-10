@@ -15,6 +15,7 @@ from typing import Any, Callable, Dict, Generator, List, Optional
 
 from paths import JOBS_LOG_DIR, BASE_DIR
 from repositories.job_repo import JobRepository
+from repositories.reconcile_repo import ReconcileRepository
 from services.process_runner import ProcessRunner
 
 
@@ -49,6 +50,10 @@ class JobManager:
     def reconcile_on_startup(self) -> int:
         """Mark abandoned running jobs as interrupted, and requeue queued jobs."""
         interrupted = self.job_repo.reconcile_running_jobs()
+        try:
+            ReconcileRepository().recover_running()
+        except Exception as exc:
+            print(f"[ReconcileQueue] startup recovery warning: {exc}")
         queued = self.job_repo.list_jobs(limit=1000, state="queued")
         for job in reversed(queued):
             job_id = job["id"]
@@ -168,11 +173,35 @@ class JobManager:
                             break
                     break
 
+    def _enqueue_due_reconciles(self):
+        """Claim durable read-only reconcile records and enqueue them as normal jobs."""
+        try:
+            rows = ReconcileRepository().claim_due(limit=5)
+        except Exception:
+            return 0
+        for row in rows:
+            payload = {
+                "command": "reconcile-post",
+                "accountId": row.get("account_id"),
+                "reconcileRecordId": row.get("id"),
+                "tasks": [{"target": row.get("target_url"), "content": row.get("content")}],
+            }
+            job_id = self.create_job("reconcile-post", payload, account_id=row.get("account_id"))
+            self.process_runner.prepare_job(job_id)
+            with self._lock:
+                self._job_queues.setdefault(job_id, queue.Queue())
+            self._work_queue.put(job_id)
+        return len(rows)
+
     def _queue_worker(self):
         while True:
             job_id = None
             try:
-                job_id = self._work_queue.get()
+                try:
+                    job_id = self._work_queue.get(timeout=5.0)
+                except queue.Empty:
+                    self._enqueue_due_reconciles()
+                    continue
                 if job_id is None:
                     break
                 with self._lock:

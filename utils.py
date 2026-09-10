@@ -10,6 +10,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from datetime import datetime
+from paths import DATA_DIR
 from services.profile_session_manager import (
     acquire_profile, attach_runtime, release_profile, runtime_snapshot,
     wait_endpoint_closed, ProfileLeaseError,
@@ -65,8 +66,8 @@ class ActionResult:
         }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ACCOUNTS_FILE = os.path.join(BASE_DIR, "accounts.json")
-STATE_FILE = os.path.join(BASE_DIR, "state.json")
+ACCOUNTS_FILE = str(DATA_DIR / "accounts.json")
+STATE_FILE = str(DATA_DIR / "state.json")
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -165,6 +166,70 @@ def safe_mouse_wheel(page, dx, dy):
     except Exception:
         return False
 
+
+
+def find_post_composer_textbox(page, dialog=None, wait_seconds=8.0):
+    """Return the editor inside a visible Create Post surface, never global chat/search/comment boxes."""
+    rejects = ("bình luận", "comment", "tìm kiếm", "search", "tin nhắn", "message", "chat")
+    accepts = ("bạn đang nghĩ gì", "bạn viết gì", "write something", "what's on your mind", "tạo bài", "create post")
+    deadline = time.monotonic() + max(0.5, float(wait_seconds))
+    while time.monotonic() < deadline:
+        scopes = []
+        if dialog is not None:
+            try:
+                if dialog.is_visible(timeout=250): scopes.append((dialog, True))
+            except Exception:
+                pass
+        # Facebook can expose a nested title-only role=dialog as `.last`; search every
+        # visible dialog and keep only surfaces whose text/aria identifies Create Post.
+        try:
+            dialogs = page.locator("div[role='dialog']")
+            for di in range(min(dialogs.count(), 12)):
+                d = dialogs.nth(di)
+                try:
+                    if not d.is_visible(timeout=200):
+                        continue
+                    title = ((d.get_attribute("aria-label") or "") + " " + (d.inner_text() or "")[:180]).lower()
+                    if any(x in title for x in ("tạo bài viết", "create post")):
+                        scopes.append((d, True))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        # Main is only a fallback for inline Page composers; unlike dialogs, it requires
+        # an explicit composer label and never accepts an unlabeled textbox.
+        try:
+            scopes.append((page.locator("div[role='main']"), False))
+        except Exception:
+            pass
+
+        seen = set()
+        for scope, is_dialog in scopes:
+            try:
+                key = str(scope)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates = scope.locator("div[role='textbox'][contenteditable='true'], div[contenteditable='true'][data-lexical-editor='true']")
+                dialog_fallback = None
+                for idx in range(min(candidates.count(), 16)):
+                    c = candidates.nth(idx)
+                    if not c.is_visible(timeout=250):
+                        continue
+                    label = ((c.get_attribute("aria-label") or "") + " " + (c.get_attribute("aria-placeholder") or "")).strip().lower()
+                    if any(x in label for x in rejects):
+                        continue
+                    if any(x in label for x in accepts):
+                        return c
+                    if is_dialog and dialog_fallback is None:
+                        dialog_fallback = c
+                if dialog_fallback is not None:
+                    return dialog_fallback
+            except Exception:
+                continue
+        time.sleep(0.35)
+    return None
+
 # ---- Multi-Account Handling ----
 
 def load_accounts():
@@ -191,7 +256,7 @@ def save_accounts(accounts):
         pass
     temporary_path = None
     try:
-        fd, temporary_path = tempfile.mkstemp(prefix="accounts-", suffix=".json", dir=".")
+        fd, temporary_path = tempfile.mkstemp(prefix="accounts-", suffix=".json", dir=str(DATA_DIR))
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(accounts, f, ensure_ascii=False, indent=2)
         os.replace(temporary_path, ACCOUNTS_FILE)
@@ -244,31 +309,35 @@ def resolve_account(account_id, gpm_api_url=None):
     if acc:
         return acc
 
-    # 2. Tra cứu trực tiếp từ GPM API v3 (Zero-Config)
-    gpm_res = fetch_gpm_profiles(gpm_api_url=gpm_api_url, page_size=200)
-    if gpm_res.get("connected"):
-        for p in gpm_res.get("profiles", []):
+    # 2. Tra cứu trực tiếp từ GPM API v3 (Zero-Config), phân trang để tên profile
+    # ngoài 200 bản ghi đầu vẫn resolve đúng.
+    page_no = 1
+    gpm_connected = False
+    while page_no <= 20:
+        gpm_res = fetch_gpm_profiles(gpm_api_url=gpm_api_url, page=page_no, page_size=200)
+        if not gpm_res.get("connected"):
+            break
+        gpm_connected = True
+        profiles = gpm_res.get("profiles", []) or []
+        for p in profiles:
             if p.get("id") == account_id or p.get("name") == account_id:
                 return {
-                    "id": p.get("id"),
-                    "name": p.get("name", account_id),
-                    "type": "gpm",
-                    "profile_path_or_id": p.get("id"),
-                    "proxy": p.get("raw_proxy", ""),
-                    "browser_type": p.get("browser_type", "Chrome"),
-                    "status": "GPM Trực tiếp"
+                    "id": p.get("id"), "name": p.get("name", account_id), "type": "gpm",
+                    "profile_path_or_id": p.get("id"), "proxy": p.get("raw_proxy", ""),
+                    "browser_type": p.get("browser_type", "Chrome"), "status": "GPM Trực tiếp"
                 }
+        total = int(gpm_res.get("total") or len(profiles))
+        if not profiles or page_no * 200 >= total:
+            break
+        page_no += 1
 
-    # 3. Fallback: Nếu không kết nối được GPM API nhưng có ID, tạo cấu hình GPM tạm thời để chạy
-    is_uuid = bool(re.search(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", account_id))
-    return {
-        "id": account_id,
-        "name": account_id if not is_uuid else f"GPM ({account_id[:8]})",
-        "type": "gpm",
-        "profile_path_or_id": account_id,
-        "proxy": "",
-        "status": "GPM Trực tiếp"
-    }
+    # 3. Chỉ UUID hợp lệ mới được dùng như direct GPM id khi list API tạm thời lỗi.
+    # Tên/chuỗi gõ sai phải fail closed thành ACCOUNT_NOT_FOUND.
+    is_uuid = bool(re.fullmatch(r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", str(account_id)))
+    if is_uuid and not gpm_connected:
+        return {"id": account_id, "name": f"GPM ({account_id[:8]})", "type": "gpm",
+                "profile_path_or_id": account_id, "proxy": "", "status": "GPM Trực tiếp"}
+    return None
 
 
 def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):

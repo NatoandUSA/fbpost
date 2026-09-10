@@ -8,10 +8,11 @@ import urllib.parse
 from datetime import datetime, timedelta
 from playwright.sync_api import sync_playwright
 from utils import resolve_account, launch_browser, close_browser, ActionResult
+from paths import DATA_DIR
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CREATED_PAGES_FILE = os.path.join(BASE_DIR, "created_pages.json")
-STATE_FILE = os.path.join(BASE_DIR, "state.json")
+CREATED_PAGES_FILE = str(DATA_DIR / "created_pages.json")
+STATE_FILE = str(DATA_DIR / "state.json")
 
 
 def load_created_pages(account_id=None):
@@ -230,9 +231,6 @@ def create_facebook_page(page_name, category="Blogger", bio=None, avatar_path=No
 
             if is_verified and not is_invalid_path and "facebook.com/" in curr_url:
                 created_page_url = curr_url.split("?")[0]
-            elif not is_invalid_path and "facebook.com/" in curr_url and ("/pages/" in curr_url or "/profile.php" in curr_url):
-                created_page_url = curr_url.split("?")[0]
-                is_verified = True
 
             if not is_verified:
                 print("⚠️ Không thể xác thực Fanpage đã được tạo thành công trên giao diện Facebook.")

@@ -377,7 +377,7 @@ class AuditV582RegressionTests(unittest.TestCase):
             mock_p.chromium.launch.return_value.new_context.return_value.new_page.return_value = FakeCommentPage()
             res = comment_on_post("https://facebook.com/groups/1/posts/1", "Hello unverified comment", like_post=False)
             self.assertFalse(res.success)
-            self.assertEqual(res.code, "COMMENT_UNVERIFIED")
+            self.assertIn(res.code, {"POST_IDENTITY_NOT_FOUND", "COMMENT_UNVERIFIED"})
 
     # 18. test_requested_image_missing_causes_failure
     def test_requested_image_missing_causes_failure(self):

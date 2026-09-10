@@ -1,4 +1,5 @@
 import time
+import re
 
 from playwright.sync_api import sync_playwright
 
@@ -14,10 +15,37 @@ from utils import (
 )
 
 
+def _normalize_target(value):
+    value=(value or "").strip().split("?",1)[0].rstrip("/")
+    return re.sub(r"^https?://(?:www\.)?facebook\.com", "facebook://", value, flags=re.I).casefold()
+
+def _normalize_content(value):
+    return " ".join((value or "").split())
+
+
 def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=None):
     """Read-only reconciliation: never opens composer and never submits a post."""
     if not target_url or not content:
         return ActionResult(False, "RECONCILE_INVALID_INPUT", "Thiếu target/content để đối soát.", target_url=target_url)
+
+    # Durable history is authoritative when the exact target/account/content tuple
+    # already has a published post permalink. Reconciliation must not depend on feed
+    # ranking after we already persisted terminal evidence, and it must never repost.
+    try:
+        from repositories.activity_repo import ActivityRepository
+        expected_account = account_id or "default"
+        expected_target = _normalize_target(target_url)
+        for row in ActivityRepository().list_posted_links(limit=500):
+            if (row.get("publish_state") == "published" and row.get("url_type") == "post"
+                    and (row.get("account_id") or "default") == expected_account
+                    and _normalize_target(row.get("target")) == expected_target
+                    and _normalize_content(row.get("content")) == _normalize_content(content)
+                    and row.get("url")):
+                return ActionResult(True, "RECONCILE_PUBLISHED", "?? x?c nh?n t? durable publication history.",
+                                    state="published", target_url=target_url, result_url=row["url"],
+                                    url_type="post", metadata={"evidence_source": "sqlite_posted_links"})
+    except Exception as history_err:
+        print(f"?? Durable reconcile lookup failed; ti?p t?c live resolver: {history_err}")
 
     account = resolve_account(account_id, gpm_api_url) if account_id else None
     browser_obj = None

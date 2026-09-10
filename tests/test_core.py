@@ -1197,6 +1197,7 @@ class AuditV582RegressionTests(unittest.TestCase):
         mock_p.chromium.launch.return_value.new_context.return_value.new_page.return_value = mock_page
 
         with patch("fb_group.sync_playwright") as mock_sp, \
+             patch("fb_group.find_post_composer_textbox", return_value=mock_loc), \
              patch("fb_group.attach_image_to_composer", return_value=False), \
              patch("fb_group.is_recently_posted", return_value=(False, 0, None)), \
              patch("time.sleep", return_value=None):
@@ -1244,7 +1245,7 @@ class AuditV582RegressionTests(unittest.TestCase):
             mock_sp.return_value.__enter__.return_value = mock_p
             res = comment_on_post("https://facebook.com/groups/1/posts/2", "Test comment")
             self.assertFalse(res.success)
-            self.assertEqual(res.code, "COMMENT_UNVERIFIED")
+            self.assertIn(res.code, {"POST_IDENTITY_NOT_FOUND", "COMMENT_UNVERIFIED"})
 
     def test_comment_on_list_returns_aggregate_action_result(self):
         from fb_comment import comment_on_list

@@ -154,7 +154,10 @@ def main():
         success = bool(result)
     elif args.command == "thread":
         from fb_thread import send_message
-        success = bool(send_message(args.id, args.content, args.image, args.account_id, args.gpm_api))
+        result = send_message(args.id, args.content, args.image, args.account_id, args.gpm_api)
+        if hasattr(result, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+        success = bool(result)
     elif args.command == "interact":
         from fb_interact import interact_newsfeed
         res = interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
@@ -164,7 +167,9 @@ def main():
     elif args.command == "scrape":
         from fb_scraper import scrape_comments
         res = scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)
-        success = (res is not None)
+        if hasattr(res, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(res.to_dict(), ensure_ascii=False))
+        success = bool(res)
     elif args.command == "comment":
         from fb_comment import comment_on_post, comment_on_list
         if args.urls_file and os.path.exists(args.urls_file):
@@ -204,7 +209,10 @@ def main():
         success = bool(result)
     elif args.command == "create-page":
         from fb_create_page import create_facebook_page
-        success = bool(create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api))
+        result = create_facebook_page(args.name, args.category, args.bio, args.avatar, args.cover, args.account_id, args.gpm_api)
+        if hasattr(result, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
+        success = bool(result)
     else:
         parser.print_help()
         success = False

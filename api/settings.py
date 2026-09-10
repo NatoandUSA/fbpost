@@ -4,13 +4,13 @@ import os
 from pathlib import Path
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
-from paths import DB_FILE, get_version
+from paths import DB_FILE, DATA_DIR, get_version
 from db import backup_db
 from repositories.settings_repo import SettingsRepository
 
 settings_bp = Blueprint("settings", __name__)
-STATE_FILE = "state.json"
-AUTH_STATUS_FILE = "auth_status.json"
+STATE_FILE = str(DATA_DIR / "state.json")
+AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 
 
 def load_config():

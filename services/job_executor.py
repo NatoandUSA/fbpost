@@ -24,6 +24,7 @@ from services.process_runner import ProcessRunner
 from repositories.job_repo import JobRepository
 from repositories.settings_repo import SettingsRepository
 from repositories.activity_repo import ActivityRepository
+from repositories.reconcile_repo import ReconcileRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
 def load_config():
@@ -85,6 +86,7 @@ def execute_automation_task(
     cfg = load_config()
     on_line(f"RUNTIME_IDENTITY:v{get_version()}|root={BASE_DIR.resolve()}|main={(BASE_DIR / 'main.py').resolve()}\n")
     account_id = data.get("accountId")
+    reconcile_record_id = str(data.get("reconcileRecordId") or "").strip()
     gpm_api = data.get("gpmApiUrl") or cfg.get("gpm_api_url", "http://127.0.0.1:19995")
 
     rotate_accounts = data.get("rotateAccounts", False)
@@ -444,6 +446,7 @@ def execute_automation_task(
                     build_cmd_for_account(target_id)
                     + ["join-group", "--keywords", str(input_targets), "--limit", str(limit)]
                     + feed_flag
+                    + rules_flag
                     + delay_args
                 )
                 join_single_res = {}
@@ -517,6 +520,9 @@ def execute_automation_task(
 
         total = len(comment_tasks)
         batch_failed = False
+        comment_verified_count = 0
+        comment_unverified_count = 0
+        comment_failed_count = 0
         if job_repo:
             job_repo.update_job(job_id, progress_total=total)
 
@@ -575,16 +581,17 @@ def execute_automation_task(
                         pass
 
             ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_comment_line, cwd=str(BASE_DIR))
-            outcome = "finished" if ret == 0 else "failed"
-            if ret != 0:
-                batch_failed = True
             comment_state = str(structured_comment_res.get("state") or "")
+            comment_code = str(structured_comment_res.get("code") or "")
             if comment_state == "commented" and ret == 0:
+                comment_verified_count += 1; outcome = "commented"
                 workflow_finish_task(wf_task_id, state="completed", submission_status="SUBMIT_CONFIRMED", verification_status="COMMENT_VERIFIED", result_url=structured_comment_res.get("result_url") or target_url)
-            elif comment_state == "unverified" or structured_comment_res.get("code") in {"COMMENT_UNVERIFIED", "SUBMIT_UNVERIFIED"}:
-                workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="COMMENT_UNVERIFIED", result_url=target_url, error_code=structured_comment_res.get("code") or "COMMENT_UNVERIFIED", error_message=structured_comment_res.get("message") or "Comment submitted but not verified.")
+            elif comment_state == "unverified" or comment_code in {"COMMENT_UNVERIFIED", "SUBMIT_UNVERIFIED"}:
+                comment_unverified_count += 1; outcome = "unverified"; batch_failed = True
+                workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="COMMENT_UNVERIFIED", result_url=target_url, error_code=comment_code or "COMMENT_UNVERIFIED", error_message=structured_comment_res.get("message") or "Comment submitted but not verified.")
             else:
-                workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=structured_comment_res.get("code") or "COMMENT_FAILED", error_message=structured_comment_res.get("message") or "Comment failed before verified submission.")
+                comment_failed_count += 1; outcome = "failed_before_submit"; batch_failed = True
+                workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=comment_code or "COMMENT_FAILED", error_message=structured_comment_res.get("message") or "Comment failed before verified submission.")
             record_profile_activity(curr_acc_id, "comment", target=target_url, content=task_comment, outcome=outcome)
 
             if job_repo:
@@ -610,11 +617,60 @@ def execute_automation_task(
                 if not sleep_with_cancel(delay):
                     return False
 
+        on_line(f"📊 [Comment Summary] Verified {comment_verified_count} · Unverified {comment_unverified_count} · Failed Before Submit {comment_failed_count} · Total {total}.\n")
         on_line(f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n")
-        on_line("\n[Hoàn thành bình luận danh sách bài viết!]\n" if not batch_failed else "\n[Hoàn thành với một số lỗi!]\n")
+        on_line("\n[Hoàn thành bình luận danh sách bài viết!]\n" if not batch_failed else "\n[Hoàn thành với một số lỗi/chưa xác minh!]\n")
         return not batch_failed
 
-    # 7. POSTING (GROUP, PAGE, THREAD)
+    # 7. THREAD COMMAND — separate capability contract; never inherits post-only flags.
+    if cmd == "thread":
+        tasks = data.get("tasks", []) or []
+        if not tasks:
+            targets = data.get("targets", []) or []
+            content = str(data.get("content") or "")
+            tasks = [{"target": t, "content": content, "image": None} for t in targets]
+        if not tasks or len(tasks) > 100:
+            on_line("Error: Thread batch must contain 1-100 tasks.\nRUN_RESULT:failed\n")
+            return False
+        verified_count = unverified_count = failed_count = 0
+        if job_repo: job_repo.update_job(job_id, progress_total=len(tasks))
+        for i, task in enumerate(tasks):
+            if check_cancel(): return False
+            target=str(task.get("target") or "").strip(); text=str(task.get("content") or "").strip(); image=task.get("image")
+            if not target or (not text and not image):
+                failed_count += 1; on_line(f"❌ Thread {i+1}: thiếu target/content.\n"); continue
+            if image and not is_uploaded_image(image):
+                failed_count += 1; on_line(f"❌ Thread {i+1}: image path không hợp lệ.\n"); continue
+            curr_acc_id = accounts_pool[i % len(accounts_pool)].get("id") if rotate_accounts and accounts_pool else account_id
+            wf_task_id=workflow_start_task(job_id=job_id,action="thread",profile_id=curr_acc_id,target_url=target,metadata={"message_preview":text[:80]})
+            full_cmd=build_cmd_for_account(curr_acc_id)+["thread",target,text]
+            if image: full_cmd.extend(["--image",image])
+            result={}
+            def _capture_thread(line):
+                on_line(line); clean=(line or "").strip()
+                if clean.startswith("ACTION_RESULT:"):
+                    try: result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                    except Exception: pass
+            ret=process_runner.run_command_sync(full_cmd,job_id=job_id,on_line=_capture_thread,cwd=str(BASE_DIR))
+            state=str(result.get("state") or ""); code=str(result.get("code") or "")
+            if state=="messaged" and ret==0:
+                verified_count += 1; outcome="messaged"
+                workflow_finish_task(wf_task_id,state="completed",submission_status="SUBMIT_CONFIRMED",verification_status="MESSAGE_VERIFIED",result_url=result.get("result_url") or target)
+            elif state=="unverified" or code=="MESSAGE_UNVERIFIED":
+                unverified_count += 1; outcome="unverified"
+                workflow_finish_task(wf_task_id,state="unverified",phase="VERIFYING",submission_status="SUBMIT_CONFIRMED",verification_status="MESSAGE_UNVERIFIED",result_url=result.get("result_url") or target,error_code=code or "MESSAGE_UNVERIFIED",error_message=result.get("message") or "Message not verified")
+            else:
+                failed_count += 1; outcome="failed_before_submit"
+                workflow_finish_task(wf_task_id,state="failed",verification_status="FAILED",error_code=code or "MESSAGE_FAILED",error_message=result.get("message") or "Message failed")
+            record_profile_activity(curr_acc_id,"thread",target=target,content=text,outcome=outcome)
+            if job_repo: job_repo.update_job(job_id,progress_current=i+1)
+            if i < len(tasks)-1 and not sleep_with_cancel(random.randint(delay_min,delay_max)): return False
+        on_line(f"📊 [Thread Summary] Verified {verified_count} · Unverified {unverified_count} · Failed Before Submit {failed_count}.\n")
+        failed = failed_count > 0 or unverified_count > 0
+        on_line(f"RUN_RESULT:{'failed' if failed else 'finished'}\n")
+        return not failed
+
+    # 8. POSTING (GROUP, PAGE, RECONCILE)
     tasks = data.get("tasks", [])
     if not tasks:
         targets = data.get("targets", [])
@@ -834,6 +890,43 @@ def execute_automation_task(
             failed_before_submit_count += 1
             batch_failed = True
             outcome = "failed_before_submit"
+
+        # Durable reconciliation is created only after a real post submit becomes uncertain.
+        if cmd in ("group", "page") and action_state in ("submitted_unverified", "unverified"):
+            try:
+                rid = ReconcileRepository().enqueue(target, task_content, curr_acc_id, queue_item_id or None, delay_seconds=30)
+                on_line(f"🕒 [Durable Reconcile] Đã lên lịch 30s → 2m → 10m · id={rid[:10]}. Không repost.\n")
+            except Exception as recon_err:
+                on_line(f"⚠️ [Durable Reconcile] Không thể ghi lịch đối soát: {recon_err}\n")
+                batch_failed = True
+
+        # A scheduled reconcile advances its durable state after every read-only attempt and
+        # synchronizes the linked Publication Queue without re-claiming/reposting the item.
+        if cmd == "reconcile-post" and reconcile_record_id:
+            try:
+                durable_repo = ReconcileRepository()
+                durable_record = durable_repo.get_item(reconcile_record_id)
+                durable_state = durable_repo.finish_attempt(
+                    reconcile_record_id, action_state, structured_result.get("result_url") or "",
+                    structured_result.get("message") or ""
+                )
+                on_line(f"🧭 [Durable Reconcile] record={reconcile_record_id[:10]} → {durable_state}.\n")
+                linked_queue_id = str((durable_record or {}).get("queue_item_id") or "").strip()
+                if linked_queue_id:
+                    from repositories.campaign_repo import CampaignRepository
+                    queue_result_state = action_state if action_state in ("published", "pending") else ("manual_review" if durable_state == "manual_review" else "unverified")
+                    CampaignRepository().apply_reconcile_result(
+                        linked_queue_id, queue_result_state,
+                        structured_result.get("result_url") or "",
+                        structured_result.get("message") or ""
+                    )
+                    on_line(f"🔗 [Queue Sync] {linked_queue_id} → {queue_result_state}.\n")
+            except Exception as recon_err:
+                on_line(f"⚠️ [Durable Reconcile] Không thể cập nhật attempt/queue: {recon_err}\n")
+                batch_failed = True
+        elif cmd == "reconcile-post" and action_state not in ("published", "pending"):
+            # Manual reconcile must not surface a green success when nothing was verified.
+            batch_failed = True
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
         if action_state == "published" and ret == 0:
@@ -909,7 +1002,7 @@ def execute_automation_task(
     if batch_failed:
         on_line("\n[Batch completed: có lỗi trước submit; xem từng target để retry thủ công.]\n")
     elif unverified_count > 0:
-        on_line("\n[Batch completed: không repost các bài chưa xác minh; đã đưa vào luồng đối soát.]\n")
+        on_line("\n[Batch completed: không repost các bài chưa xác minh; durable reconcile đã được lên lịch.]\n")
     elif actual_runs == 0 and skipped_duplicates > 0:
         on_line("\n[Batch completed: 0 bài mới được gửi; tất cả mục tiêu đang bị khóa retry/đã xử lý gần đây.]\n")
     else:

@@ -5,8 +5,9 @@ import random
 import re
 from playwright.sync_api import sync_playwright
 from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult
+from paths import DATA_DIR
 
-STATE_FILE = "state.json"
+STATE_FILE = str(DATA_DIR / "state.json")
 
 def _canonicalize_comment_url(url):
     """Return a canonical Facebook post URL, or empty when the input is not a post identity."""

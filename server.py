@@ -286,7 +286,7 @@ def valid_vault_date(value):
 
 def scheduler_posted_count():
     try:
-        with open("scheduler_state.json", "r", encoding="utf-8") as f:
+        with open(DATA_DIR / "scheduler_state.json", "r", encoding="utf-8") as f:
             value = json.load(f)
         posted = value.get("posted", {}) if isinstance(value, dict) else {}
         return len(posted) if isinstance(posted, dict) else 0
@@ -294,8 +294,8 @@ def scheduler_posted_count():
         return 0
 
 
-STATE_FILE = "state.json"
-AUTH_STATUS_FILE = "auth_status.json"
+STATE_FILE = str(DATA_DIR / "state.json")
+AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 
 @app.route('/')
 def index():

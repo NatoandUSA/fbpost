@@ -14,10 +14,11 @@ from pathlib import Path
 import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 from fb_page_api import post_to_page
+from paths import DATA_DIR, LOG_DIR
 
-LOG_FILE = "scheduler.log"
-CONFIG_FILE = "config.json"
-STATE_FILE = "scheduler_state.json"
+LOG_FILE = str(LOG_DIR / "scheduler.log")
+CONFIG_FILE = str(DATA_DIR / "config.json")
+STATE_FILE = str(DATA_DIR / "scheduler_state.json")
 STATE_LOCK = threading.Lock()
 JOB_LOCK = threading.Lock()
 

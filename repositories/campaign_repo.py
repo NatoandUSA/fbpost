@@ -159,6 +159,41 @@ class CampaignRepository(BaseRepository):
                 recovered += 1
         return recovered
 
+    def apply_reconcile_result(self, item_id: str, result_state: str, result_url: str = "", error: str = ""):
+        """Apply a read-only reconcile result without re-claiming the publication task."""
+        allowed_states = {"unverified", "reconciling"}
+        with self.transaction() as conn:
+            row = conn.execute("SELECT raw_json, state FROM publication_jobs WHERE id = ?", (item_id,)).fetchone()
+            if not row:
+                return None
+            if row["state"] not in allowed_states:
+                return self.loads(row["raw_json"], {}) or {}
+            item = self.loads(row["raw_json"], {}) or {}
+            now = datetime.now().isoformat()
+            if result_state == "published":
+                to_state = "published"
+                item["published_at"] = now
+                item["result_url"] = result_url or item.get("result_url") or ""
+                item["error"] = None
+            elif result_state == "pending":
+                to_state = "pending"
+                item["result_url"] = result_url or item.get("result_url") or ""
+                item["error"] = None
+            elif result_state == "manual_review":
+                to_state = "manual_review"
+                item["error"] = error or "Đã hết 3 lượt đối soát tự động; cần kiểm tra thủ công, tuyệt đối không repost tự động."
+            else:
+                to_state = "unverified"
+                item["error"] = error or item.get("error") or "Chưa tìm thấy permalink sau đối soát."
+            item["state"] = to_state
+            item["updated_at"] = now
+            item.setdefault("audit", []).append({"at": now, "event": "durable_reconcile_result", "state": to_state})
+            conn.execute(
+                "UPDATE publication_jobs SET state=?, published_at=?, error=?, raw_json=? WHERE id=? AND state IN ('unverified','reconciling')",
+                (to_state, item.get("published_at"), item.get("error"), self.dumps(item), item_id),
+            )
+            return item
+
     # Manual Group Queue
     def list_manual_group_queue(self) -> List[Dict[str, Any]]:
         conn = self.get_conn()

@@ -20,7 +20,7 @@ from utils import (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 from paths import DATA_DIR
 JOINED_GROUPS_FILE = str(DATA_DIR / "joined_groups.json")
-STATE_FILE = os.path.join(BASE_DIR, "state.json")
+STATE_FILE = str(DATA_DIR / "state.json")
 
 COMMUNITY_GROUP_COMMENTS = [
     "Nhóm hoạt động sôi nổi và hữu ích quá ạ!",
@@ -314,19 +314,49 @@ def search_and_join_groups(
                     if is_direct_url:
                         # Direct URL mode: distinguish an existing membership/request from a true missing control.
                         existing_state = ""
-                        try:
-                            for state_btn in page.locator('div[role="button"], button').all():
-                                if not state_btn.is_visible():
-                                    continue
-                                state_text = f"{state_btn.inner_text() or ''} {state_btn.get_attribute('aria-label') or ''}".lower()
-                                if any(marker in state_text for marker in ["đã tham gia", "joined", "rời khỏi", "leave"]):
-                                    existing_state = "joined"
+                        # Facebook often hydrates the membership button after the rest of the
+                        # group header. Poll a fresh locator instead of trusting the first DOM pass.
+                        for membership_round in range(1, 4):
+                            try:
+                                state_controls = page.locator(
+                                    'div[role="banner"] div[role="button"], '
+                                    'div[role="main"] div[role="button"], button'
+                                ).all()
+                                for state_btn in state_controls:
+                                    if not state_btn.is_visible():
+                                        continue
+                                    state_text = f"{state_btn.inner_text() or ''} {state_btn.get_attribute('aria-label') or ''}".lower()
+                                    if any(marker in state_text for marker in ["đã tham gia", "joined", "rời khỏi", "leave"]):
+                                        existing_state = "joined"
+                                        break
+                                    if any(marker in state_text for marker in ["đã yêu cầu", "yêu cầu đã gửi", "requested", "hủy yêu cầu", "cancel request"]):
+                                        existing_state = "pending"
+                                        break
+                                if existing_state:
+                                    print(f"✅ [Join Existing Verify] round={membership_round} state={existing_state}")
                                     break
-                                if any(marker in state_text for marker in ["đã yêu cầu", "yêu cầu đã gửi", "requested", "hủy yêu cầu", "cancel request"]):
-                                    existing_state = "pending"
-                                    break
-                        except Exception:
-                            existing_state = ""
+                            except Exception:
+                                pass
+                            time.sleep(1.5)
+                        if not existing_state:
+                            # One reload is safe/read-only and catches late Facebook hydration.
+                            try:
+                                page.reload(wait_until="domcontentloaded", timeout=30000)
+                                time.sleep(3.0)
+                                for state_btn in page.locator('div[role="banner"] div[role="button"], div[role="main"] div[role="button"], button').all():
+                                    if not state_btn.is_visible():
+                                        continue
+                                    state_text = f"{state_btn.inner_text() or ''} {state_btn.get_attribute('aria-label') or ''}".lower()
+                                    if any(marker in state_text for marker in ["đã tham gia", "joined", "rời khỏi", "leave"]):
+                                        existing_state = "joined"
+                                        break
+                                    if any(marker in state_text for marker in ["đã yêu cầu", "yêu cầu đã gửi", "requested", "hủy yêu cầu", "cancel request"]):
+                                        existing_state = "pending"
+                                        break
+                                if existing_state:
+                                    print(f"✅ [Join Existing Verify] reload state={existing_state}")
+                            except Exception:
+                                pass
                         if existing_state:
                             record = {
                                 "group_name": kw, "keyword": kw, "url": target_url,
@@ -521,7 +551,7 @@ def search_and_join_groups(
                         except Exception as reload_err:
                             print(f"⚠️ [Join Verify] reload scan lỗi: {reload_err}")
                     if not is_confirmed:
-                        print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng Facebook chưa cho state xác minh; giữ unverified để tránh gửi lặp.")
+                        print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng Facebook chưa cho state xác minh; giữ unverified để tránh gửi lặp; vẫn tính vào giới hạn phiên.")
                         continue
 
                     record = {
