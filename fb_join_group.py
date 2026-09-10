@@ -473,29 +473,55 @@ def search_and_join_groups(
                         print(f"❌ Facebook báo lỗi khi tham gia nhóm: {block_alert.inner_text()[:100]}")
                         continue
 
-                    # Xác thực nút bấm đã chuyển trạng thái thành công
-                    time.sleep(random.uniform(1.5, 2.5))
+                    # Xác thực state bằng DOM MỚI thay vì locator cũ (Facebook thường thay node header sau click).
                     state = "pending"
                     is_confirmed = False
-                    try:
-                        btn_text = (btn_to_click.inner_text() or "").strip().lower()
-                        btn_aria = (btn_to_click.get_attribute("aria-label") or "").strip().lower()
-                        combined_after = f"{btn_text} {btn_aria}"
-                        if any(kw_sub in combined_after for kw_sub in ["đã tham gia", "joined", "truy cập", "rời khỏi", "leave"]):
-                            state = "joined"
-                            is_confirmed = True
-                        elif any(kw_sub in combined_after for kw_sub in ["đã gửi", "requested", "hủy yêu cầu", "cancel request", "đã yêu cầu"]):
-                            state = "pending"
-                            is_confirmed = True
-                        elif any(kw_sub in combined_after for kw_sub in ["tham gia", "join"]) and not any(kw_sub in combined_after for kw_sub in ["hủy", "cancel"]):
-                            print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng UI chưa xác minh trạng thái; vẫn tính vào giới hạn phiên để tránh gửi quá nhiều yêu cầu.")
-                            is_confirmed = False
-                        else:
-                            is_confirmed = False
-                    except Exception:
-                        is_confirmed = False
-
+                    state_markers_joined = ["đã tham gia", "joined", "truy cập nhóm", "rời khỏi nhóm", "leave group"]
+                    state_markers_pending = ["đã gửi", "requested", "hủy yêu cầu", "cancel request", "đã yêu cầu"]
+                    for verify_round in range(1, 6):
+                        page.wait_for_timeout(1200)
+                        try:
+                            visible_states = []
+                            for state_btn in page.locator('div[role="button"], button').all():
+                                if not state_btn.is_visible():
+                                    continue
+                                txt = (state_btn.inner_text() or "").strip().lower()
+                                aria = (state_btn.get_attribute("aria-label") or "").strip().lower()
+                                combined_state = f"{txt} {aria}"
+                                visible_states.append(combined_state)
+                                if any(m in combined_state for m in state_markers_joined):
+                                    state = "joined"
+                                    is_confirmed = True
+                                    break
+                                if any(m in combined_state for m in state_markers_pending):
+                                    state = "pending"
+                                    is_confirmed = True
+                                    break
+                            if is_confirmed:
+                                print(f"✅ [Join Verify] round={verify_round} state={state}")
+                                break
+                        except Exception as verify_err:
+                            print(f"⚠️ [Join Verify] round={verify_round} DOM scan lỗi: {verify_err}")
                     if not is_confirmed:
+                        try:
+                            page.reload(wait_until="domcontentloaded", timeout=35000)
+                            page.wait_for_timeout(2500)
+                            for state_btn in page.locator('div[role="button"], button').all():
+                                if not state_btn.is_visible():
+                                    continue
+                                txt = (state_btn.inner_text() or "").strip().lower()
+                                aria = (state_btn.get_attribute("aria-label") or "").strip().lower()
+                                combined_state = f"{txt} {aria}"
+                                if any(m in combined_state for m in state_markers_joined):
+                                    state = "joined"; is_confirmed = True; break
+                                if any(m in combined_state for m in state_markers_pending):
+                                    state = "pending"; is_confirmed = True; break
+                            if is_confirmed:
+                                print(f"✅ [Join Verify] reload state={state}")
+                        except Exception as reload_err:
+                            print(f"⚠️ [Join Verify] reload scan lỗi: {reload_err}")
+                    if not is_confirmed:
+                        print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng Facebook chưa cho state xác minh; giữ unverified để tránh gửi lặp.")
                         continue
 
                     record = {

@@ -52,11 +52,28 @@ def _locate_target_post_article(page, canonical_url):
                     return article
             except Exception:
                 continue
+    # Facebook 2026 thường render permalink trong modal "Bài viết của ..." và để feed phía sau.
+    # Nếu URL hiện tại vẫn khóa đúng post_id, modal visible là scope an toàn hơn các article nền.
+    try:
+        current_url = page.url or ""
+        if post_id in current_url:
+            dialogs = page.locator("div[role='dialog']")
+            for idx in range(min(dialogs.count(), 8)):
+                dlg = dialogs.nth(idx)
+                if not dlg.is_visible(timeout=400):
+                    continue
+                aria = (dlg.get_attribute("aria-label") or "").strip().lower()
+                text = (dlg.inner_text() or "").strip().lower()[:160]
+                if ("bài viết của" in text or "post by" in text or not aria):
+                    print(f"[Comment Resolver] post_identity={post_id} scope=permalink-dialog")
+                    return dlg
+    except Exception:
+        pass
     visible = []
     for idx in range(min(page.locator("div[role='article']").count(), 8)):
         try:
             art = page.locator("div[role='article']").nth(idx)
-            if art.is_visible(timeout=400):
+            if art.is_visible(timeout=400) and not art.locator("[data-visualcompletion='loading-state']").count():
                 visible.append(art)
         except Exception:
             pass
@@ -183,26 +200,39 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
 
             # Danh sách các bộ chọn tìm ô comment linh hoạt cho FB 2026
             selectors = [
-                "div[role='textbox'][aria-label*='bình luận' i]",
+                "div[role='textbox'][contenteditable='true'][data-lexical-editor='true']",
+                "div[role='textbox'][contenteditable='true']",
+                "div[role='textbox'][aria-label*='bình luận']",
                 "div[role='textbox'][aria-label*='comment' i]",
-                "div[role='textbox'][aria-placeholder*='bình luận' i]",
+                "div[role='textbox'][aria-placeholder*='bình luận']",
                 "div[role='textbox'][aria-placeholder*='comment' i]"
             ]
 
-            for selector in selectors:
-                candidates = post_scope.locator(selector)
-                count = candidates.count()
-                for i in range(count):
-                    el = candidates.nth(i)
-                    if el.is_visible():
-                        comment_input = el
+            # Facebook có thể mount Lexical editor trễ vài giây sau khi modal permalink hiện ra.
+            for wait_round in range(1, 9):
+                for selector in selectors:
+                    candidates = post_scope.locator(selector)
+                    count = candidates.count()
+                    for i in range(count):
+                        el = candidates.nth(i)
+                        try:
+                            if el.is_visible(timeout=300):
+                                comment_input = el
+                                break
+                        except Exception:
+                            pass
+                    if comment_input:
                         break
                 if comment_input:
+                    print(f"[Comment Resolver] textbox=found wait_round={wait_round}")
                     break
+                page.wait_for_timeout(900)
 
             # Nếu chưa thấy ô textbox, có thể cần click nút "Viết bình luận" hoặc "Bình luận"
             if not comment_input:
                 open_comment_buttons = [
+                    "div[role='button'][aria-label='Viết bình luận']",
+                    "div[role='button'][aria-label='Write a comment']",
                     "div[role='button']:has-text('Viết bình luận')",
                     "div[role='button']:has-text('Write a comment')",
                     "div[role='button']:has-text('Bình luận')",
@@ -218,12 +248,20 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                         time.sleep(random.uniform(1.5, 3.0))
                         break
 
-                # Thử tìm lại ô textbox sau khi click
-                for selector in selectors:
-                    el = post_scope.locator(selector).first
-                    if el.is_visible():
-                        comment_input = el
+                # Thử tìm lại ô textbox sau khi click; chờ editor mount trong đúng post_scope.
+                for wait_round in range(1, 7):
+                    for selector in selectors:
+                        el = post_scope.locator(selector).first
+                        try:
+                            if el.is_visible(timeout=300):
+                                comment_input = el
+                                break
+                        except Exception:
+                            pass
+                    if comment_input:
+                        print(f"[Comment Resolver] textbox=found-after-open wait_round={wait_round}")
                         break
+                    page.wait_for_timeout(800)
 
             if not comment_input or not comment_input.is_visible():
                 print("❌ Không tìm thấy ô bình luận trên bài viết này (Bài viết có thể bị tắt tính năng bình luận hoặc yêu cầu phê duyệt).")
