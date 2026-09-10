@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/app-info');
             const data = await res.json();
-            const verText = data.version ? `v${data.version}` : 'v6.1.0';
+            const verText = data.version ? `v${data.version}` : 'v6.1.1';
             const buildText = data.built_at ? `Build: ${data.built_at}` : 'Build: 2026-09-08';
             
             const sidebarVer = document.getElementById('sidebar-version-badge');
@@ -4987,7 +4987,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {
-        let ver = 'v6.1.0';
+        let ver = 'v6.1.1';
         let build = '2026-09-09';
         try {
             const res = await fetch('/api/app-info');

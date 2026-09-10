@@ -346,6 +346,23 @@ class V610EndToEndTruthTests(unittest.TestCase):
         self.assertIn("post_scope.locator(\"div[role='article']\")", src)
         self.assertNotIn("document.querySelectorAll('div[role=\"article\"], ul", src)
 
+    def test_comment_surface_supports_exact_permalink_portal_without_global_fallback(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "fb_comment.py").read_text(encoding="utf-8")
+        self.assertIn("def _comment_search_roots", src)
+        self.assertIn("len(exact_dialogs) == 1", src)
+        self.assertIn("dialog.contains(scope)", src)
+        self.assertIn("owns_permalink", src)
+        self.assertIn("post_id not in (page.url or \"\")", src)
+        self.assertIn("def _find_comment_input", src)
+        self.assertIn("data-lexical-editor", src)
+        self.assertNotIn("page.locator(\"div[role='textbox']\").first", src)
+
+    def test_comment_input_failure_captures_evidence(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "fb_comment.py").read_text(encoding="utf-8")
+        self.assertIn('_save_comment_evidence(page, "COMMENT_INPUT_NOT_FOUND")', src)
+
     def test_batch_summary_reports_truthful_post_states(self):
         root = Path(__file__).resolve().parents[1]
         src = (root / "services" / "job_executor.py").read_text(encoding="utf-8")

@@ -87,6 +87,107 @@ def _locate_target_post_article(page, canonical_url):
     print(f"[Comment Resolver] post_identity={post_id} scope=not-found")
     return None
 
+
+
+def _comment_search_roots(page, post_scope, canonical_url):
+    """Return exact-post-safe roots that may own Facebook's portalled comment editor."""
+    roots = [post_scope]
+    ident = _post_identity(canonical_url)
+    post_id = (ident.get("post_id") or "").strip()
+    if not post_id or post_id not in (page.url or ""):
+        return roots
+    try:
+        dialogs = page.locator("div[role='dialog']")
+        exact_dialogs = []
+        for idx in range(min(dialogs.count(), 8)):
+            dialog = dialogs.nth(idx)
+            try:
+                if not dialog.is_visible(timeout=250):
+                    continue
+                scope_handle = post_scope.element_handle()
+                owns_scope = bool(scope_handle) and dialog.evaluate(
+                    "(dialog, scope) => dialog.contains(scope)", scope_handle
+                )
+                owns_permalink = dialog.locator(f"a[href*='{post_id}']").count() > 0
+                if owns_scope or owns_permalink:
+                    exact_dialogs.append(dialog)
+            except Exception:
+                pass
+        # Only an unambiguous dialog tied to this exact post may own a portalled editor.
+        if len(exact_dialogs) == 1:
+            roots.append(exact_dialogs[0])
+    except Exception:
+        pass
+    return roots
+
+
+def _find_comment_input(page, post_scope, canonical_url, wait_rounds=8):
+    """Find a visible writable editor without escaping exact-post-safe roots."""
+    selectors = [
+        "div[role='textbox'][contenteditable='true'][data-lexical-editor='true']",
+        "div[role='textbox'][contenteditable='true']",
+        "[contenteditable='true'][data-lexical-editor='true']",
+        "[contenteditable='true'][aria-label*='comment' i]",
+        "[contenteditable='true'][aria-placeholder*='comment' i]",
+        "[contenteditable='true'][aria-label*='bình luận' i]",
+        "[contenteditable='true'][aria-placeholder*='bình luận' i]",
+    ]
+    for wait_round in range(1, max(1, int(wait_rounds)) + 1):
+        roots = _comment_search_roots(page, post_scope, canonical_url)
+        for root_idx, root in enumerate(roots):
+            for selector in selectors:
+                candidates = root.locator(selector)
+                for idx in range(min(candidates.count(), 16)):
+                    el = candidates.nth(idx)
+                    try:
+                        if not el.is_visible(timeout=250):
+                            continue
+                        editable = (el.get_attribute("contenteditable") or "").lower()
+                        if editable != "true":
+                            continue
+                        print(f"[Comment Resolver] textbox=found root={root_idx} wait_round={wait_round}")
+                        return el
+                    except Exception:
+                        pass
+        if wait_round < wait_rounds:
+            page.wait_for_timeout(800)
+    return None
+
+
+def _open_comment_surface(page, post_scope, canonical_url):
+    """Activate comment UI inside the exact post and wait for a portalled/lazy editor."""
+    open_comment_buttons = [
+        "div[role='button'][aria-label='Write a comment']",
+        "div[role='button'][aria-label*='comment' i]",
+        "div[role='button'][aria-label*='bình luận' i]",
+        "div[role='button']:has-text('Write a comment')",
+        "div[role='button']:has-text('Comment')",
+        "div[role='button']:has-text('Bình luận')",
+    ]
+    for selector in open_comment_buttons:
+        candidates = post_scope.locator(selector)
+        for idx in range(min(candidates.count(), 12)):
+            btn = candidates.nth(idx)
+            try:
+                if not btn.is_visible(timeout=250):
+                    continue
+                try:
+                    btn.scroll_into_view_if_needed(timeout=1200)
+                except Exception:
+                    pass
+                try:
+                    btn.click(timeout=1800)
+                except Exception:
+                    # Transparent overlays are common; DOM click stays within exact scope.
+                    btn.evaluate("e => e.click()")
+                page.wait_for_timeout(900)
+                found = _find_comment_input(page, post_scope, canonical_url, wait_rounds=6)
+                if found is not None:
+                    return found
+            except Exception:
+                pass
+    return _find_comment_input(page, post_scope, canonical_url, wait_rounds=4)
+
 def _save_comment_evidence(page, code):
     try:
         from paths import LOG_DIR
@@ -198,78 +299,22 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 except Exception as e:
                     print(f"⚠️ Bỏ qua bước tương tác cảm xúc: {e}")
 
-            # 2. Tìm ô nhập bình luận
-            print("🔍 Đang tìm ô bình luận...")
-            comment_input = None
+            # 2. Resolve the Facebook 2026 comment surface. The editor may be
+            # lazy-mounted or portalled to the single permalink dialog, so search
+            # only exact-post-safe roots and never fall back to arbitrary page DOM.
+            print("[Comment Resolver] locating comment surface...")
+            comment_input = _find_comment_input(page, post_scope, canonical_url, wait_rounds=8)
+            if comment_input is None:
+                comment_input = _open_comment_surface(page, post_scope, canonical_url)
 
-            # Danh sách các bộ chọn tìm ô comment linh hoạt cho FB 2026
-            selectors = [
-                "div[role='textbox'][contenteditable='true'][data-lexical-editor='true']",
-                "div[role='textbox'][contenteditable='true']",
-                "div[role='textbox'][aria-label*='bình luận']",
-                "div[role='textbox'][aria-label*='comment' i]",
-                "div[role='textbox'][aria-placeholder*='bình luận']",
-                "div[role='textbox'][aria-placeholder*='comment' i]"
-            ]
-
-            # Facebook có thể mount Lexical editor trễ vài giây sau khi modal permalink hiện ra.
-            for wait_round in range(1, 9):
-                for selector in selectors:
-                    candidates = post_scope.locator(selector)
-                    count = candidates.count()
-                    for i in range(count):
-                        el = candidates.nth(i)
-                        try:
-                            if el.is_visible(timeout=300):
-                                comment_input = el
-                                break
-                        except Exception:
-                            pass
-                    if comment_input:
-                        break
-                if comment_input:
-                    print(f"[Comment Resolver] textbox=found wait_round={wait_round}")
-                    break
-                page.wait_for_timeout(900)
-
-            # Nếu chưa thấy ô textbox, có thể cần click nút "Viết bình luận" hoặc "Bình luận"
-            if not comment_input:
-                open_comment_buttons = [
-                    "div[role='button'][aria-label='Viết bình luận']",
-                    "div[role='button'][aria-label='Write a comment']",
-                    "div[role='button']:has-text('Viết bình luận')",
-                    "div[role='button']:has-text('Write a comment')",
-                    "div[role='button']:has-text('Bình luận')",
-                    "div[role='button']:has-text('Comment')",
-                    "div[aria-label*='bình luận' i][role='button']",
-                    "div[aria-label*='comment' i][role='button']"
-                ]
-                for btn_sel in open_comment_buttons:
-                    btn = post_scope.locator(btn_sel).first
-                    if btn.is_visible():
-                        print("👉 Click mở ô bình luận...")
-                        btn.click()
-                        time.sleep(random.uniform(1.5, 3.0))
-                        break
-
-                # Thử tìm lại ô textbox sau khi click; chờ editor mount trong đúng post_scope.
-                for wait_round in range(1, 7):
-                    for selector in selectors:
-                        el = post_scope.locator(selector).first
-                        try:
-                            if el.is_visible(timeout=300):
-                                comment_input = el
-                                break
-                        except Exception:
-                            pass
-                    if comment_input:
-                        print(f"[Comment Resolver] textbox=found-after-open wait_round={wait_round}")
-                        break
-                    page.wait_for_timeout(800)
-
-            if not comment_input or not comment_input.is_visible():
-                print("❌ Không tìm thấy ô bình luận trên bài viết này (Bài viết có thể bị tắt tính năng bình luận hoặc yêu cầu phê duyệt).")
-                return ActionResult(success=False, code="COMMENT_INPUT_NOT_FOUND", message="Không tìm thấy ô bình luận trên bài viết này.", target_url=post_url)
+            if comment_input is None:
+                evidence = _save_comment_evidence(page, "COMMENT_INPUT_NOT_FOUND")
+                print("[Comment Resolver] textbox=not-found after exact-scope lazy/portal search")
+                return ActionResult(
+                    success=False, code="COMMENT_INPUT_NOT_FOUND",
+                    message="Không tìm thấy ô bình luận trong exact-post scope.",
+                    target_url=post_url, metadata={"evidence_path": evidence}
+                )
 
             # 3. Focus và gõ nội dung bình luận (dùng Shift+Enter cho newline để không submit sớm)
             print(f"💬 Đang gõ nội dung bình luận: \"{parsed_comment}\"")
