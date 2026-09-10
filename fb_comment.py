@@ -36,52 +36,55 @@ def _post_identity(url):
     return {"group_id": "", "post_id": m.group(1)} if m else {"group_id": "", "post_id": ""}
 
 def _locate_target_post_article(page, canonical_url):
+    """Resolve the exact target-post DOM scope and fail closed on ambiguity."""
     ident = _post_identity(canonical_url)
-    post_id = ident.get("post_id") or ""
+    post_id = (ident.get("post_id") or "").strip()
     if not post_id:
         return None
+
     selectors = [
-        f"a[href*='/posts/{post_id}']", f"a[href*='/permalink/{post_id}']",
-        f"a[href*='story_fbid={post_id}']", f"a[href*='fbid={post_id}']"
+        f"a[href*='/posts/{post_id}']",
+        f"a[href*='/permalink/{post_id}']",
+        f"a[href*='story_fbid={post_id}']",
+        f"a[href*='fbid={post_id}']",
     ]
     for selector in selectors:
-        for idx in range(min(page.locator(selector).count(), 12)):
+        locator = page.locator(selector)
+        for idx in range(min(locator.count(), 12)):
             try:
-                article = page.locator(selector).nth(idx).locator("xpath=ancestor::div[@role='article'][1]")
+                article = locator.nth(idx).locator("xpath=ancestor::div[@role='article'][1]")
                 if article.count() and article.is_visible(timeout=800):
-                    print(f"[Comment Resolver] post_identity={post_id} article=matched")
+                    print(f"[Comment Resolver] post_identity={post_id} scope=identity-article")
                     return article
             except Exception:
                 continue
-    # Facebook 2026 thường render permalink trong modal "Bài viết của ..." và để feed phía sau.
-    # Nếu URL hiện tại vẫn khóa đúng post_id, modal visible là scope an toàn hơn các article nền.
-    try:
-        current_url = page.url or ""
-        if post_id in current_url:
-            dialogs = page.locator("div[role='dialog']")
-            for idx in range(min(dialogs.count(), 8)):
-                dlg = dialogs.nth(idx)
-                if not dlg.is_visible(timeout=400):
-                    continue
-                aria = (dlg.get_attribute("aria-label") or "").strip().lower()
-                text = (dlg.inner_text() or "").strip().lower()[:160]
-                if ("bài viết của" in text or "post by" in text or not aria):
-                    print(f"[Comment Resolver] post_identity={post_id} scope=permalink-dialog")
-                    return dlg
-    except Exception:
-        pass
-    visible = []
-    for idx in range(min(page.locator("div[role='article']").count(), 8)):
+
+    deadline = time.monotonic() + 12.0
+    while time.monotonic() < deadline:
         try:
-            art = page.locator("div[role='article']").nth(idx)
-            if art.is_visible(timeout=400) and not art.locator("[data-visualcompletion='loading-state']").count():
-                visible.append(art)
+            current_url = page.url or ""
+            if post_id not in current_url:
+                break
+            dialogs = page.locator("div[role='dialog']")
+            visible_dialogs = []
+            for idx in range(min(dialogs.count(), 8)):
+                try:
+                    dialog = dialogs.nth(idx)
+                    if dialog.is_visible(timeout=300):
+                        visible_dialogs.append(dialog)
+                except Exception:
+                    continue
+            if len(visible_dialogs) == 1:
+                print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog")
+                return visible_dialogs[0]
+            if len(visible_dialogs) > 1:
+                print(f"[Comment Resolver] post_identity={post_id} scope=ambiguous-dialogs count={len(visible_dialogs)}")
+                return None
         except Exception:
             pass
-    if len(visible) == 1:
-        print(f"[Comment Resolver] post_identity={post_id} article=single-visible-fallback")
-        return visible[0]
-    print(f"[Comment Resolver] post_identity={post_id} article=not-found visible_articles={len(visible)}")
+        time.sleep(0.35)
+
+    print(f"[Comment Resolver] post_identity={post_id} scope=not-found")
     return None
 
 def _save_comment_evidence(page, code):
@@ -272,9 +275,15 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             print(f"💬 Đang gõ nội dung bình luận: \"{parsed_comment}\"")
             comment_input.scroll_into_view_if_needed()
             time.sleep(random.uniform(0.8, 1.5))
-            comment_input.click()
-            time.sleep(random.uniform(0.5, 1.0))
-            
+            # Facebook 2026 may place a transparent overlay above a visible Lexical
+            # editor. DOM focus/force fallback in human_type is safer than a normal
+            # pointer click, which can wait the full page timeout on interception.
+            try:
+                comment_input.focus(timeout=2000)
+            except Exception:
+                pass
+            time.sleep(random.uniform(0.3, 0.7))
+
             human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
             time.sleep(random.uniform(1.0, 2.0))
 
@@ -335,21 +344,40 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                         time.sleep(1.0)
                 print(f"[Comment Resolver] verify_in_target_post={'1' if comment_verified else '0'} post_id={_post_identity(canonical_url).get('post_id')}")
 
-            if not comment_verified:
-                print(f"⚠️ Bình luận đã nhấn gửi nhưng không thể xác thực hiển thị trên bài viết: {post_url}")
+            # Immediate DOM appearance is not enough: Facebook may echo editor text
+            # before the comment is durably persisted. Reopen the permalink and require
+            # the marker to exist again inside the exact post scope.
+            persisted_verified = False
+            if comment_verified and check_snippet:
+                try:
+                    page.goto(canonical_url, wait_until="domcontentloaded", timeout=35000)
+                    page.wait_for_timeout(3500)
+                    persisted_scope = _locate_target_post_article(page, canonical_url)
+                    if persisted_scope is not None:
+                        persisted_matches = persisted_scope.get_by_text(check_snippet, exact=False)
+                        for idx in range(min(persisted_matches.count(), 12)):
+                            if persisted_matches.nth(idx).is_visible(timeout=500):
+                                persisted_verified = True
+                                break
+                except Exception:
+                    persisted_verified = False
+                print(f"[Comment Resolver] verify_after_reopen={'1' if persisted_verified else '0'} post_id={_post_identity(canonical_url).get('post_id')}")
+
+            if not persisted_verified:
+                print(f"⚠️ Bình luận chưa được xác thực bền vững sau khi mở lại bài viết: {post_url}")
                 evidence = _save_comment_evidence(page, "COMMENT_UNVERIFIED")
                 return ActionResult(
                     success=False, code="COMMENT_UNVERIFIED", state="unverified",
-                    message="Bình luận đã gửi nhưng không tìm thấy hiển thị trên bài viết.",
+                    message="Đã thử gửi bình luận nhưng không xác thực được sau khi mở lại bài viết.",
                     target_url=post_url, metadata={"evidence_path": evidence}
                 )
 
             evidence = _save_comment_evidence(page, "COMMENT_VERIFIED")
-            print("✅ Đã bình luận bài viết thành công và xác thực hiển thị!")
+            print("✅ COMMENT_VERIFIED: bình luận tồn tại sau khi mở lại đúng permalink.")
             return ActionResult(
-                success=True, code="SUCCESS", state="commented",
-                message="Đã bình luận bài viết thành công!", target_url=post_url, result_url=post_url,
-                metadata={"evidence_path": evidence}
+                success=True, code="COMMENT_VERIFIED", state="commented",
+                message="Đã bình luận và xác thực bền vững trên đúng bài viết.", target_url=post_url, result_url=post_url,
+                metadata={"evidence_path": evidence, "verification_status": "COMMENT_VERIFIED"}
             )
 
     except Exception as e:
