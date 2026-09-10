@@ -33,3 +33,10 @@ Base commit: `496eb0191b753ed50d464bed6699d683dff0be41`
 8. Only then promote RC to final production deploy/E2E and final release artifact.
 
 Do not repost marker `FB-AUTO LAUNCH RC 2026-09-10 19:28`.
+
+## RC checkpoint / temporary deploy artifact
+- Code checkpoint commit: `a848c9c68ddf4625e4afd5fc5c2f0b3ac8b9ea33` (`Harden exact post comment verification gate`).
+- Portable RC built as `release/artifacts/FB-Automation-Portable-v6.1.0-Windows-x64.zip`.
+- SHA256: `096FAE08A6EF503A448994B707FDEA6A98109553B21410206588E79A57542CCA`.
+- Staging bundle smoke-started independently on `127.0.0.1:5011`; root HTTP returned 200 with the bundled application UI.
+- Smoke server was stopped after verification; this is a temporary RC deploy check, not final production promotion.
