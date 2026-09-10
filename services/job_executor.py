@@ -169,6 +169,8 @@ def execute_automation_task(
         total_accs = len(target_accs)
         interact_failed = False
         interact_success_count = 0
+        interact_partial_count = 0
+        interact_no_action_count = 0
         interact_fail_count = 0
 
         if job_repo:
@@ -198,13 +200,33 @@ def execute_automation_task(
             if cur_comments:
                 full_cmd.extend(["--comments", cur_comments])
 
-            ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
-            outcome = "finished" if ret == 0 else "failed"
-            if ret != 0:
-                interact_failed = True
-                interact_fail_count += 1
-            else:
+            interact_result = {}
+            def _capture_interact_line(line):
+                on_line(line)
+                clean = (line or "").strip()
+                if clean.startswith("ACTION_RESULT:"):
+                    try:
+                        interact_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                    except Exception:
+                        pass
+
+            ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_interact_line, cwd=str(BASE_DIR))
+            state = str(interact_result.get("state") or "")
+            code = str(interact_result.get("code") or "")
+            if state == "completed" or code == "INTERACT_CONFIRMED":
                 interact_success_count += 1
+                outcome = "completed"
+            elif state == "partial" or code == "INTERACT_PARTIAL":
+                interact_partial_count += 1
+                outcome = "partial"
+            elif state == "no_action" or code == "INTERACT_NO_ACTION":
+                interact_no_action_count += 1
+                interact_failed = True
+                outcome = "no_action"
+            else:
+                interact_fail_count += 1
+                interact_failed = True
+                outcome = "failed"
             record_profile_activity(cur_id, "interact", target="newsfeed", content=cur_comments, outcome=outcome)
 
             if job_repo:
@@ -221,7 +243,7 @@ def execute_automation_task(
                 if not sleep_with_cancel(delay):
                     return False
 
-        on_line(f"📊 [Interact Summary] Thành công: {interact_success_count}/{total_accs} profile · Lỗi: {interact_fail_count}/{total_accs} profile.\n")
+        on_line(f"📊 [Interact Summary] Đạt mục tiêu: {interact_success_count} · Một phần: {interact_partial_count} · 0 hành động: {interact_no_action_count} · Lỗi runtime: {interact_fail_count} · Tổng: {total_accs}.\n")
         on_line(f"RUN_RESULT:{'failed' if interact_failed else 'finished'}\n")
         return not interact_failed
 
@@ -611,6 +633,10 @@ def execute_automation_task(
     batch_failed = False
     actual_runs = 0
     skipped_duplicates = 0
+    published_count = 0
+    pending_count = 0
+    unverified_count = 0
+    failed_before_submit_count = 0
     if job_repo:
         job_repo.update_job(job_id, progress_total=total)
 
@@ -767,12 +793,49 @@ def execute_automation_task(
 
         actual_runs += 1
         ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR))
-        outcome = "finished" if ret == 0 else "failed"
-        if ret != 0:
-            batch_failed = True
-        record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
+
+        # A submit can succeed before Facebook exposes a permalink. Reconcile read-only
+        # before declaring the task unresolved; never resubmit the post here.
+        initial_state = str(structured_result.get("state") or "")
+        if cmd in ("group", "page") and initial_state in ("submitted_unverified", "unverified"):
+            for reconcile_attempt, wait_seconds in enumerate((5, 15), 1):
+                on_line(f"🔎 [Auto Reconcile {reconcile_attempt}/2] Facebook đã nhận submit nhưng chưa có permalink; chờ {wait_seconds}s rồi đối soát read-only.\n")
+                if not sleep_with_cancel(wait_seconds):
+                    return False
+                reconcile_result = {}
+                def _capture_reconcile_line(line):
+                    on_line(line)
+                    clean = (line or "").strip()
+                    if clean.startswith("ACTION_RESULT:"):
+                        try:
+                            reconcile_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                        except Exception:
+                            pass
+                reconcile_cmd = build_cmd_for_account(curr_acc_id) + ["reconcile-post", target, task_content]
+                reconcile_ret = process_runner.run_command_sync(reconcile_cmd, job_id=job_id, on_line=_capture_reconcile_line, cwd=str(BASE_DIR))
+                reconciled_state = str(reconcile_result.get("state") or "")
+                if reconciled_state in ("published", "pending"):
+                    structured_result.clear(); structured_result.update(reconcile_result)
+                    ret = reconcile_ret
+                    on_line(f"✅ [Auto Reconcile] Đã xác định trạng thái Facebook: {reconciled_state}.\n")
+                    break
 
         action_state = str(structured_result.get("state") or "")
+        if action_state == "published":
+            published_count += 1
+            outcome = "published"
+        elif action_state == "pending":
+            pending_count += 1
+            outcome = "pending"
+        elif action_state in ("submitted_unverified", "unverified"):
+            unverified_count += 1
+            outcome = "submitted_unverified"
+        else:
+            failed_before_submit_count += 1
+            batch_failed = True
+            outcome = "failed_before_submit"
+        record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
+
         if action_state == "published" and ret == 0:
             workflow_finish_task(wf_task_id, state="published", submission_status="SUBMIT_CONFIRMED", verification_status="PERMALINK_FOUND", result_url=structured_result.get("result_url") or "")
         elif action_state == "pending":
@@ -813,11 +876,13 @@ def execute_automation_task(
             job_repo.update_job(job_id, progress_current=i + 1)
 
         if i < total - 1:
-            delay = 2 if cmd == "reconcile-post" else (5 if ret != 0 else random.randint(delay_min, delay_max))
+            delay = 2 if cmd == "reconcile-post" else (5 if outcome == "failed_before_submit" else random.randint(delay_min, delay_max))
             mins = delay // 60
             secs = delay % 60
-            if ret != 0:
-                on_line(f"\n⚠️ Target {i+1} lỗi trước khi hoàn tất. Nghỉ nhanh {delay}s trước target tiếp theo.\n")
+            if outcome == "failed_before_submit":
+                on_line(f"\n⚠️ Target {i+1} lỗi trước khi có bằng chứng submit. Nghỉ nhanh {delay}s trước target tiếp theo.\n")
+            elif outcome == "submitted_unverified":
+                on_line(f"\n🔎 Target {i+1} đã submit nhưng còn cần đối soát permalink. Giữ khóa chống duplicate và giãn cách {delay}s trước target tiếp theo.\n")
             else:
                 on_line(f"\n⏳ [Giãn cách] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
             if auto_join_groups and group_keywords:
@@ -835,9 +900,18 @@ def execute_automation_task(
             if not sleep_with_cancel(delay):
                 return False
 
-    on_line(f"📊 [Batch Summary] Tổng {total} · đã gửi/thử {actual_runs} · bỏ qua khóa retry {skipped_duplicates} · lỗi={1 if batch_failed else 0}.\n")
+    on_line(
+        f"📊 [Batch Summary] Tổng {total} · Published {published_count} · Pending {pending_count} · "
+        f"Submitted/Need Reconcile {unverified_count} · Retry Locked {skipped_duplicates} · "
+        f"Failed Before Submit {failed_before_submit_count}.\n"
+    )
     on_line(f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n")
-    if batch_failed: on_line("\n[Batch processing completed with errors.]\n")
-    elif actual_runs == 0 and skipped_duplicates > 0: on_line("\n[Batch completed: 0 bài mới được gửi; tất cả mục tiêu đang bị khóa retry/đã xử lý gần đây.]\n")
-    else: on_line("\n[Batch processing completed successfully!]\n")
+    if batch_failed:
+        on_line("\n[Batch completed: có lỗi trước submit; xem từng target để retry thủ công.]\n")
+    elif unverified_count > 0:
+        on_line("\n[Batch completed: không repost các bài chưa xác minh; đã đưa vào luồng đối soát.]\n")
+    elif actual_runs == 0 and skipped_duplicates > 0:
+        on_line("\n[Batch completed: 0 bài mới được gửi; tất cả mục tiêu đang bị khóa retry/đã xử lý gần đây.]\n")
+    else:
+        on_line("\n[Batch processing completed successfully!]\n")
     return not batch_failed

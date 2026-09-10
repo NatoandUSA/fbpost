@@ -1838,30 +1838,25 @@ def clean_facebook_post_url(href: str) -> str:
     return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 def text_similarity_match(needle: str, haystack: str) -> bool:
-    """
-    Kiểm tra xem một đoạn văn bản needle có xuất hiện trong haystack hay không
-    sử dụng cơ chế multi-checkpoint (prefix, middle, suffix) để tránh false-positives
-    từ các câu mở đầu phổ biến.
-    """
+    """Match post content with word checkpoints resilient to FB truncation/DOM wrapping."""
     def norm(s):
-        return re.sub(r"[\s\u200b\u200c\u200d]+", " ", s or "").strip().lower()
+        s = re.sub(r"[\s\u200b\u200c\u200d]+", " ", s or "").strip().casefold()
+        return re.sub(r"[^\wÀ-ỹ]+", " ", s, flags=re.UNICODE).strip()
 
     a = norm(needle)
     b = norm(haystack)
-
     if not a or not b:
         return False
-
     if len(a) <= 40:
         return a in b
 
-    checkpoints = [
-        a[:60],
-        a[len(a)//2:len(a)//2 + 60],
-        a[-60:],
-    ]
-
-    matches = sum(1 for part in checkpoints if len(part) >= 15 and part in b)
+    words = a.split()
+    if len(words) < 8:
+        return a in b
+    width = 6 if len(words) >= 18 else 4
+    starts = [0, max(0, len(words) // 2 - width // 2), max(0, len(words) - width)]
+    checkpoints = [" ".join(words[s:s + width]) for s in starts]
+    matches = sum(1 for part in checkpoints if len(part) >= 12 and part in b)
     return matches >= 2
 
 TOAST_CONFIRM_RE = re.compile(r"(đã đăng|đã chia sẻ|bài viết của bạn đã|bài viết đã được chia sẻ|posted|published|shared|your post has been)", re.I)
@@ -1929,12 +1924,33 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
     share_button = None
     dialog = None
     try:
-        snippet = re.sub(r"\s+", " ", content).strip()[:90]
-        if len(snippet) < 12:
+        print("[Permalink Resolver] native_share:start")
+        normalized = re.sub(r"\s+", " ", content).strip()
+        words = normalized.split()
+        fragments = []
+        if len(words) >= 4:
+            fragments.append(" ".join(words[:8])[:70])
+            mid = max(0, len(words) // 2 - 3)
+            fragments.append(" ".join(words[mid:mid + 7])[:70])
+        node = None
+        for fragment in fragments:
+            if len(fragment) < 12:
+                continue
+            candidates = page.get_by_text(fragment, exact=False)
+            for idx in range(min(candidates.count(), 8)):
+                candidate = candidates.nth(idx)
+                try:
+                    if candidate.is_visible(timeout=700):
+                        node = candidate
+                        break
+                except Exception:
+                    pass
+            if node is not None:
+                break
+        if node is None:
+            print("[Permalink Resolver] native_share:text_match=0")
             return ""
-        node = page.get_by_text(snippet, exact=False).first
-        if not node.count() or not node.is_visible(timeout=1500):
-            return ""
+        print("[Permalink Resolver] native_share:text_match=1")
         try:
             node.scroll_into_view_if_needed(timeout=2500)
         except Exception:
@@ -1944,7 +1960,8 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
             current = current.locator("xpath=..")
             try:
                 current_text = current.inner_text(timeout=800) or ""
-                if not text_similarity_match(content, current_text):
+                current_norm = re.sub(r"\s+", " ", current_text).strip().casefold()
+                if not any(fragment.casefold() in current_norm for fragment in fragments if fragment):
                     continue
                 buttons = current.locator("[role='button'], button")
                 for idx in range(min(buttons.count(), 50)):
@@ -1952,7 +1969,8 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
                     label = (candidate.get_attribute("aria-label") or "").lower()
                     if ("g\u1eedi n\u1ed9i dung n\u00e0y cho b\u1ea1n b\u00e8" in label or
                             "send this to friends" in label or
-                            "share this content" in label):
+                            "share this content" in label or
+                            "chia s\u1ebb" in label or label.strip() == "share"):
                         share_button = candidate
                         break
                 if share_button:
@@ -1960,7 +1978,9 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
             except Exception:
                 continue
         if not share_button:
+            print("[Permalink Resolver] native_share:share_button=0")
             return ""
+        print("[Permalink Resolver] native_share:share_button=1")
         try:
             page.context.grant_permissions(["clipboard-read", "clipboard-write"], origin="https://www.facebook.com")
         except Exception:
@@ -1973,16 +1993,21 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
         dialog = page.locator("[role='dialog']").last
         copy_button = dialog.get_by_text(re.compile("^(Sao ch\u00e9p li\u00ean k\u1ebft|Copy link)$", re.I), exact=True).first
         if not copy_button.count() or not copy_button.is_visible(timeout=1800):
+            print("[Permalink Resolver] native_share:copy_link=0")
             return ""
+        print("[Permalink Resolver] native_share:copy_link=1")
         try:
             copy_button.evaluate("el => el.click()")
         except Exception:
             copy_button.click(force=True, timeout=1800)
         time.sleep(0.4)
         copied = page.evaluate("async () => await navigator.clipboard.readText()") or ""
+        print(f"[Permalink Resolver] native_share:clipboard={'1' if copied.strip() else '0'}")
         clean = clean_facebook_post_url(copied.strip())
         if not clean:
+            print("[Permalink Resolver] native_share:canonical=0")
             return ""
+        print(f"[Permalink Resolver] native_share:canonical=1 url={clean}")
         target_group = _group_key_from_url(target)
         copied_group = _group_key_from_url(clean)
         if target_group and copied_group and target_group != copied_group:

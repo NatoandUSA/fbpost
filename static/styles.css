@@ -1506,3 +1506,9 @@ select.field-input { cursor: pointer; }
 .workflow-event-seq { color: #64748B; font-family: 'JetBrains Mono', monospace; }
 .workspace-grid.queue-focus #queue-section > .log-card { margin-top: 0; width: 100%; }
 @media (max-width: 900px) { .workflow-event-row { grid-template-columns: 46px 1fr; } .workflow-event-row time { grid-column: 2; } }
+
+/* v6.1.0 compact queue/history workspaces */
+.workspace-grid.queue-focus #approval-queue-list{max-height:52vh;overflow:auto!important;}
+.workspace-grid.queue-focus .workflow-table-wrap{max-height:38vh;overflow:auto;}
+#history-section #posted-links-card{width:100%;box-shadow:none;}
+#history-section #posted-links-list{max-height:68vh!important;overflow:auto!important;}

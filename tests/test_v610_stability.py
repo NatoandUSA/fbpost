@@ -329,3 +329,26 @@ class V610LaunchRepairTests(unittest.TestCase):
         self.assertTrue(callable(utils._gpm_root_processes))
         self.assertTrue(callable(utils._ensure_clean_gpm_process_state))
         self.assertTrue(callable(utils._wait_gpm_roots_closed))
+
+
+class V610EndToEndTruthTests(unittest.TestCase):
+    def test_comment_url_requires_post_identity(self):
+        from fb_comment import _canonicalize_comment_url, _post_identity
+        self.assertEqual(_canonicalize_comment_url("https://www.facebook.com/groups/123456/"), "")
+        canonical = _canonicalize_comment_url("https://www.facebook.com/groups/123456/?multi_permalinks=987654")
+        self.assertEqual(canonical, "https://www.facebook.com/groups/123456/posts/987654")
+        self.assertEqual(_post_identity(canonical)["post_id"], "987654")
+
+    def test_comment_verification_is_scoped_to_target_post(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "fb_comment.py").read_text(encoding="utf-8")
+        self.assertIn("post_scope = _locate_target_post_article", src)
+        self.assertIn("post_scope.locator(\"div[role='article']\")", src)
+        self.assertNotIn("document.querySelectorAll('div[role=\"article\"], ul", src)
+
+    def test_batch_summary_reports_truthful_post_states(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        for marker in ["Published {published_count}", "Pending {pending_count}", "Submitted/Need Reconcile {unverified_count}", "Retry Locked {skipped_duplicates}", "Failed Before Submit {failed_before_submit_count}"]:
+            self.assertIn(marker, src)
+        self.assertIn('outcome = "submitted_unverified"', src)

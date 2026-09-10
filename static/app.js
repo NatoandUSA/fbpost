@@ -137,8 +137,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsPanelRight = document.getElementById('settings-panel-right');
     const composerActionBar = document.getElementById('composer-action-bar');
     const queueSection = document.getElementById('queue-section');
+    let historySection = document.getElementById('history-section');
+    if (!historySection && queueSection) {
+        historySection = document.createElement('section');
+        historySection.id = 'history-section';
+        historySection.className = 'hidden execution-manager-section';
+        queueSection.insertAdjacentElement('afterend', historySection);
+    }
+    const queueTab = document.getElementById('tab-queue');
+    if (queueTab && !document.getElementById('tab-history')) {
+        const historyTab = document.createElement('button');
+        historyTab.className = 'composer-tab nav-item';
+        historyTab.dataset.target = 'history'; historyTab.id = 'tab-history';
+        historyTab.innerHTML = '<span style="font-size:17px">🔗</span><span>Lịch sử & Đối soát</span>';
+        queueTab.insertAdjacentElement('afterend', historyTab);
+    }
     const workspaceGrid = document.querySelector('.workspace-grid');
     if (queueSection && approvalQueueCard && approvalQueueCard.parentElement !== queueSection) queueSection.insertBefore(approvalQueueCard, queueSection.firstChild);
+    if (historySection && postedLinksCard && postedLinksCard.parentElement !== historySection) historySection.appendChild(postedLinksCard);
     const logCard = document.querySelector('.card.log-card') || document.querySelector('.log-card');
     const logCardHome = logCard ? logCard.parentElement : null;
     const workflowTaskBody = document.getElementById('workflow-task-body');
@@ -1986,10 +2002,10 @@ document.addEventListener('DOMContentLoaded', () => {
             badgeEl.style.color = '#B45309';
         }
         try {
-            const res = await fetch(`/api/gpm/profiles?api_url=${encodeURIComponent(gpmUrl)}`);
+            const res = await fetch(`/api/gpm/status?gpm_api_url=${encodeURIComponent(gpmUrl)}`);
             const data = await res.json();
-            if (res.ok && data.success) {
-                const count = data.total || (data.data && data.data.length) || 0;
+            if (res.ok && data.connected) {
+                const count = Number(data.total_profiles || 0);
                 if (badgeEl) {
                     badgeEl.textContent = `✅ OK (${count} profiles)`;
                     badgeEl.style.background = '#DCFCE7';
@@ -2331,7 +2347,8 @@ document.addEventListener('DOMContentLoaded', () => {
         profiles: '📁 Quản Lý Profiles & Tài Khoản GPM',
         'create-page': '🚩 Tự Tạo Fanpage Cá Nhân (Chuẩn Người Thật, Max 2/Ngày)',
         'join-group': '🤝 Tự Động Gia Nhập Nhóm (Join Group)',
-        queue: '📋 Hàng Đợi & Lịch Sử Đăng Bài',
+        queue: '📋 Hàng Đợi Đăng Bài',
+        history: '🔗 Lịch Sử & Đối Soát Bài Đăng',
         settings: '🛡️ Bảo Mật & Cấu Hình Hệ Thống'
     };
 
@@ -2344,16 +2361,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mode === 'queue') approvalQueueCard.classList.remove('hidden');
             else approvalQueueCard.classList.add('hidden');
         }
-        if (workspaceGrid) workspaceGrid.classList.toggle('queue-focus', mode === 'queue');
+        if (workspaceGrid) workspaceGrid.classList.toggle('queue-focus', mode === 'queue' || mode === 'history');
 
-        // 2. Posted Links: on Group, Page, Comment
-        if (postedLinksCard) {
-            if (mode === 'group' || mode === 'page' || mode === 'comment') {
-                postedLinksCard.classList.remove('hidden');
-            } else {
-                postedLinksCard.classList.add('hidden');
-            }
-        }
+        // 2. Posted Links: dedicated history workspace only.
+        if (postedLinksCard) postedLinksCard.classList.toggle('hidden', mode !== 'history');
 
         // 3. Scrape Results Card: ONLY on Scrape
         if (scrapeResultsContainer) {
@@ -2454,6 +2465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (createPageSection) createPageSection.classList.add('hidden');
             if (joinGroupSection) joinGroupSection.classList.add('hidden');
             if (queueSection) queueSection.classList.add('hidden');
+            if (historySection) historySection.classList.add('hidden');
             if (modeToggleContainer) modeToggleContainer.classList.add('hidden');
             if (addToPostBar) addToPostBar.classList.add('hidden');
             if (composerDividerBar) composerDividerBar.classList.remove('hidden');
@@ -2548,6 +2560,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (logCard) logCard.classList.remove('hidden');
                 loadQueue();
                 loadWorkflowTasks();
+            } else if (currentMode === 'history') {
+                if (composerBodyCard) composerBodyCard.classList.add('hidden');
+                if (accountsCard) accountsCard.classList.add('hidden');
+                if (workflowGuide) workflowGuide.classList.add('hidden');
+                if (accountSelectorContainer) accountSelectorContainer.classList.add('hidden');
+                if (historySection) historySection.classList.remove('hidden');
+                if (postBtn) postBtn.classList.add('hidden');
+                if (logCard) logCard.classList.add('hidden');
+                loadPostedLinks();
             } else if (currentMode === 'settings') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -4428,15 +4449,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const toneTxt = f.tone;
       const lenTxt = f.length;
       
-      const facts = b.isPlace ? "Bài viết VỀ HUẾ: sự kiện, ẩm thực, lăng tẩm, sông Hương." : JSON.stringify(OFFLINE_KNOWLEDGE[currentHubBrand]);
+      const facts = JSON.stringify(OFFLINE_KNOWLEDGE[currentHubBrand] || OFFLINE_KNOWLEDGE.hue);
       
-      return `Bạn là người viết content tự nhiên cho homestay ${b.name} tại Huế.
-      Ý CHÍNH: ${f.idea}.
+      return `Bạn là người viết content tự nhiên cho ${b.name} tại Huế.
+      Ý CHÍNH NGƯỜI DÙNG: ${f.idea}.
       MỤC ĐÍCH: ${f.purpose}.
       ĐỐI TƯỢNG: ${targetTxt}.
       TÔNG GIỌNG: ${toneTxt}.
       ĐỘ DÀI: ${lenTxt}.
-      SỰ THẬT ĐÃ XÁC MINH: ${facts}.
+      CONTENT HUB — SỰ THẬT ĐÃ XÁC MINH: ${facts}.
+      QUY TẮC CỨNG: Chỉ được dùng dữ kiện có trong SỰ THẬT ĐÃ XÁC MINH hoặc trường người dùng vừa nhập. Không tự bịa giá, số phòng trống, ưu đãi, voucher, khoảng cách/thời gian di chuyển, tiện nghi, giờ mở cửa, lịch sự kiện, thời tiết hay claim tốt nhất/rẻ nhất. Nếu thiếu dữ liệu thì bỏ claim đó, không đoán. Nếu weatherUnavailable=true thì tuyệt đối không nói thời tiết hôm nay.
+      Mọi URL, số điện thoại, địa chỉ và tên thương hiệu phải giữ đúng dữ liệu Content Hub.
       Trả về duy nhất 1 JSON không markdown: {"main":"bài chính","grp1":"group 1","grp2":"group 2","grp3":"group 3","grp4":"group 4","titles":["tiêu đề 1","tiêu đề 2","tiêu đề 3"],"reeldesc":"mô tả reel","story":"story ngắn"}`;
     }
 
@@ -4477,7 +4500,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const wData = await wRes.json();
                 f.weatherLine = `Thời tiết Huế hôm nay: ${wData.current.temperature_2m}°C`;
             } catch (err) {
-                f.weatherLine = "Thời tiết Huế hôm nay rất mát mẻ";
+                f.weatherLine = "";
+                f.weatherUnavailable = true;
+                showToast('Không lấy được thời tiết thật; Content Hub sẽ không tự bịa thời tiết hôm nay.', 'error');
             }
         }
 

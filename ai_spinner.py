@@ -28,6 +28,15 @@ def _preserves_core_info(original: str, generated: str) -> bool:
         key = address.split(":", 1)[-1].strip()
         if key and key not in dst:
             return False
+    # AI is allowed to rephrase, never to manufacture dynamic facts.
+    src_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", original or ""))
+    dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", dst))
+    if not dst_numbers.issubset(src_numbers):
+        return False
+    risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "chỉ mất vài phút")
+    src_low, dst_low = (original or "").casefold(), dst.casefold()
+    if any(term in dst_low and term not in src_low for term in risky):
+        return False
     return True
 
 def _urlopen_json(req, timeout=20, attempts=3):
@@ -102,59 +111,25 @@ def extract_core_info(content: str) -> dict:
 
 
 def spin_content_local(content: str) -> str:
-    """
-    Xào bài thông minh bằng quy tắc ngữ nghĩa Local (Hoàn toàn Offline & Miễn phí).
-    Tự động tái cấu trúc bài viết: Mở bài mới lạ + Thân bài giữ nguyên cốt lõi + Điểm nhấn + Lời kêu gọi + Hashtag.
-    """
+    """Truth-preserving offline fallback: never invent facts absent from source."""
     if not content or not content.strip():
         return content
-
-    core = extract_core_info(content)
-    lines = [line.strip() for line in content.strip().split('\n') if line.strip()]
-    
-    # Lấy các dòng thân bài chính (bỏ các dòng hook hoặc hashtag cũ)
-    body_lines = []
+    lines=[line.rstrip() for line in content.strip().splitlines()]
+    out=[]; blank=False
     for line in lines:
-        if not line.startswith('#') and not any(h in line for h in ['#', 'Homestay Huế', 'Chào']):
-            body_lines.append(line)
-            
-    # Tạo mở đầu ngẫu nhiên
-    hook = random.choice(HOOKS_HOMESTAY)
-    
-    # Chọn ngẫu nhiên 2 - 3 điểm nhấn tiện ích
-    selected_highlights = random.sample(HIGHLIGHTS_HOMESTAY, random.randint(2, 3))
-    
-    # Lời kêu gọi
-    cta = random.choice(CALL_TO_ACTIONS)
-    
-    # Hashtag
-    hashtags = random.choice(HASHTAG_POOLS)
-    
-    parts = [hook, ""]
-    
-    if body_lines:
-        parts.append("\n".join(body_lines[:4]))
-        parts.append("")
-        
-    parts.extend(selected_highlights)
-    parts.append("")
-    
-    # Gắn lại thông tin liên hệ nếu có
-    if core["phones"]:
-        parts.append(f"☎️ Hotline / Zalo đặt phòng: {' - '.join(core['phones'])}")
-    if core["addresses"]:
-        parts.append(f"📍 {core['addresses'][0]}")
-    if core["prices"]:
-        parts.append(f"💵 Giá phòng chỉ từ: {core['prices'][0]}")
-    if core["links"]:
-        parts.append(f"🔗 Xem thêm tại: {core['links'][0]}")
-        
-    parts.append("")
-    parts.append(cta)
-    parts.append("")
-    parts.append(hashtags)
-    
-    return "\n".join(parts).strip()
+        if not line.strip():
+            if out and not blank: out.append("")
+            blank=True
+        else:
+            out.append(line.strip()); blank=False
+    # Styling-only variation is allowed; hashtags below make no new factual claim.
+    lowered = (content or "").casefold()
+    tags = []
+    if "huế" in lowered: tags.append("#Hue")
+    if "homestay" in lowered and "huế" in lowered: tags.append("#HomestayHue")
+    if tags and not any("#" in line for line in out):
+        out.extend(["", " ".join(tags)])
+    return "\n".join(out).strip()
 
 
 def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "") -> str:
@@ -168,10 +143,13 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", 
     prompt = (
         f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản.\n"
         + (f"Thương hiệu/Project hiện tại là {brand_name}. Hãy dùng đúng tên thương hiệu này khi cần nhắc đến cơ sở lưu trú.\n" if brand_name else "")
-        + f"Hãy viết lại bài đăng Facebook sau đây thành một phiên bản hoàn toàn mới lạ, hấp dẫn, văn phong {style}, "
+        + f"Hãy viết lại bài đăng Facebook sau đây với văn phong {style}, nhưng chỉ diễn đạt lại dữ liệu đã có, "
         f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
-        f"YÊU CẦU BẮT BUỘC:\n"
+        f"YÊU CẦU BẮT BUỘC — CONTENT HUB TRUTH CONTRACT:\n"
+        f"- KHÔNG thêm tiện nghi, khoảng cách, thời gian di chuyển, giá, số phòng trống, khuyến mãi, voucher, sự kiện hoặc lời hứa không có trong bài gốc.\n"
         f"- Giữ nguyên toàn bộ số điện thoại, Zalo, địa chỉ, giá phòng hoặc link nếu có trong bài gốc.\n"
+        f"- Không dùng claim rẻ nhất/tốt nhất hôm nay/phòng có hạn/chỉ vài phút nếu bài gốc không có dữ liệu đó.\n"
+        f"- Được đổi câu chữ và thứ tự đoạn; KHÔNG thay đổi nghĩa của facts.\n"
         f"- Viết bằng Tiếng Việt tự nhiên, phù hợp đăng nhóm cộng đồng hoặc fanpage.\n"
         f"- KHÔNG thêm bất kỳ lời dẫn giải nào như 'Dưới đây là bài viết...'. Chỉ trả về duy nhất nội dung bài đăng.\n\n"
         f"NỘI DUNG BÀI GỐC:\n{content}"

@@ -158,7 +158,9 @@ def main():
     elif args.command == "interact":
         from fb_interact import interact_newsfeed
         res = interact_newsfeed(args.limit, args.comments, args.account_id, args.gpm_api)
-        success = (res is not False)
+        if hasattr(res, "to_dict"):
+            print("ACTION_RESULT:" + json.dumps(res.to_dict(), ensure_ascii=False))
+        success = bool(res)
     elif args.command == "scrape":
         from fb_scraper import scrape_comments
         res = scrape_comments(args.url, args.limit, args.account_id, args.gpm_api)

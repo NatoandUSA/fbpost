@@ -4,7 +4,7 @@ import random
 import re
 import os
 from playwright.sync_api import sync_playwright
-from utils import process_spintax, human_type, resolve_account, launch_browser, close_browser, safe_mouse_wheel
+from utils import process_spintax, human_type, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult
 
 STATE_FILE = "state.json"
 
@@ -23,7 +23,7 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
         account = resolve_account(account_id, gpm_api_url)
         if not account:
             print(f"❌ Error: Account ID '{account_id}' not found in accounts.json or GPM.")
-            return
+            return ActionResult(False, "ACCOUNT_NOT_FOUND", f"Account ID '{account_id}' not found.", state="failed")
 
     browser_obj = None
     context = None
@@ -113,7 +113,11 @@ def interact_newsfeed(limit=5, comment_pool_str="", account_id=None, gpm_api_url
                     
             print(f"✅ Hoàn thành tương tác Newsfeed. Đã tương tác: {interacted_count}/{limit} bài viết.")
             print(f"📊 Feed diagnostics: articles_seen={articles_seen}, like_candidates={like_candidates_seen}")
-            return True
+            if interacted_count >= limit:
+                return ActionResult(True, "INTERACT_CONFIRMED", f"Đạt mục tiêu {interacted_count}/{limit} tương tác.", state="completed", metadata={"interacted": interacted_count, "limit": limit, "articles_seen": articles_seen, "like_candidates": like_candidates_seen})
+            if interacted_count > 0:
+                return ActionResult(True, "INTERACT_PARTIAL", f"Tương tác một phần {interacted_count}/{limit}.", state="partial", metadata={"interacted": interacted_count, "limit": limit, "articles_seen": articles_seen, "like_candidates": like_candidates_seen})
+            return ActionResult(False, "INTERACT_NO_ACTION", f"Không thực hiện được tương tác nào (0/{limit}).", state="no_action", metadata={"interacted": 0, "limit": limit, "articles_seen": articles_seen, "like_candidates": like_candidates_seen})
             
         except Exception as e:
             print(f"❌ Có lỗi xảy ra khi nuôi nick: {e}")

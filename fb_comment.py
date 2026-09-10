@@ -8,6 +8,64 @@ from utils import process_spintax, human_type, load_accounts, resolve_account, l
 
 STATE_FILE = "state.json"
 
+def _canonicalize_comment_url(url):
+    """Return a canonical Facebook post URL, or empty when the input is not a post identity."""
+    value = (url or "").strip()
+    m = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.IGNORECASE)
+    if m:
+        return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
+    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/(\d+)", value, re.IGNORECASE)
+    if m:
+        return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
+    if re.search(r"facebook\.com/.+/(?:posts|videos)/\d+", value, re.IGNORECASE):
+        return value.split("?", 1)[0]
+    if re.search(r"facebook\.com/(?:story\.php|permalink\.php)\?.*(?:story_fbid|fbid)=\d+", value, re.IGNORECASE):
+        return value
+    return ""
+
+def _post_identity(url):
+    value = (url or "").strip()
+    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/(\d+)", value, re.IGNORECASE)
+    if m:
+        return {"group_id": m.group(1), "post_id": m.group(2)}
+    m = re.search(r"facebook\.com/.+/(?:posts|videos)/(\d+)", value, re.IGNORECASE)
+    if m:
+        return {"group_id": "", "post_id": m.group(1)}
+    m = re.search(r"[?&](?:story_fbid|fbid)=(\d+)", value, re.IGNORECASE)
+    return {"group_id": "", "post_id": m.group(1)} if m else {"group_id": "", "post_id": ""}
+
+def _locate_target_post_article(page, canonical_url):
+    ident = _post_identity(canonical_url)
+    post_id = ident.get("post_id") or ""
+    if not post_id:
+        return None
+    selectors = [
+        f"a[href*='/posts/{post_id}']", f"a[href*='/permalink/{post_id}']",
+        f"a[href*='story_fbid={post_id}']", f"a[href*='fbid={post_id}']"
+    ]
+    for selector in selectors:
+        for idx in range(min(page.locator(selector).count(), 12)):
+            try:
+                article = page.locator(selector).nth(idx).locator("xpath=ancestor::div[@role='article'][1]")
+                if article.count() and article.is_visible(timeout=800):
+                    print(f"[Comment Resolver] post_identity={post_id} article=matched")
+                    return article
+            except Exception:
+                continue
+    visible = []
+    for idx in range(min(page.locator("div[role='article']").count(), 8)):
+        try:
+            art = page.locator("div[role='article']").nth(idx)
+            if art.is_visible(timeout=400):
+                visible.append(art)
+        except Exception:
+            pass
+    if len(visible) == 1:
+        print(f"[Comment Resolver] post_identity={post_id} article=single-visible-fallback")
+        return visible[0]
+    print(f"[Comment Resolver] post_identity={post_id} article=not-found visible_articles={len(visible)}")
+    return None
+
 def _save_comment_evidence(page, code):
     try:
         from paths import LOG_DIR
@@ -26,7 +84,11 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
     Tự động mở một bài viết Facebook (trong Group public hoặc Fanpage public) và để lại bình luận.
     Hỗ trợ Spintax, human typing, like trước khi comment, và xử lý các loại giao diện Facebook.
     """
-    print(f"🔗 Đang mở bài viết để bình luận: {post_url}")
+    canonical_url = _canonicalize_comment_url(post_url)
+    if not canonical_url:
+        print(f"❌ Link không phải permalink bài viết Facebook hợp lệ: {post_url}")
+        return ActionResult(success=False, code="INVALID_POST_URL", message="Chỉ nhận permalink của một bài viết Facebook cụ thể.", target_url=post_url)
+    print(f"🔗 Đang mở bài viết để bình luận: {canonical_url}")
     parsed_comment = process_spintax(comment_content, anti_hash=anti_hash_text)
     
     account = None
@@ -54,12 +116,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             
             # Di chuyển chuột ngẫu nhiên
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            # multi_permalinks thường chậm và hay timeout dù nội dung đã render.
-            canonical_url = post_url
-            m = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", post_url, re.IGNORECASE)
-            if m:
-                canonical_url = f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
-                print(f"🔗 Chuẩn hóa permalink comment: {canonical_url}")
+            print(f"🔗 Permalink canonical: {canonical_url}")
             try:
                 page.goto(canonical_url, wait_until="domcontentloaded", timeout=35000)
             except Exception as nav_err:
@@ -81,12 +138,17 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             safe_mouse_wheel(page, 0, -random.randint(100, 250))
             time.sleep(random.uniform(1.0, 2.0))
 
+            post_scope = _locate_target_post_article(page, canonical_url)
+            if post_scope is None:
+                evidence = _save_comment_evidence(page, "POST_IDENTITY_NOT_FOUND")
+                return ActionResult(False, "POST_IDENTITY_NOT_FOUND", "Đã mở permalink nhưng không khóa được DOM vào đúng post ID.", state="unverified", target_url=canonical_url, metadata={"evidence_path": evidence})
+
             # 1. Tương tác Thích / Thả Tim nếu được yêu cầu
             if like_post:
                 try:
-                    like_btn = page.locator("div[role='button']").filter(
+                    like_btn = post_scope.locator("div[role='button']").filter(
                         has_text=re.compile(r"^\s*(Thích|Like)(\s+\d+)?\s*$", re.IGNORECASE)
-                    ).or_(page.locator("div[role='button'][aria-label*='Thích' i], div[role='button'][aria-label*='Like' i]")).first
+                    ).or_(post_scope.locator("div[role='button'][aria-label*='Thích' i], div[role='button'][aria-label*='Like' i]")).first
                     if like_btn.is_visible(timeout=3500):
                         aria_pressed = like_btn.get_attribute("aria-pressed")
                         if aria_pressed != "true":
@@ -124,15 +186,11 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 "div[role='textbox'][aria-label*='bình luận' i]",
                 "div[role='textbox'][aria-label*='comment' i]",
                 "div[role='textbox'][aria-placeholder*='bình luận' i]",
-                "div[role='textbox'][aria-placeholder*='comment' i]",
-                "div[role='textbox'][data-lexical-editor='true']",
-                "div[contenteditable='true'][role='textbox']",
-                "div[contenteditable='true'][data-lexical-editor='true']",
-                "form div[contenteditable='true']"
+                "div[role='textbox'][aria-placeholder*='comment' i]"
             ]
 
             for selector in selectors:
-                candidates = page.locator(selector)
+                candidates = post_scope.locator(selector)
                 count = candidates.count()
                 for i in range(count):
                     el = candidates.nth(i)
@@ -153,7 +211,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                     "div[aria-label*='comment' i][role='button']"
                 ]
                 for btn_sel in open_comment_buttons:
-                    btn = page.locator(btn_sel).first
+                    btn = post_scope.locator(btn_sel).first
                     if btn.is_visible():
                         print("👉 Click mở ô bình luận...")
                         btn.click()
@@ -162,7 +220,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
 
                 # Thử tìm lại ô textbox sau khi click
                 for selector in selectors:
-                    el = page.locator(selector).first
+                    el = post_scope.locator(selector).first
                     if el.is_visible():
                         comment_input = el
                         break
@@ -188,7 +246,7 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 "div[role='button'][aria-label='Send' i]", "button[aria-label='Send' i]"
             ]:
                 try:
-                    send_btn = page.locator(send_sel).last
+                    send_btn = post_scope.locator(send_sel).last
                     if send_btn.is_visible(timeout=500) and send_btn.is_enabled():
                         send_btn.click(timeout=2500)
                         submitted_by_button = True
@@ -220,31 +278,23 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             except Exception:
                 pass
 
-            # Xác thực comment xuất hiện trên page (trong comment thread hoặc article)
+            # Chỉ xác thực comment bên trong đúng post_scope; không quét Messenger/chat/toàn page.
             comment_verified = False
             check_snippet = re.sub(r'[\s\u200b\u200c\u200d]+', ' ', parsed_comment).strip()[:30]
             if check_snippet:
-                try:
-                    # Chờ tối đa 8s để comment xuất hiện trong DOM
-                    page.wait_for_function(
-                        """(snippet) => {
-                            const articles = document.querySelectorAll('div[role="article"], ul, div[data-visualcompletion="ignore-dynamic-snippet"]');
-                            for (const el of articles) {
-                                if (el.innerText && el.innerText.includes(snippet)) return true;
-                            }
-                            return false;
-                        }""",
-                        arg=check_snippet,
-                        timeout=8000
-                    )
-                    comment_verified = True
-                except Exception:
+                deadline = time.time() + 10.0
+                while time.time() < deadline and not comment_verified:
                     try:
-                        found = page.locator("div[role='article']").filter(has_text=check_snippet).first
-                        if found.is_visible(timeout=2000):
-                            comment_verified = True
+                        matches = post_scope.locator("div[role='article']").filter(has_text=check_snippet)
+                        for idx in range(min(matches.count(), 12)):
+                            if matches.nth(idx).is_visible(timeout=500):
+                                comment_verified = True
+                                break
                     except Exception:
                         pass
+                    if not comment_verified:
+                        time.sleep(1.0)
+                print(f"[Comment Resolver] verify_in_target_post={'1' if comment_verified else '0'} post_id={_post_identity(canonical_url).get('post_id')}")
 
             if not comment_verified:
                 print(f"⚠️ Bình luận đã nhấn gửi nhưng không thể xác thực hiển thị trên bài viết: {post_url}")
