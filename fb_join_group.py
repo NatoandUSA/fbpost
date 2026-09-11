@@ -168,10 +168,9 @@ def search_and_join_groups(
 ):
     """
     Tìm kiếm nhóm theo từ khóa và tự động xin gia nhập nhóm an toàn.
-    Chỉ gia nhập tối đa 2 nhóm mỗi lượt mở profile để tránh checkpoint.
+    Tiếp tục xử lý cho đến khi đạt đủ số nhóm JOINED đã xác minh hoặc hết candidate.
     """
-    # Cố định tối đa 2 nhóm mỗi lần mở profile
-    max_groups = min(max(1, int(max_groups)), 2)
+    target_joined = min(max(1, int(max_groups)), 2)
     if isinstance(keywords, str):
         kw_list = [k.strip() for k in re.split(r"[,;\n]", keywords) if k.strip()]
     else:
@@ -195,6 +194,7 @@ def search_and_join_groups(
 
     joined_count = 0
     existing_count = 0
+    pending_count = 0
     join_attempts = 0
     browser_obj = None
     context = None
@@ -212,8 +212,8 @@ def search_and_join_groups(
             page.set_default_timeout(35000)
 
             for kw in kw_list:
-                if join_attempts >= max_groups:
-                    print(f"🛑 Đã đạt giới hạn {max_groups} lần gửi yêu cầu Join cho profile này; dừng xử lý thêm nhóm.")
+                if joined_count >= target_joined:
+                    print(f"✅ Đã đạt mục tiêu {target_joined}/{target_joined} nhóm JOINED đã xác minh; đóng profile.")
                     break
 
                 is_direct_url = kw.lower().startswith("http")
@@ -414,7 +414,7 @@ def search_and_join_groups(
                             pass
 
                     attempt_no=join_attempts+1
-                    print(f"👉 [Join attempt {attempt_no}/{max_groups}] Đang bấm 'Tham gia' nhóm: {group_name}...")
+                    print(f"👉 [Join attempt {attempt_no}] Mục tiêu JOINED {joined_count}/{target_joined}. Đang bấm 'Tham gia' nhóm: {group_name}...")
                     try:
                         btn_to_click.scroll_into_view_if_needed()
                         btn_to_click.click(timeout=4000)
@@ -551,7 +551,7 @@ def search_and_join_groups(
                         except Exception as reload_err:
                             print(f"⚠️ [Join Verify] reload scan lỗi: {reload_err}")
                     if not is_confirmed:
-                        print(f"⚠️ Join attempt {join_attempts}/{max_groups} đã được gửi nhưng Facebook chưa cho state xác minh; giữ unverified để tránh gửi lặp; vẫn tính vào giới hạn phiên.")
+                        print(f"⚠️ Join attempt {join_attempts} đã được gửi nhưng Facebook chưa cho state xác minh; giữ unverified và thử candidate tiếp theo nếu còn.")
                         continue
 
                     record = {
@@ -583,16 +583,19 @@ def search_and_join_groups(
                                 json.dump(current_json, f, ensure_ascii=False, indent=2)
                         except Exception:
                             pass
-                    joined_count += 1
+                    if state == "joined":
+                        joined_count += 1
+                    else:
+                        pending_count += 1
                     status_lbl = "thành viên" if state == "joined" else "chờ duyệt"
-                    print(f"🎉 Đã tham gia nhóm ({status_lbl}): {group_name}!")
+                    print(f"🎉 Kết quả nhóm ({status_lbl}): {group_name}. Tiến độ JOINED {joined_count}/{target_joined}")
 
                     # Nếu không phải mở link trực tiếp (đã tương tác trước đó) và đã vào nhóm: lướt tương tác bảng tin nhóm
                     if not is_direct_url and interact_feed:
                         interact_with_group_feed(page, gemini_key=gemini_key)
 
                     # Giãn cách an toàn ngẫu nhiên 1 - 3 phút (60 - 180s) nếu còn nhóm tiếp theo
-                    if join_attempts < max_groups:
+                    if joined_count < target_joined:
                         cooldown = random.randint(max(10, delay_min), max(delay_min, delay_max))
                         print(f"\n⏳ [Anti-Spam] Nghỉ an toàn {cooldown}s ({cooldown//60}p {cooldown%60}s) trước khi xử lý nhóm tiếp theo...")
                         for sec in range(cooldown, 0, -1):
@@ -610,19 +613,22 @@ def search_and_join_groups(
 
     result_summary = {
         "joined_confirmed": joined_count,
+        "target_joined": target_joined,
         "existing_confirmed": existing_count,
+        "pending_confirmed": pending_count,
         "join_attempts": join_attempts,
-        "unverified_attempts": max(0, join_attempts - joined_count),
+        "unverified_attempts": max(0, join_attempts - joined_count - pending_count),
+        "quota_met": joined_count >= target_joined,
         "account_id": account_id or "default",
     }
     print("JOIN_RESULT:" + json.dumps(result_summary, ensure_ascii=False))
-    return joined_count + existing_count
+    return joined_count
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Tự động tìm kiếm và tham gia nhóm Facebook")
     parser.add_argument("--keywords", default="Homestay Huế", help="Từ khóa tìm nhóm hoặc danh sách URL")
-    parser.add_argument("--limit", type=int, default=2, help="Số lượng nhóm tối đa cần tham gia (Tối đa 2 nhóm/profile)")
+    parser.add_argument("--limit", type=int, default=2, help="Mục tiêu số nhóm JOINED đã xác minh trên mỗi profile (1-2)")
     parser.add_argument("--account-id", default=None, help="ID tài khoản")
     parser.add_argument("--gpm-api", default=None, help="URL GPM API")
     parser.add_argument("--delay-min", type=int, default=60, help="Thời gian nghỉ tối thiểu giữa các nhóm (giây)")
