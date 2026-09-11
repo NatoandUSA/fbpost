@@ -211,6 +211,36 @@ def search_and_join_groups(
 
             page.set_default_timeout(35000)
 
+            def _ensure_hydrated_surface(nav_url, rounds=3):
+                for hydrate_round in range(1, max(1, int(rounds)) + 1):
+                    try:
+                        body_text = page.locator("body").inner_text(timeout=4000).strip()
+                    except Exception:
+                        body_text = ""
+                    try:
+                        interactive_count = page.locator("a, div[role='button'], button").count()
+                    except Exception:
+                        interactive_count = 0
+                    if body_text or interactive_count:
+                        print(f"[Join Resolver] surface hydrated round={hydrate_round} chars={len(body_text)} controls={interactive_count}")
+                        return True
+                    print(f"[Join Resolver] empty Facebook surface round={hydrate_round}; reloading read-only")
+                    if hydrate_round < rounds:
+                        try:
+                            page.reload(wait_until="domcontentloaded", timeout=35000)
+                        except Exception:
+                            page.goto(nav_url, wait_until="domcontentloaded", timeout=35000)
+                        page.wait_for_timeout(3500)
+                return False
+
+            if account and account.get("type") == "gpm":
+                try:
+                    print("[Join Resolver] prewarming Facebook session before group navigation")
+                    page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=35000)
+                    page.wait_for_timeout(3500)
+                except Exception as warm_err:
+                    print(f"[Join Resolver] prewarm warning: {warm_err}")
+
             for kw in kw_list:
                 if joined_count >= target_joined:
                     print(f"✅ Đã đạt mục tiêu {target_joined}/{target_joined} nhóm JOINED đã xác minh; đóng profile.")
@@ -235,6 +265,9 @@ def search_and_join_groups(
                     try:
                         page.goto(target_url, wait_until="domcontentloaded", timeout=35000)
                         time.sleep(random.uniform(3.0, 4.5))
+                        if not _ensure_hydrated_surface(target_url):
+                            print(f"?? Facebook group surface v?n r?ng sau hydration retry: {target_url}")
+                            continue
                     except Exception as e:
                         print(f"⚠️ Lỗi tải trang nhóm: {e}")
                         continue
@@ -248,6 +281,9 @@ def search_and_join_groups(
                     try:
                         page.goto(search_url, wait_until="domcontentloaded", timeout=35000)
                         time.sleep(random.uniform(3.0, 5.0))
+                        if not _ensure_hydrated_surface(search_url):
+                            print(f"?? Facebook search surface v?n r?ng sau hydration retry: {search_url}")
+                            continue
                     except Exception as e:
                         print(f"⚠️ Lỗi tải trang tìm kiếm: {e}")
                         continue
@@ -451,8 +487,29 @@ def search_and_join_groups(
                     time.sleep(random.uniform(2.0,3.0))
 
                     # Kiểm tra xem có dialog nội quy/câu hỏi nhóm hiện ra không
-                    rule_dialog = page.locator('div[role="dialog"]')
-                    if rule_dialog.is_visible(timeout=3000):
+                    rule_dialog = None
+                    try:
+                        dialogs = page.locator('div[role="dialog"]')
+                        for dialog_idx in range(min(dialogs.count(), 8)):
+                            dlg = dialogs.nth(dialog_idx)
+                            if not dlg.is_visible(timeout=350):
+                                continue
+                            try:
+                                dlg_text = (dlg.inner_text(timeout=700) or "").lower()
+                            except Exception:
+                                dlg_text = ""
+                            has_rule_controls = dlg.locator('input[type="checkbox"], div[role="checkbox"], textarea, input[type="text"]').count() > 0
+                            has_join_copy = any(marker in dlg_text for marker in [
+                                "n\u1ed9i quy", "quy t\u1eafc", "c\u00e2u h\u1ecfi", "tham gia nh\u00f3m", "g\u1eedi y\u00eau c\u1ea7u",
+                                "group rules", "membership questions", "join group", "submit request"
+                            ])
+                            if has_rule_controls or has_join_copy:
+                                rule_dialog = dlg
+                                print(f"[Join Resolver] membership dialog selected index={dialog_idx}")
+                                break
+                    except Exception as dialog_err:
+                        print(f"[Join Resolver] dialog scan warning: {dialog_err}")
+                    if rule_dialog is not None:
                         if not auto_rules:
                             print("📝 Nhóm yêu cầu nội quy/câu hỏi. Chế độ tự trả lời đang tắt; bỏ qua để người dùng xử lý thủ công.")
                             try:
