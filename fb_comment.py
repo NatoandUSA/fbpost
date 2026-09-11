@@ -75,8 +75,23 @@ def _locate_target_post_article(page, canonical_url):
                 except Exception:
                     continue
             if len(visible_dialogs) == 1:
-                print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog")
-                return visible_dialogs[0]
+                dialog = visible_dialogs[0]
+                try:
+                    dialog_text = dialog.inner_text(timeout=700).strip()
+                except Exception:
+                    dialog_text = ""
+                try:
+                    has_identity_link = dialog.locator(f"a[href*='{post_id}']").count() > 0
+                except Exception:
+                    has_identity_link = False
+                try:
+                    has_article = dialog.locator("div[role='article']").count() > 0
+                except Exception:
+                    has_article = False
+                if has_identity_link or has_article or len(dialog_text) >= 80:
+                    print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={len(dialog_text)}")
+                    return dialog
+                print(f"[Comment Resolver] post_identity={post_id} scope=permalink-shell-wait chars={len(dialog_text)}")
             if len(visible_dialogs) > 1:
                 print(f"[Comment Resolver] post_identity={post_id} scope=ambiguous-dialogs count={len(visible_dialogs)}")
                 return None
@@ -92,6 +107,15 @@ def _locate_target_post_article(page, canonical_url):
 def _comment_search_roots(page, post_scope, canonical_url):
     """Return exact-post-safe roots that may own Facebook's portalled comment editor."""
     roots = [post_scope]
+    # Facebook 2026 can portal the composer as a sibling of the post article
+    # while both remain inside the same exact permalink dialog. Include that
+    # shared dialog root; it is exact-post-safe because post_scope itself anchors it.
+    try:
+        shared_dialog = post_scope.locator("xpath=ancestor::div[@role='dialog'][1]")
+        if shared_dialog.count() and shared_dialog.is_visible(timeout=250):
+            roots.append(shared_dialog)
+    except Exception:
+        pass
     ident = _post_identity(canonical_url)
     post_id = (ident.get("post_id") or "").strip()
     if not post_id or post_id not in (page.url or ""):
@@ -235,6 +259,15 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 page = context.new_page()
 
             page.set_default_timeout(25000)
+            if account and account.get("type") == "gpm":
+                # Cold GPM/CDP sessions can render a permalink shell before Facebook
+                # finishes bootstrapping its feed/session runtime. Prewarm read-only.
+                try:
+                    print("[Comment Resolver] prewarming Facebook session before permalink")
+                    page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=35000)
+                    page.wait_for_timeout(3500)
+                except Exception as warm_err:
+                    print(f"[Comment Resolver] prewarm warning: {warm_err}")
             
             # Di chuyển chuột ngẫu nhiên
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
@@ -261,6 +294,16 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             time.sleep(random.uniform(1.0, 2.0))
 
             post_scope = _locate_target_post_article(page, canonical_url)
+            if post_scope is None:
+                # Read-only recovery for Facebook/GPM permalink shells that mount but
+                # never hydrate. Reload once before any like/comment write action.
+                try:
+                    print("[Comment Resolver] exact post not hydrated; one read-only reload recovery")
+                    page.reload(wait_until="domcontentloaded", timeout=35000)
+                    page.wait_for_timeout(4500)
+                    post_scope = _locate_target_post_article(page, canonical_url)
+                except Exception as reload_err:
+                    print(f"[Comment Resolver] reload recovery failed: {reload_err}")
             if post_scope is None:
                 evidence = _save_comment_evidence(page, "POST_IDENTITY_NOT_FOUND")
                 return ActionResult(False, "POST_IDENTITY_NOT_FOUND", "Đã mở permalink nhưng không khóa được DOM vào đúng post ID.", state="unverified", target_url=canonical_url, metadata={"evidence_path": evidence})
@@ -378,7 +421,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 deadline = time.time() + 10.0
                 while time.time() < deadline and not comment_verified:
                     try:
-                        matches = post_scope.locator("div[role='article']").filter(has_text=check_snippet)
+                        verify_roots = _comment_search_roots(page, post_scope, canonical_url)
+                        verify_scope = verify_roots[-1]
+                        matches = verify_scope.locator("div[role='article']").filter(has_text=check_snippet)
                         for idx in range(min(matches.count(), 12)):
                             if matches.nth(idx).is_visible(timeout=500):
                                 comment_verified = True
@@ -399,7 +444,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                     page.wait_for_timeout(3500)
                     persisted_scope = _locate_target_post_article(page, canonical_url)
                     if persisted_scope is not None:
-                        persisted_matches = persisted_scope.get_by_text(check_snippet, exact=False)
+                        persisted_roots = _comment_search_roots(page, persisted_scope, canonical_url)
+                        persisted_verify_scope = persisted_roots[-1]
+                        persisted_matches = persisted_verify_scope.get_by_text(check_snippet, exact=False)
                         for idx in range(min(persisted_matches.count(), 12)):
                             if persisted_matches.nth(idx).is_visible(timeout=500):
                                 persisted_verified = True

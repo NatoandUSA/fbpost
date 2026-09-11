@@ -343,7 +343,8 @@ class V610EndToEndTruthTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         src = (root / "fb_comment.py").read_text(encoding="utf-8")
         self.assertIn("post_scope = _locate_target_post_article", src)
-        self.assertIn("post_scope.locator(\"div[role='article']\")", src)
+        self.assertIn("verify_scope.locator(\"div[role='article']\")", src)
+        self.assertIn("persisted_verify_scope.get_by_text", src)
         self.assertNotIn("document.querySelectorAll('div[role=\"article\"], ul", src)
 
     def test_comment_surface_supports_exact_permalink_portal_without_global_fallback(self):
@@ -352,11 +353,19 @@ class V610EndToEndTruthTests(unittest.TestCase):
         self.assertIn("def _comment_search_roots", src)
         self.assertIn("len(exact_dialogs) == 1", src)
         self.assertIn("dialog.contains(scope)", src)
+        self.assertIn("ancestor::div[@role='dialog'][1]", src)
         self.assertIn("owns_permalink", src)
         self.assertIn("post_id not in (page.url or \"\")", src)
         self.assertIn("def _find_comment_input", src)
         self.assertIn("data-lexical-editor", src)
         self.assertNotIn("page.locator(\"div[role='textbox']\").first", src)
+
+    def test_scraper_accepts_facebook_2026_group_user_comment_authors(self):
+        root = Path(__file__).resolve().parents[1]
+        src = (root / "fb_scraper.py").read_text(encoding="utf-8")
+        self.assertIn("includes('comment_id=')", src)
+        self.assertNotIn("href.includes('/groups/'))continue", src)
+        self.assertIn("_comment_search_roots(page,scope,canonical)", src)
 
     def test_comment_input_failure_captures_evidence(self):
         root = Path(__file__).resolve().parents[1]

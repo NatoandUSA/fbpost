@@ -5,7 +5,7 @@ import time
 from playwright.sync_api import sync_playwright
 from paths import DATA_DIR
 from utils import ActionResult, resolve_account, launch_browser, close_browser
-from fb_comment import _canonicalize_comment_url, _locate_target_post_article
+from fb_comment import _canonicalize_comment_url, _locate_target_post_article, _comment_search_roots
 
 STATE_FILE = str(DATA_DIR / 'state.json')
 
@@ -21,7 +21,8 @@ def _extract_comment_rows(scope, limit):
         if (out.length>=maxRows) break;
         const text=(art.innerText||'').trim(); if(!text||text.length<2) continue;
         const links=[...art.querySelectorAll('a[role="link"],a')]; let name='',profileUrl='';
-        for(const a of links){const href=a.href||'',t=(a.innerText||'').trim(); if(!t||!href||href.includes('/posts/')||href.includes('/permalink/')||href.includes('/groups/'))continue; if(href.includes('facebook.com/')){name=t;profileUrl=href;break;}}
+        const isComment=links.some(a=>(a.href||'').includes('comment_id=')); if(!isComment) continue;
+        for(const a of links){const href=a.href||'',t=(a.innerText||'').trim(); if(!t||!href||href.includes('/posts/')||href.includes('/permalink/'))continue; if(href.includes('facebook.com/')){name=t;profileUrl=href;break;}}
         if(!name)continue; const key=name+'|'+text.slice(0,120); if(seen.has(key))continue; seen.add(key); out.push({name,profileUrl,text});
       } return out;
     }'''
@@ -44,11 +45,15 @@ def scrape_comments(post_url, max_comments=50, account_id=None, gpm_api_url=None
         if scope is None: return ActionResult(False,'POST_IDENTITY_NOT_FOUND','Không khóa được DOM vào đúng bài viết.',state='unverified',target_url=canonical)
         for _ in range(6):
           try:
-            b=scope.locator("span,div[role='button']").filter(has_text=re.compile(r'View more comments|Xem thêm bình luận|Xem thêm phản hồi|Xem tất cả bình luận',re.I)).first
+            roots=_comment_search_roots(page,scope,canonical)
+            comment_scope=roots[-1]
+            b=comment_scope.locator("span,div[role='button']").filter(has_text=re.compile(r'View more comments|Xem thêm bình luận|Xem thêm phản hồi|Xem tất cả bình luận',re.I)).first
             if not b.is_visible(timeout=600): break
             b.click(); time.sleep(1)
           except Exception: break
-        rows=_extract_comment_rows(scope,limit)[:limit]; data=[]
+        roots=_comment_search_roots(page,scope,canonical)
+        comment_scope=roots[-1]
+        rows=_extract_comment_rows(comment_scope,limit)[:limit]; data=[]
         for item in rows:
           profile=(item.get('profileUrl') or '').split('?',1)[0]; text=item.get('text','')
           data.append({'name':item.get('name',''),'profile':profile,'comment':text,'phone':extract_phone(text) or 'Không có'})
