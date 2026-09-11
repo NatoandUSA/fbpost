@@ -1849,12 +1849,13 @@ class V607JobLifecycleRegressionTests(unittest.TestCase):
         self.assertIn("currentJobId = null", src)
         self.assertIn("Đang có một Job hoạt động; từ chối gửi Job mới", src)
 
-    def test_join_group_cap_is_based_on_attempted_join_requests(self):
+    def test_join_group_quota_is_based_on_verified_joined_memberships(self):
         src = (Path(__file__).resolve().parents[1] / "fb_join_group.py").read_text(encoding="utf-8")
-        self.assertIn("join_attempts = 0", src)
-        self.assertIn("if join_attempts >= max_groups", src)
+        self.assertIn("target_joined = min(max(1, int(max_groups)), 2)", src)
+        self.assertIn("if joined_count >= target_joined", src)
         self.assertIn("join_attempts += 1", src)
-        self.assertIn("vẫn tính vào giới hạn phiên", src)
+        self.assertIn('"quota_met": joined_count >= target_joined', src)
+        self.assertNotIn("if join_attempts >= max_groups", src)
 
 
 class V608UiAndContentRegressionTests(unittest.TestCase):

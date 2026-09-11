@@ -269,6 +269,8 @@ def execute_automation_task(
         urls = data.get("urls", "").strip()
         raw_keywords = data.get("keywords") or data.get("groupKeywords") or group_keywords or "Homestay Huế, Du lịch Huế"
         limit = min(max(1, int(data.get("limit", 2))), 2)
+        profile_delay_min = max(0, int(data.get("profileDelayMin", 60) or 60))
+        profile_delay_max = max(profile_delay_min, int(data.get("profileDelayMax", 180) or 180))
         try: max_profiles=max(0,int(data.get("maxProfiles",0) or 0))
         except (TypeError,ValueError): max_profiles=0
 
@@ -287,7 +289,7 @@ def execute_automation_task(
                 on_line("Error: Danh sách URL nhóm đang trống.\n")
                 on_line("RUN_RESULT:failed\n")
                 return False
-            on_line(f"🔗 Bắt đầu xử lý {len(urls_list)} link nhóm cho từng profile; tối đa {limit} nhóm mới/profile.\n")
+            on_line(f"🔗 Bắt đầu xử lý {len(urls_list)} link nhóm cho từng profile; mục tiêu {limit} JOINED đã xác minh/profile.\n")
             active_pool = accounts_pool if (rotate_accounts and accounts_pool) else []
             if not active_pool:
                 target_id = account_id
@@ -297,7 +299,7 @@ def execute_automation_task(
                 active_pool = [{"id": target_id, "name": target_id or "default"}]
             if max_profiles > 0: active_pool=active_pool[:max_profiles]
             total_profiles=len(active_pool)
-            on_line(f"👥 Phạm vi Join: {total_profiles} profile · tối đa {limit} request/profile.\n")
+            on_line(f"👥 Phạm vi Join: {total_profiles} profile · mục tiêu {limit} JOINED/profile.\n")
             join_failed=False
             join_success = 0
             if job_repo:
@@ -313,9 +315,9 @@ def execute_automation_task(
                     action="join-group",
                     profile_id=acc_id,
                     target_url=shared_targets[:300],
-                    metadata={"mode": "urls", "limit": limit, "profile_name": acc_name}
+                    metadata={"mode": "urls", "target_joined": limit, "profile_name": acc_name}
                 )
-                on_line(f"\n========== [Profile {idx + 1}/{total_profiles}: {acc_name} | tối đa {limit}/{len(urls_list)} nhóm] ==========\n")
+                on_line(f"\n========== [Profile {idx + 1}/{total_profiles}: {acc_name} | mục tiêu JOINED {limit}] ==========\n")
                 full_cmd = (
                     build_cmd_for_account(acc_id)
                     + ["join-group", "--keywords", shared_targets, "--limit", str(limit)]
@@ -336,20 +338,24 @@ def execute_automation_task(
                     join_success += 1
                 else:
                     join_failed = True
-                confirmed = int(join_summary_res.get("joined_confirmed", 0)) + int(join_summary_res.get("existing_confirmed", 0))
+                confirmed = int(join_summary_res.get("joined_confirmed", 0))
+                pending = int(join_summary_res.get("pending_confirmed", 0))
                 uncertain = int(join_summary_res.get("unverified_attempts", 0))
-                if confirmed > 0 and uncertain == 0:
-                    workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=shared_targets[:300])
-                elif uncertain > 0 or ret == 0:
-                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=shared_targets[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                quota_met = bool(join_summary_res.get("quota_met")) or confirmed >= limit
+                if quota_met:
+                    workflow_finish_task(wf_task_id, state="completed", verification_status="JOIN_QUOTA_CONFIRMED", result_url=shared_targets[:300])
+                elif pending > 0 and uncertain == 0:
+                    workflow_finish_task(wf_task_id, state="pending", phase="VERIFYING", verification_status="REQUEST_PENDING", result_url=shared_targets[:300], error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; {pending} request(s) pending approval.")
+                elif uncertain > 0:
+                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=shared_targets[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message=f"Confirmed JOINED {confirmed}/{limit}; some join actions remain unverified.")
                 else:
-                    workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
+                    workflow_finish_task(wf_task_id, state="failed", verification_status="JOIN_QUOTA_PARTIAL", error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; no eligible candidate remained.")
                 record_profile_activity(acc_id, "join-group", target=shared_targets[:100], outcome=outcome)
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=idx + 1)
                 if idx < total_profiles - 1:
                     next_name = active_pool[idx + 1].get("name", "profile tiếp theo")
-                    rot_delay = 5 if ret != 0 else random.randint(60, 180)
+                    rot_delay = 5 if ret != 0 else random.randint(profile_delay_min, profile_delay_max)
                     if ret != 0:
                         on_line(f"\n⚠️ Profile {acc_name} chưa xác nhận được nhóm mới. Nghỉ {rot_delay}s trước {next_name}.\n")
                     else:
@@ -365,12 +371,12 @@ def execute_automation_task(
             kw_list = [k.strip() for k in re.split(r"[\r\n,;]+", str(raw_keywords)) if k.strip() and k.strip() != "None"]
             input_targets = ", ".join(kw_list) if kw_list else "Homestay Huế, Du lịch Huế"
             on_line(f"🔍 Bắt đầu tìm kiếm & tự động xin gia nhập nhóm Facebook theo từ khóa: '{input_targets}'...\n")
-            on_line("🛡️ [Giới hạn vận hành] Mỗi profile chỉ vào tối đa 2 nhóm/phiên mở trình duyệt & nghỉ ngẫu nhiên 1 - 3 phút.\n")
+            on_line(f"🛡️ [Quota] Mỗi profile tiếp tục xử lý cho đến khi đạt {limit} JOINED đã xác minh hoặc hết candidate.\n")
 
             if rotate_accounts and accounts_pool:
                 scoped_pool=accounts_pool[:max_profiles] if max_profiles > 0 else accounts_pool
                 total_acc=len(scoped_pool)
-                on_line(f"👥 Phạm vi Join: {total_acc} profile · tối đa {limit} request/profile.\n")
+                on_line(f"👥 Phạm vi Join: {total_acc} profile · mục tiêu {limit} JOINED/profile.\n")
                 join_failed=False
                 if job_repo:
                     job_repo.update_job(job_id, progress_total=total_acc)
@@ -384,9 +390,9 @@ def execute_automation_task(
                         action="join-group",
                         profile_id=acc_id,
                         target_url=str(input_targets)[:300],
-                        metadata={"mode": "keywords", "limit": limit, "profile_name": acc_name}
+                        metadata={"mode": "keywords", "target_joined": limit, "profile_name": acc_name}
                     )
-                    on_line(f"\n========== [Profile {idx+1}/{total_acc}: {acc_name} (Tối đa 2 nhóm)] ==========\n")
+                    on_line(f"\n========== [Profile {idx+1}/{total_acc}: {acc_name} | mục tiêu JOINED {limit}] ==========\n")
                     full_cmd = (
                         build_cmd_for_account(acc_id)
                         + ["join-group", "--keywords", str(input_targets), "--limit", str(limit)]
@@ -407,14 +413,18 @@ def execute_automation_task(
                     outcome = "finished" if ret == 0 else "failed"
                     if ret != 0:
                         join_failed = True
-                    confirmed = int(join_kw_res.get("joined_confirmed", 0)) + int(join_kw_res.get("existing_confirmed", 0))
+                    confirmed = int(join_kw_res.get("joined_confirmed", 0))
+                    pending = int(join_kw_res.get("pending_confirmed", 0))
                     uncertain = int(join_kw_res.get("unverified_attempts", 0))
-                    if confirmed > 0 and uncertain == 0:
-                        workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=str(input_targets)[:300])
-                    elif uncertain > 0 or ret == 0:
-                        workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                    quota_met = bool(join_kw_res.get("quota_met")) or confirmed >= limit
+                    if quota_met:
+                        workflow_finish_task(wf_task_id, state="completed", verification_status="JOIN_QUOTA_CONFIRMED", result_url=str(input_targets)[:300])
+                    elif pending > 0 and uncertain == 0:
+                        workflow_finish_task(wf_task_id, state="pending", phase="VERIFYING", verification_status="REQUEST_PENDING", result_url=str(input_targets)[:300], error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; {pending} request(s) pending approval.")
+                    elif uncertain > 0:
+                        workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message=f"Confirmed JOINED {confirmed}/{limit}; some join actions remain unverified.")
                     else:
-                        workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
+                        workflow_finish_task(wf_task_id, state="failed", verification_status="JOIN_QUOTA_PARTIAL", error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; no eligible candidate remained.")
                     record_profile_activity(acc_id, "join-group", target=str(input_targets)[:100], outcome=outcome)
                     if job_repo:
                         job_repo.update_job(job_id, progress_current=idx + 1)
@@ -424,7 +434,7 @@ def execute_automation_task(
                             rot_delay = 5
                             on_line(f"\n⚠️ Profile {acc_name} gặp sự cố. Nghỉ nhanh {rot_delay}s trước khi chuyển sang {next_acc}...\n")
                         else:
-                            rot_delay = random.randint(60, 180)
+                            rot_delay = random.randint(profile_delay_min, profile_delay_max)
                             on_line(f"\n⏳ [Giãn cách] Đã hoàn tất profile {acc_name}. Nghỉ {rot_delay}s ({rot_delay//60} phút {rot_delay%60}s) trước khi xoay sang {next_acc}...\n")
                         if not sleep_with_cancel(rot_delay):
                             return False
@@ -440,7 +450,7 @@ def execute_automation_task(
                     action="join-group",
                     profile_id=target_id,
                     target_url=str(input_targets)[:300],
-                    metadata={"mode": "keywords", "limit": limit}
+                    metadata={"mode": "keywords", "target_joined": limit}
                 )
                 full_cmd = (
                     build_cmd_for_account(target_id)
@@ -460,14 +470,18 @@ def execute_automation_task(
                             pass
                 ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_single_join_line, cwd=str(BASE_DIR))
                 outcome = "finished" if ret == 0 else "failed"
-                confirmed = int(join_single_res.get("joined_confirmed", 0)) + int(join_single_res.get("existing_confirmed", 0))
+                confirmed = int(join_single_res.get("joined_confirmed", 0))
+                pending = int(join_single_res.get("pending_confirmed", 0))
                 uncertain = int(join_single_res.get("unverified_attempts", 0))
-                if confirmed > 0 and uncertain == 0:
-                    workflow_finish_task(wf_task_id, state="completed", verification_status="MEMBERSHIP_CONFIRMED", result_url=str(input_targets)[:300])
-                elif uncertain > 0 or ret == 0:
-                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message="Join request may have been triggered but membership state is not confirmed.")
+                quota_met = bool(join_single_res.get("quota_met")) or confirmed >= limit
+                if quota_met:
+                    workflow_finish_task(wf_task_id, state="completed", verification_status="JOIN_QUOTA_CONFIRMED", result_url=str(input_targets)[:300])
+                elif pending > 0 and uncertain == 0:
+                    workflow_finish_task(wf_task_id, state="pending", phase="VERIFYING", verification_status="REQUEST_PENDING", result_url=str(input_targets)[:300], error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; {pending} request(s) pending approval.")
+                elif uncertain > 0:
+                    workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", verification_status="REQUEST_UNVERIFIED", result_url=str(input_targets)[:300], error_code="JOIN_CLICKED_UNVERIFIED", error_message=f"Confirmed JOINED {confirmed}/{limit}; some join actions remain unverified.")
                 else:
-                    workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code="JOIN_FAILED", error_message="Join session ended without confirmed membership evidence.")
+                    workflow_finish_task(wf_task_id, state="failed", verification_status="JOIN_QUOTA_PARTIAL", error_code="JOIN_QUOTA_PARTIAL", error_message=f"Confirmed JOINED {confirmed}/{limit}; no eligible candidate remained.")
                 on_line(f"RUN_RESULT:{outcome}\n")
                 record_profile_activity(target_id, "join-group", target=str(input_targets)[:100], outcome=outcome)
                 return ret == 0

@@ -806,27 +806,28 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                                 <!-- Cấu hình số lượng, chống spam & tự động tương tác -->
                                 <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #1E40AF; line-height: 1.5;">
                                     🛡️ <b>Giới hạn vận hành & tương tác tùy chọn:</b><br>
-                                    • Giãn cách an toàn ngẫu nhiên <b>1 - 3 phút</b> (60 - 180s) giữa các nhóm và giữa các lượt đổi profile.<br>
-                                    • Mỗi profile chỉ vào <b>tối đa 2 nhóm</b> mỗi lần mở trình duyệt rồi tự động xoay sang profile tiếp theo.<br>
+                                    • Mỗi profile tiếp tục xử lý candidate cho đến khi đạt đủ <b>quota JOINED đã xác minh</b> hoặc hết nhóm phù hợp.<br>
+                                    • <b>Đã là thành viên</b> và <b>đang chờ duyệt</b> không được tính vào quota JOINED mới.<br>
                                     • Trong khi mở nhóm, tự động lướt và <b>Like / Bình luận AI</b> vào bài viết để thực hiện tương tác tùy chọn.
                                 </div>
 
                                 <div class="grid2" style="margin-bottom: 12px;">
                                     <div class="field-group">
-                                        <label class="field-label">Số nhóm tối đa mỗi profile</label>
+                                        <label class="field-label">Số nhóm cần JOINED thành công / profile</label>
                                         <select id="join-group-limit" class="field-input">
-                                            <option value="1">1 nhóm (Siêu an toàn)</option>
-                                            <option value="2" selected>2 nhóm (Tối đa 2 nhóm / profile)</option>
+                                            <option value="1">1 nhóm JOINED</option>
+                                            <option value="2" selected>2 nhóm JOINED</option>
                                         </select>
                                     </div>
                                     <div class="field-group">
                                         <label class="field-label">Số profile sẽ chạy</label>
-                                        <select id="join-group-max-profiles" class="field-input">
-                                            <option value="0" selected>Tất cả profile đã chọn</option>
-                                            <option value="1">1 profile</option><option value="2">2 profile</option><option value="4">4 profile</option><option value="8">8 profile</option>
-                                        </select>
-                                        <p class="field-hint">Độc lập với giới hạn số nhóm/profile.</p>
+                                        <select id="join-group-max-profiles" class="field-input"><option value="1">1 profile</option></select>
+                                        <p id="join-group-ready-hint" class="field-hint">Đang xác định số profile sẵn sàng...</p>
                                     </div>
+                                </div>
+                                <div class="grid2" style="margin-bottom: 12px;">
+                                    <div class="field-group"><label class="field-label">Nghỉ giữa 2 profile — tối thiểu (giây)</label><input id="join-profile-delay-min" class="field-input" type="number" min="0" max="3600" value="60"></div>
+                                    <div class="field-group"><label class="field-label">Nghỉ giữa 2 profile — tối đa (giây)</label><input id="join-profile-delay-max" class="field-input" type="number" min="0" max="3600" value="180"><p class="field-hint">Chỉ áp dụng sau khi profile hiện tại đạt quota hoặc kết thúc partial.</p></div>
                                 </div>
                                 <div class="field-group" style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:12px;">
                                     <label class="checkbox-label"><input type="checkbox" id="join-group-auto-rules"> Tự động xử lý quy tắc/câu hỏi nhóm</label>

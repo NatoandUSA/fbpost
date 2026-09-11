@@ -183,6 +183,20 @@ class V610ProductionLinkageTests(unittest.TestCase):
         self.assertIn("accountIds: accId === '__rotate__'", app)
         self.assertIn("loadAccounts().then(loadDefaultProductionSetup)", app)
 
+    def test_join_group_quota_and_ui_wiring_contract(self):
+        root = Path(__file__).resolve().parents[1]
+        executor = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
+        joiner = (root / "fb_join_group.py").read_text(encoding="utf-8")
+        app = (root / "static" / "app.js").read_text(encoding="utf-8")
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('"quota_met": joined_count >= target_joined', joiner)
+        self.assertIn('"pending_confirmed": pending_count', joiner)
+        self.assertIn('verification_status="JOIN_QUOTA_CONFIRMED"', executor)
+        self.assertIn('verification_status="REQUEST_PENDING"', executor)
+        self.assertIn('profileDelayMin: profileDelayMinVal', app)
+        self.assertIn('profileDelayMax: profileDelayMaxVal', app)
+        self.assertIn('join-group-ready-hint', html)
+
     def test_execution_manager_dom_and_css_linkage(self):
         root = Path(__file__).resolve().parents[1]
         html = (root / "static" / "index.html").read_text(encoding="utf-8")
@@ -199,7 +213,8 @@ class V610ProductionLinkageTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         source = (root / "services" / "job_executor.py").read_text(encoding="utf-8")
         for marker in [
-            'verification_status="MEMBERSHIP_CONFIRMED"',
+            'verification_status="JOIN_QUOTA_CONFIRMED"',
+            'verification_status="REQUEST_PENDING"',
             'verification_status="REQUEST_UNVERIFIED"',
             'verification_status="COMMENT_VERIFIED"',
             'verification_status="COMMENT_UNVERIFIED"',

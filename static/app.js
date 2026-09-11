@@ -199,6 +199,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const joinGroupUrls = document.getElementById('join-group-urls');
     const joinGroupLimit = document.getElementById('join-group-limit');
     const joinGroupMaxProfiles = document.getElementById('join-group-max-profiles');
+    const joinProfileDelayMin = document.getElementById('join-profile-delay-min');
+    const joinProfileDelayMax = document.getElementById('join-profile-delay-max');
+    const joinGroupReadyHint = document.getElementById('join-group-ready-hint');
     const joinGroupAutoRules = document.getElementById('join-group-auto-rules');
     const joinGroupInteractFeed = document.getElementById('join-group-interact-feed');
     const submitJoinGroupBtn = document.getElementById('submit-join-group-btn');
@@ -1667,9 +1670,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await presetRes.json();
                 const profiles = Array.isArray(data.profiles) ? data.profiles : [];
                 defaultJoinProfileIds = profiles.map(p => p.id).filter(Boolean);
-                if (joinGroupMaxProfiles && defaultJoinProfileIds.length) {
-                    joinGroupMaxProfiles.value = String(Math.min(defaultJoinProfileIds.length, 8));
-                }
+                refreshJoinProfileCountOptions();
                 populateJoinGroupProfiles();
                 if (joinGroupProfileSelect && defaultJoinProfileIds.length > 1) {
                     const rotate = joinGroupProfileSelect.querySelector('option[value="__rotate__"]');
@@ -1679,6 +1680,21 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) {
             console.warn('Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c c\u1ea5u h\u00ecnh production m\u1eb7c \u0111\u1ecbnh:', err);
         }
+    }
+
+    function refreshJoinProfileCountOptions() {
+        if (!joinGroupMaxProfiles) return;
+        const readyCount = defaultJoinProfileIds.length;
+        joinGroupMaxProfiles.innerHTML = '';
+        const maxReady = Math.max(1, readyCount);
+        for (let n = 1; n <= maxReady; n++) {
+            const opt = document.createElement('option');
+            opt.value = String(n);
+            opt.textContent = `${n} profile${n > 1 ? 's' : ''}`;
+            joinGroupMaxProfiles.appendChild(opt);
+        }
+        joinGroupMaxProfiles.value = String(readyCount > 0 ? readyCount : 1);
+        if (joinGroupReadyHint) joinGroupReadyHint.textContent = readyCount > 0 ? `${readyCount} profile READY trong preset production hiện tại.` : 'Chưa có profile READY trong preset production.';
     }
 
     function populateJoinGroupProfiles() {
@@ -1816,7 +1832,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const kwVal = joinGroupKeywords ? joinGroupKeywords.value.trim() : '';
             const urlVal = joinGroupUrls ? joinGroupUrls.value.trim() : '';
             const limitVal = joinGroupLimit ? parseInt(joinGroupLimit.value) || 2 : 2;
-            const maxProfilesVal = joinGroupMaxProfiles ? parseInt(joinGroupMaxProfiles.value) || 0 : 0;
+            const maxProfilesVal = joinGroupMaxProfiles ? Math.max(1, parseInt(joinGroupMaxProfiles.value) || 1) : 1;
+            const profileDelayMinVal = joinProfileDelayMin ? Math.max(0, parseInt(joinProfileDelayMin.value) || 0) : 60;
+            const profileDelayMaxVal = joinProfileDelayMax ? Math.max(profileDelayMinVal, parseInt(joinProfileDelayMax.value) || profileDelayMinVal) : 180;
             const autoRulesVal = joinGroupAutoRules ? joinGroupAutoRules.checked : false;
             const interactFeedVal = joinGroupInteractFeed ? joinGroupInteractFeed.checked : false;
 
@@ -1830,7 +1848,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            appendLog(`🤝 Join Group: ${maxProfilesVal || 'tất cả'} profile · tối đa ${limitVal} request/profile · ${isUrlMode ? 'URL mode' : 'Keyword mode'}.`);
+            appendLog(`🤝 Join Group: ${maxProfilesVal} profile · mục tiêu ${limitVal} JOINED/profile · nghỉ profile ${profileDelayMinVal}-${profileDelayMaxVal}s · ${isUrlMode ? 'URL mode' : 'Keyword mode'}.`);
             await runCommand('join-group', {
                 accountId: accId,
                 mode: isUrlMode ? 'urls' : 'keywords',
@@ -1838,7 +1856,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 urls: urlVal,
                 limit: limitVal,
                 maxProfiles: maxProfilesVal,
-                accountIds: accId === '__rotate__' ? defaultJoinProfileIds.slice(0, maxProfilesVal || defaultJoinProfileIds.length) : [],
+                profileDelayMin: profileDelayMinVal,
+                profileDelayMax: profileDelayMaxVal,
+                accountIds: accId === '__rotate__' ? defaultJoinProfileIds.slice(0, maxProfilesVal) : [],
                 autoRules: autoRulesVal,
                 interactFeed: interactFeedVal
             });
