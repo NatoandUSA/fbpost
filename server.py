@@ -508,6 +508,48 @@ def delete_group(group_id):
     return jsonify({"success": True})
 
 
+@app.route('/api/groups/sync-sheet', methods=['POST'])
+def api_sync_groups_from_sheet():
+    from services.sheet_sync import (
+        to_csv_export_url,
+        fetch_sheet_csv,
+        parse_group_sheet,
+        sync_to_group_registry,
+        DEFAULT_SHEET_URL,
+    )
+    data = json_body()
+    raw_sheet_url = data.get("sheet_url", "").strip() or DEFAULT_SHEET_URL
+    filter_active = bool(data.get("filter_active_only", False))
+    save_registry = bool(data.get("save_registry", True))
+
+    csv_url = to_csv_export_url(raw_sheet_url)
+    try:
+        csv_text = fetch_sheet_csv(csv_url)
+    except Exception as e:
+        return jsonify({"success": False, "error": f"Lỗi tải Google Sheet: {str(e)}"}), 400
+
+    parsed = parse_group_sheet(csv_text, filter_active_only=filter_active)
+    if not parsed.get("success"):
+        return jsonify(parsed), 400
+
+    if save_registry and parsed.get("groups"):
+        try:
+            sync_to_group_registry(parsed["groups"])
+        except Exception as se:
+            print(f"Warning: sync_to_group_registry error: {se}")
+
+    return jsonify(parsed)
+
+
+@app.route('/api/groups/sheet-config', methods=['GET'])
+def api_get_sheet_config():
+    from services.sheet_sync import DEFAULT_SHEET_URL
+    return jsonify({
+        "default_sheet_url": DEFAULT_SHEET_URL,
+        "sample_columns": ["STT", "Group Link", "Group Name", "Nhóm Public/Private", "Số thành viên làm tròn lên", "Đăng bài tự động (Y/N)"]
+    })
+
+
 # ---- Manual Group workflow: preparation and audit only, never browser posting ----
 MANUAL_GROUP_QUEUE_STATES = {"planned", "ready", "completed", "skipped"}
 

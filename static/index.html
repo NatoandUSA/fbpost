@@ -297,7 +297,22 @@
                         <!-- 1. Post/Message manual sections -->
                         <div id="manual-section">
                             <div class="field-group">
-                                <label class="field-label" id="target-label">🔗 Đường dẫn Group (mỗi link 1 dòng)</label>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                                    <label class="field-label" id="target-label" style="margin-bottom:0;">🔗 Đường dẫn Group (mỗi link 1 dòng)</label>
+                                    <div style="display:flex; gap:6px; align-items:center;">
+                                        <button id="sync-sheet-groups-btn" type="button" class="btn btn-secondary btn-xs" style="background:#0F9D58; color:#fff; font-weight:700; border:none; padding:4px 10px; border-radius:6px; font-size:12px; cursor:pointer;" title="Đồng bộ danh sách nhóm từ Google Sheets tự động">📥 Nạp nhóm Google Sheets</button>
+                                        <button id="toggle-sheet-modal-btn" type="button" class="btn-ghost btn-xs" style="font-size:11px; color:#6B7280; padding:2px 6px;" title="Cấu hình Google Sheet Link">⚙️ Link Sheet</button>
+                                    </div>
+                                </div>
+                                <div id="sheet-config-container" class="hidden" style="margin-bottom:8px; padding:8px 10px; background:#F0FDF4; border:1px solid #BBF7D0; border-radius:6px;">
+                                    <div style="display:flex; gap:6px; align-items:center;">
+                                        <input type="text" id="custom-sheet-url-input" class="field-input" placeholder="Dán link Google Sheets (để trống dùng sheet nhân viên)" style="font-size:12px; padding:5px 8px; flex:1;">
+                                        <label style="font-size:11px; display:flex; align-items:center; gap:4px; white-space:nowrap; cursor:pointer;">
+                                            <input type="checkbox" id="sheet-active-only-checkbox" checked> Chỉ nhóm Active (Y)
+                                        </label>
+                                    </div>
+                                    <div id="sheet-sync-status-msg" style="font-size:11px; color:#15803D; margin-top:4px; display:none;"></div>
+                                </div>
                                 <textarea id="target-input" class="field-textarea" rows="4" placeholder="https://facebook.com/groups/...">https://www.facebook.com/groups/timhomestaytaihue/
 https://www.facebook.com/groups/1384618231608931/
 https://www.facebook.com/groups/648990015540886/</textarea>
@@ -799,7 +814,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
 
                                 <!-- Nhập danh sách URL trực tiếp -->
                                 <div class="field-group hidden" id="join-urls-group">
-                                    <label class="field-label">Danh sách đường dẫn nhóm Facebook (mỗi dòng 1 link)</label>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                                        <label class="field-label" style="margin-bottom:0;">Danh sách đường dẫn nhóm Facebook (mỗi dòng 1 link)</label>
+                                        <button id="join-sync-sheet-btn" type="button" class="btn btn-secondary btn-xs" style="background:#0F9D58; color:#fff; font-weight:700; border:none; padding:3px 8px; border-radius:6px; font-size:11px; cursor:pointer;" title="Đồng bộ danh sách nhóm từ Google Sheets">📥 Nạp nhóm từ Sheet</button>
+                                    </div>
                                     <textarea id="join-group-urls" class="field-textarea" rows="4" placeholder="https://www.facebook.com/groups/timhomestaytaihue/&#10;https://www.facebook.com/groups/648990015540886/"></textarea>
                                     <p class="field-hint">Mở trực tiếp từng nhóm để kiểm tra trạng thái và bấm 'Tham gia nhóm' nếu chưa vào.</p>
                                 </div>
@@ -966,7 +984,10 @@ https://www.facebook.com/groups/648990015540886/</textarea>
                         <section id="group-manager-section" class="management-section hidden" aria-labelledby="group-manager-title">
                             <div class="management-hero">
                                 <div><span class="workflow-kicker">GROUP PIPELINE</span><h3 id="group-manager-title">Group manager</h3><p>Store Group links, track manual request status, rate results, and keep operating notes in one place.</p></div>
-                                <button id="group-manager-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button>
+                                <div style="display:flex; gap:6px;">
+                                    <button id="group-manager-sync-sheet-btn" class="btn btn-secondary btn-sm" type="button" style="background:#0F9D58; color:#fff; border:none; font-weight:600;">📥 Nạp từ Google Sheets</button>
+                                    <button id="group-manager-refresh-btn" class="btn btn-secondary btn-sm" type="button">↻ Refresh</button>
+                                </div>
                             </div>
                             <form id="group-manager-form" class="group-add-form">
                                 <div class="field-group"><label class="field-label" for="group-url-input">Facebook Group link</label><input id="group-url-input" class="field-input" type="url" placeholder="https://www.facebook.com/groups/example" required></div>

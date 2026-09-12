@@ -5096,6 +5096,132 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tải danh sách link đã đăng ban đầu
     loadPostedLinks();
 
+    // ---- Google Sheet Group Sync & Deduplication ----
+    function setupGoogleSheetSync() {
+        const syncSheetGroupsBtn = document.getElementById('sync-sheet-groups-btn');
+        const toggleSheetModalBtn = document.getElementById('toggle-sheet-modal-btn');
+        const sheetConfigContainer = document.getElementById('sheet-config-container');
+        const customSheetUrlInput = document.getElementById('custom-sheet-url-input');
+        const sheetActiveOnlyCheckbox = document.getElementById('sheet-active-only-checkbox');
+        const sheetSyncStatusMsg = document.getElementById('sheet-sync-status-msg');
+        const joinSyncSheetBtn = document.getElementById('join-sync-sheet-btn');
+        const groupManagerSyncSheetBtn = document.getElementById('group-manager-sync-sheet-btn');
+
+        if (toggleSheetModalBtn && sheetConfigContainer) {
+            toggleSheetModalBtn.addEventListener('click', () => {
+                sheetConfigContainer.classList.toggle('hidden');
+            });
+        }
+
+        async function triggerSheetSync(targetTextarea, btnElement) {
+            const customUrl = customSheetUrlInput ? customSheetUrlInput.value.trim() : '';
+            const filterActive = sheetActiveOnlyCheckbox ? sheetActiveOnlyCheckbox.checked : false;
+
+            const originalBtnText = btnElement ? btnElement.innerHTML : '';
+            if (btnElement) {
+                btnElement.disabled = true;
+                btnElement.innerHTML = '⏳ Đang đồng bộ...';
+            }
+
+            appendLog('📥 [Google Sheets] Đang kết nối tải và đồng bộ danh sách nhóm từ Google Sheets...');
+
+            try {
+                const res = await fetch('/api/groups/sync-sheet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sheet_url: customUrl,
+                        filter_active_only: filterActive,
+                        save_registry: true
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success && data.groups) {
+                    const urls = data.groups.map(g => g.url || g.raw_url).filter(Boolean);
+                    if (targetTextarea) {
+                        targetTextarea.value = urls.join('\n');
+                    }
+
+                    const uniqueCount = data.unique_count || data.selected_count || urls.length;
+                    const dupCount = data.duplicates_count || 0;
+                    const totalRows = data.total_rows || (uniqueCount + dupCount);
+
+                    const successMsg = `Đã nạp ${urls.length} nhóm độc nhất từ Google Sheets! (Lọc bỏ ${dupCount} link trùng lặp)`;
+                    showToast(successMsg, 'success');
+                    appendLog(`✅ [Google Sheets Sync] ${successMsg}`);
+                    appendLog(`📊 Chi tiết dữ liệu Sheet: ${totalRows} dòng tổng cộng, ${urls.length} nhóm hợp lệ.`);
+
+                    if (data.duplicates_details && data.duplicates_details.length > 0) {
+                        const dupSummary = data.duplicates_details.slice(0, 5).map(d => `Dòng ${d.duplicate_row} trùng Dòng ${d.first_row} (${d.name || d.duplicate_url})`).join('; ');
+                        appendLog(`⚠️ Phát hiện ${data.duplicates_details.length} vị trí trùng trong Sheet: ${dupSummary}${data.duplicates_details.length > 5 ? '...' : ''}`);
+                    }
+
+                    if (sheetSyncStatusMsg) {
+                        sheetSyncStatusMsg.style.display = 'block';
+                        sheetSyncStatusMsg.textContent = `Đã nạp lúc ${new Date().toLocaleTimeString('vi-VN')}: ${urls.length} nhóm (lọc ${dupCount} trùng).`;
+                    }
+                } else {
+                    const errMsg = data.error || 'Không thể đồng bộ nhóm từ Google Sheets.';
+                    showToast(errMsg, 'error');
+                    appendLog(`❌ [Google Sheets Sync Lỗi] ${errMsg}`);
+                }
+            } catch (err) {
+                const errMsg = `Lỗi kết nối đồng bộ: ${err.message}`;
+                showToast(errMsg, 'error');
+                appendLog(`❌ [Google Sheets Sync Lỗi] ${errMsg}`);
+            } finally {
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalBtnText;
+                }
+            }
+        }
+
+        if (syncSheetGroupsBtn) {
+            syncSheetGroupsBtn.addEventListener('click', () => {
+                triggerSheetSync(targetInput, syncSheetGroupsBtn);
+            });
+        }
+
+        if (joinSyncSheetBtn) {
+            const joinGroupUrls = document.getElementById('join-group-urls');
+            joinSyncSheetBtn.addEventListener('click', () => {
+                triggerSheetSync(joinGroupUrls, joinSyncSheetBtn);
+            });
+        }
+
+        if (groupManagerSyncSheetBtn) {
+            groupManagerSyncSheetBtn.addEventListener('click', async () => {
+                const origText = groupManagerSyncSheetBtn.innerHTML;
+                groupManagerSyncSheetBtn.disabled = true;
+                groupManagerSyncSheetBtn.innerHTML = '⏳ Đang nạp...';
+                try {
+                    const res = await fetch('/api/groups/sync-sheet', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ save_registry: true })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast(`Đã đồng bộ ${data.unique_count} nhóm vào kho quản lý!`, 'success');
+                        appendLog(`✅ [Group Manager] Đã nạp ${data.unique_count} nhóm từ Google Sheets vào kho dữ liệu.`);
+                        const refreshBtn = document.getElementById('group-manager-refresh-btn');
+                        if (refreshBtn) refreshBtn.click();
+                    } else {
+                        showToast(data.error || 'Lỗi đồng bộ', 'error');
+                    }
+                } catch (e) {
+                    showToast(`Lỗi: ${e.message}`, 'error');
+                } finally {
+                    groupManagerSyncSheetBtn.disabled = false;
+                    groupManagerSyncSheetBtn.innerHTML = origText;
+                }
+            });
+        }
+    }
+    setupGoogleSheetSync();
+
     // Khởi tạo trạng thái cách ly panel theo tab mặc định & nạp cấu hình hệ thống
     applyTabIsolation(currentMode);
     loadSettings();
