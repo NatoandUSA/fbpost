@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-12 v6.1.9"
+BUILD_TIME = "2026-09-12 v6.1.10"
 
 
 def app_build_info():
@@ -897,7 +897,9 @@ def cancel_all_queue():
 @app.route('/api/queue/clear', methods=['POST'])
 def clear_queue_items():
     data = json_body()
-    scope = data.get("scope", "all") # "all", "cancelled_or_failed", "date", "approved", "draft"
+    scope = (data.get("scope") or "").strip().lower()
+    if scope not in ("all", "cancelled_or_failed", "date", "approved", "draft"):
+        return jsonify({"error": "Tham số scope không hợp lệ. Cần một trong: all, cancelled_or_failed, date, approved, draft."}), 400
     target_date = data.get("date") # "YYYY-MM-DD"
     date_from = (data.get("date_from") or target_date or "").strip()[:10]
     date_to = (data.get("date_to") or target_date or "").strip()[:10]

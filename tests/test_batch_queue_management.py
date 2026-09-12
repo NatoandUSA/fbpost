@@ -191,6 +191,14 @@ class ServerQueueApiTests(unittest.TestCase):
         self.assertTrue(data.get('success'))
         self.assertEqual(data.get('deleted'), 1)
 
+        # Invalid scope returns 400 Bad Request
+        res_invalid = self.client.post('/api/queue/clear', json={'scope': 'invalid_scope'})
+        self.assertEqual(res_invalid.status_code, 400)
+
+        # Missing scope returns 400 Bad Request
+        res_empty = self.client.post('/api/queue/clear', json={})
+        self.assertEqual(res_empty.status_code, 400)
+
     def test_queue_dates_endpoint(self):
         self.client.post('/api/queue', json={'target': 'https://facebook.com/groups/401', 'content': 'A'})
         res = self.client.get('/api/queue/dates')
