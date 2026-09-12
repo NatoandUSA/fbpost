@@ -18,6 +18,7 @@ from services.profile_session_manager import (
 
 # GPM profiles with proxies/extensions can take longer than 15s to start.
 GPM_START_TIMEOUT_SECONDS = 30
+ENABLE_ADVANCED_HUMAN_ENGINE = os.getenv("ENABLE_ADVANCED_HUMAN_ENGINE", "true").lower() in ("true", "1", "yes")
 
 if sys.platform == "win32":
     try:
@@ -125,13 +126,22 @@ def human_type(page, locator, text, multiline_key="Enter"):
     print("Typing content with conservative pacing...")
     _ensure_focus(locator)
     value = str(text or "")
+    if ENABLE_ADVANCED_HUMAN_ENGINE:
+        try:
+            from modules.human_engine.adapter import human_type_advanced
+            if human_type_advanced(page, locator, value, multiline_key=multiline_key, allow_typos=False):
+                return
+        except Exception:
+            pass
     try:
         locator.fill(value)
         time.sleep(0.45)
         return
     except Exception:
         pass
-    keyboard = page.keyboard
+    keyboard = getattr(page, "keyboard", None)
+    if not keyboard:
+        return
     lines = value.split("\n")
     for idx, line in enumerate(lines):
         if line:
@@ -218,6 +228,13 @@ def safe_mouse_wheel(page, dx, dy):
     """
     if not page:
         return False
+    if ENABLE_ADVANCED_HUMAN_ENGINE:
+        try:
+            from modules.human_engine.adapter import kinetic_mouse_wheel
+            if kinetic_mouse_wheel(page, dx, dy):
+                return True
+        except Exception:
+            pass
     try:
         if hasattr(page, "is_closed") and page.is_closed():
             return False
@@ -763,7 +780,15 @@ def launch_browser(account, p, api_url=None):
             """)
         except Exception:
             pass
-            
+
+        if ENABLE_ADVANCED_HUMAN_ENGINE:
+            try:
+                from modules.human_engine.stealth_evasion import apply_stealth_scripts
+                apply_stealth_scripts(context)
+                apply_stealth_scripts(page)
+            except Exception:
+                pass
+
         return browser, context, page
         
     else:
@@ -836,6 +861,14 @@ def launch_browser(account, p, api_url=None):
             """)
         except Exception:
             pass
+
+        if ENABLE_ADVANCED_HUMAN_ENGINE:
+            try:
+                from modules.human_engine.stealth_evasion import apply_stealth_scripts
+                apply_stealth_scripts(context)
+                apply_stealth_scripts(page)
+            except Exception:
+                pass
 
         return None, context, page
 
