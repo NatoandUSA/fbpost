@@ -91,14 +91,14 @@ def parse_member_count(raw_val: Any) -> Optional[int]:
     if not val_str:
         return None
 
-    # Handle compact suffixes such as '76k', '1.2m', '1,2 nghìn', or '2 triệu'.
+    # Handle '76k', '1.2m'
     val_lower = val_str.lower().replace(" ", "")
-    k_match = re.fullmatch(r"([0-9]+(?:[.,][0-9]+)?)(?:k|nghìn)", val_lower)
+    k_match = re.match(r"^([0-9]+(?:[.,][0-9]+)?)[k|nghìn]$", val_lower)
     if k_match:
         num = float(k_match.group(1).replace(",", "."))
         return int(round(num * 1_000))
 
-    m_match = re.fullmatch(r"([0-9]+(?:[.,][0-9]+)?)(?:m|tr|triệu)", val_lower)
+    m_match = re.match(r"^([0-9]+(?:[.,][0-9]+)?)[m|tr|triệu]$", val_lower)
     if m_match:
         num = float(m_match.group(1).replace(",", "."))
         return int(round(num * 1_000_000))

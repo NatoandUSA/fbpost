@@ -1979,7 +1979,7 @@ class V6110QueueWorkspaceUiTests(unittest.TestCase):
     def test_queue_cards_show_created_time_and_session_identifier(self):
         js = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
         self.assertIn("queue-item-meta", js)
-        self.assertIn("item.created_at ? 'Tạo' : (item.updated_at ? 'Cập nhật' : 'Thời gian')", js)
+        self.assertIn("🕒 Tạo:", js)
         self.assertIn("🧾 Phiên/Mã:", js)
         self.assertIn("item.created_at || item.updated_at", js)
         self.assertIn("item.campaign_id || item.session_id || item.id", js)

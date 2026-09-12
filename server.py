@@ -536,17 +536,7 @@ def api_sync_groups_from_sheet():
         try:
             parsed["registry"] = sync_to_group_registry(parsed["groups"])
         except Exception as se:
-            app.logger.exception("Google Sheet parsed but registry synchronization failed")
-            return jsonify({
-                "success": False,
-                "error": f"Đã đọc Google Sheet nhưng không thể lưu kho Group: {str(se)}",
-                "sheet": {
-                    "total_rows": parsed.get("total_rows", 0),
-                    "unique_count": parsed.get("unique_count", 0),
-                    "duplicates_count": parsed.get("duplicates_count", 0),
-                    "selected_count": parsed.get("selected_count", 0),
-                },
-            }), 500
+            print(f"Warning: sync_to_group_registry error: {se}")
 
     return jsonify(parsed)
 

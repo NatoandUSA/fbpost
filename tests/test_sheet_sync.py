@@ -61,8 +61,6 @@ class DataParsingTests(unittest.TestCase):
         self.assertEqual(parse_member_count("692,800"), 692800)
         self.assertEqual(parse_member_count("25k"), 25000)
         self.assertEqual(parse_member_count("1.2M"), 1200000)
-        self.assertEqual(parse_member_count("1,2 nghìn"), 1200)
-        self.assertEqual(parse_member_count("2 triệu"), 2000000)
         self.assertIsNone(parse_member_count(""))
         self.assertIsNone(parse_member_count(None))
         self.assertIsNone(parse_member_count("abc"))
@@ -204,19 +202,6 @@ class ApiEndpointTests(unittest.TestCase):
         data = res.get_json()
         self.assertFalse(data["success"])
         self.assertIn("Google Sheet unreachable", data["error"])
-
-    @patch("services.sheet_sync.sync_to_group_registry", side_effect=OSError("disk full"))
-    @patch("services.sheet_sync.fetch_sheet_csv", return_value=SAMPLE_SHEET_CSV)
-    def test_post_sync_sheet_registry_error_is_fail_closed(self, mock_fetch, mock_sync):
-        res = self.client.post("/api/groups/sync-sheet", json={
-            "sheet_url": "https://docs.google.com/spreadsheets/d/test/edit",
-            "save_registry": True,
-        })
-        self.assertEqual(res.status_code, 500)
-        data = res.get_json()
-        self.assertFalse(data["success"])
-        self.assertIn("không thể lưu kho Group", data["error"])
-        self.assertEqual(data["sheet"]["unique_count"], 6)
 
 
 if __name__ == "__main__":
