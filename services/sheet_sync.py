@@ -31,9 +31,12 @@ def to_csv_export_url(sheet_url: str) -> str:
         return ""
 
     url = sheet_url.strip()
-    match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", url)
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "docs.google.com":
+        raise ValueError("Chỉ chấp nhận liên kết HTTPS từ docs.google.com.")
+    match = re.search(r"^/spreadsheets/d/([a-zA-Z0-9_-]+)", parsed.path)
     if not match:
-        return url
+        raise ValueError("Liên kết Google Sheets không hợp lệ.")
 
     doc_id = match.group(1)
 
@@ -58,16 +61,26 @@ def fetch_sheet_csv(csv_url: str, timeout: float = 15.0) -> str:
             "Chrome/128.0.0.0 Safari/537.36"
         )
     }
-    response = requests.get(csv_url, headers=headers, timeout=timeout)
+    response = requests.get(csv_url, headers=headers, timeout=timeout, stream=True)
     if response.status_code != 200:
         raise RuntimeError(
             f"Không thể tải dữ liệu từ Google Sheet (HTTP {response.status_code}). "
             "Vui lòng kiểm tra quyền chia sẻ (Bất kỳ ai có đường liên kết đều có thể xem)."
         )
 
-    # Ensure correct text decoding (UTF-8 or fallback)
-    response.encoding = response.apparent_encoding or "utf-8"
-    return response.text
+    max_csv_bytes = 5 * 1024 * 1024
+    chunks = []
+    received = 0
+    for chunk in response.iter_content(chunk_size=64 * 1024):
+        if not chunk:
+            continue
+        received += len(chunk)
+        if received > max_csv_bytes:
+            raise ValueError("Google Sheet vượt giới hạn 5 MB.")
+        chunks.append(chunk)
+    raw = b"".join(chunks)
+    encoding = response.encoding or "utf-8"
+    return raw.decode(encoding, errors="replace")
 
 
 def parse_member_count(raw_val: Any) -> Optional[int]:
@@ -294,41 +307,72 @@ def sync_to_group_registry(groups: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not groups:
         return {"saved_count": 0, "status": "no_groups"}
 
-    # Update SQLite
+    groups_file = DATA_DIR / "group_registry.json"
+    existing_list: List[Dict[str, Any]] = []
+    try:
+        if groups_file.exists():
+            with open(groups_file, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    existing_list = loaded
+    except (OSError, ValueError):
+        existing_list = []
+
     try:
         repo = GroupRepository()
-        existing_groups = {g.get("url"): g for g in repo.list_groups() if g.get("url")}
-        
-        merged_list = []
-        for g in groups:
-            url = g.get("url")
-            if not url:
-                continue
-            item = existing_groups.get(url, {}).copy()
-            item.update({
-                "id": item.get("id") or g.get("id") or uuid.uuid4().hex[:12],
-                "name": g.get("name") or item.get("name", url),
-                "url": url,
-                "category": item.get("category", "homestay_hue"),
-                "member_count": g.get("member_count") or item.get("member_count"),
-                "group_type": g.get("group_type") or item.get("group_type", "unknown"),
-                "notes": g.get("notes") or item.get("notes", ""),
-            })
-            merged_list.append(item)
-
-        repo.save_groups(merged_list)
+        for item in repo.list_groups():
+            url = normalize_target_url(item.get("url") or "").lower()
+            if url and not any(normalize_target_url(g.get("url") or "").lower() == url for g in existing_list):
+                existing_list.append(item)
     except Exception as sqle:
-        print(f"Warning: GroupRepository save error: {sqle}")
+        print(f"Warning: GroupRepository read error: {sqle}")
+        repo = None
 
-    # Update JSON file fallback
+    merged_list = [item.copy() for item in existing_list]
+    by_url = {
+        normalize_target_url(item.get("url") or "").lower(): item
+        for item in merged_list if item.get("url")
+    }
+    imported_count = 0
+    updated_count = 0
+    for group in groups:
+        url = normalize_target_url(group.get("url") or "").lower()
+        if not url:
+            continue
+        existing = by_url.get(url)
+        if existing is None:
+            item = group.copy()
+            item["url"] = url
+            item.setdefault("id", uuid.uuid4().hex[:12])
+            item.setdefault("category", "homestay_hue")
+            merged_list.append(item)
+            by_url[url] = item
+            imported_count += 1
+        else:
+            existing.update({
+                "name": group.get("name") or existing.get("name", url),
+                "member_count": group.get("member_count") or existing.get("member_count"),
+                "group_type": group.get("group_type") or existing.get("group_type", "unknown"),
+                "notes": group.get("notes") or existing.get("notes", ""),
+            })
+            updated_count += 1
+
+    if repo is not None:
+        repo.save_groups(merged_list)
+
+    temp_file = groups_file.with_suffix(".json.tmp")
     try:
-        groups_file = DATA_DIR / "groups.json"
-        with open(groups_file, "w", encoding="utf-8") as f:
-            json.dump(groups, f, ensure_ascii=False, indent=2)
-    except Exception as fe:
-        print(f"Warning: groups.json save error: {fe}")
+        with open(temp_file, "w", encoding="utf-8") as f:
+            json.dump(merged_list, f, ensure_ascii=False, indent=2)
+        temp_file.replace(groups_file)
+    finally:
+        if temp_file.exists():
+            temp_file.unlink()
 
     return {
         "saved_count": len(groups),
+        "imported_count": imported_count,
+        "updated_count": updated_count,
+        "registry_count": len(merged_list),
         "status": "success"
     }

@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyTab = document.createElement('button');
         historyTab.className = 'composer-tab nav-item';
         historyTab.dataset.target = 'history'; historyTab.id = 'tab-history';
-        historyTab.innerHTML = '<span style="font-size:17px">🔗</span><span>Lịch sử & Đối soát</span>';
+        historyTab.innerHTML = '<span style="font-size:17px">🔗</span><span>Lịch Sử & Đối Soát Bài Đăng</span>';
         queueTab.insertAdjacentElement('afterend', historyTab);
     }
     const workspaceGrid = document.querySelector('.workspace-grid');
@@ -433,6 +433,17 @@ document.addEventListener('DOMContentLoaded', () => {
             preview.style.cssText = 'font-size:11px;color:#64748B;line-height:1.35;max-height:32px;overflow:hidden;background:#F8FAFC;padding:4px 6px;border-radius:5px;';
             preview.textContent = item.content;
 
+            const meta = document.createElement('div');
+            meta.className = 'queue-item-meta';
+            meta.style.cssText = 'font-size:10px;color:#64748B;display:flex;gap:10px;flex-wrap:wrap;align-items:center;';
+            const rawCreatedAt = item.created_at || item.updated_at || '';
+            const parsedCreatedAt = rawCreatedAt ? new Date(rawCreatedAt) : null;
+            const createdLabel = parsedCreatedAt && !Number.isNaN(parsedCreatedAt.getTime())
+                ? parsedCreatedAt.toLocaleString('vi-VN', { hour12: false })
+                : (rawCreatedAt || 'Không rõ');
+            const sessionLabel = item.campaign_id || item.session_id || item.id || 'Không rõ';
+            meta.innerHTML = `<span>🕒 Tạo: <strong>${escapeHtml(createdLabel)}</strong></span><span>🧾 Phiên/Mã: <strong>${escapeHtml(sessionLabel)}</strong></span>`;
+
             const actions = document.createElement('div');
             actions.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-top: 4px;';
 
@@ -490,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 actions.appendChild(cancel);
             }
 
-            row.append(title, preview, actions);
+            row.append(title, preview, meta, actions);
             approvalQueueList.appendChild(row);
         });
 

@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-12 v6.1.9"
+BUILD_TIME = "2026-09-12 v6.1.10"
 
 
 def app_build_info():
@@ -522,8 +522,8 @@ def api_sync_groups_from_sheet():
     filter_active = bool(data.get("filter_active_only", False))
     save_registry = bool(data.get("save_registry", True))
 
-    csv_url = to_csv_export_url(raw_sheet_url)
     try:
+        csv_url = to_csv_export_url(raw_sheet_url)
         csv_text = fetch_sheet_csv(csv_url)
     except Exception as e:
         return jsonify({"success": False, "error": f"Lỗi tải Google Sheet: {str(e)}"}), 400
@@ -534,7 +534,7 @@ def api_sync_groups_from_sheet():
 
     if save_registry and parsed.get("groups"):
         try:
-            sync_to_group_registry(parsed["groups"])
+            parsed["registry"] = sync_to_group_registry(parsed["groups"])
         except Exception as se:
             print(f"Warning: sync_to_group_registry error: {se}")
 

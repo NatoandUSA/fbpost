@@ -844,7 +844,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.9")
+        self.assertEqual(get_version(), "6.1.10")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1912,8 +1912,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.9', html)
-        self.assertIn('app.js?v=6.1.9', html)
+        self.assertIn('styles.css?v=6.1.10', html)
+        self.assertIn('app.js?v=6.1.10', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
@@ -1962,6 +1962,27 @@ class V619QueueStateSeparationTests(unittest.TestCase):
             self.assertEqual(summary["active"], 1)
             self.assertEqual(summary["needs_reconcile"], 2)
             self.assertEqual(summary["pending"], 1)
+
+
+class V6110QueueWorkspaceUiTests(unittest.TestCase):
+    def test_queue_and_history_have_a_separate_workspace_sidebar_block(self):
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "static" / "index.html").read_text(encoding="utf-8")
+        js = (root / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertEqual(html.count('id="tab-queue"'), 1)
+        self.assertIn("🗂️ KHÔNG GIAN LÀM VIỆC", html)
+        self.assertIn("📋 Hàng Đợi Đăng Bài", html)
+        self.assertIn("Lịch Sử & Đối Soát Bài Đăng", js)
+        self.assertLess(html.index("id=\"tab-comment\""), html.index("🗂️ KHÔNG GIAN LÀM VIỆC"))
+        self.assertLess(html.index("🗂️ KHÔNG GIAN LÀM VIỆC"), html.index("⚡ TỰ ĐỘNG & TIỆN ÍCH"))
+
+    def test_queue_cards_show_created_time_and_session_identifier(self):
+        js = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("queue-item-meta", js)
+        self.assertIn("🕒 Tạo:", js)
+        self.assertIn("🧾 Phiên/Mã:", js)
+        self.assertIn("item.created_at || item.updated_at", js)
+        self.assertIn("item.campaign_id || item.session_id || item.id", js)
 
 
 class V609SecurityLinkageRegressionTests(unittest.TestCase):

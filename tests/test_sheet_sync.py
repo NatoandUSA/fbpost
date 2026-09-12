@@ -1,6 +1,9 @@
 """Unit and Integration Tests for Google Sheet Group Synchronization & Deduplication."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from services.sheet_sync import (
@@ -9,6 +12,7 @@ from services.sheet_sync import (
     parse_privacy_type,
     is_active_flag,
     parse_group_sheet,
+    sync_to_group_registry,
     DEFAULT_SHEET_URL,
 )
 
@@ -43,6 +47,11 @@ class GoogleSheetUrlTests(unittest.TestCase):
         url3 = "https://docs.google.com/spreadsheets/d/10kZe1_oYgdUWPua16jN59xaPBwR2WsK86bjNFHpGz2k/edit"
         exp3 = to_csv_export_url(url3)
         self.assertEqual(exp3, "https://docs.google.com/spreadsheets/d/10kZe1_oYgdUWPua16jN59xaPBwR2WsK86bjNFHpGz2k/export?format=csv&gid=0")
+
+    def test_rejects_non_google_sheet_urls(self):
+        for url in ("http://docs.google.com/spreadsheets/d/test/edit", "https://evil.example/spreadsheets/d/test/edit", "https://docs.google.com.evil.example/spreadsheets/d/test/edit"):
+            with self.assertRaises(ValueError):
+                to_csv_export_url(url)
 
 
 class DataParsingTests(unittest.TestCase):
@@ -137,6 +146,25 @@ class SheetSyncPipelineTests(unittest.TestCase):
         self.assertEqual(res["rows_with_urls"], 95)
         self.assertEqual(res["unique_count"], 84)
         self.assertEqual(res["duplicates_count"], 11)
+
+
+class RegistryMergeTests(unittest.TestCase):
+    def test_sheet_import_preserves_existing_registry_items(self):
+        class FakeRepo:
+            saved = None
+            def list_groups(self): return []
+            def save_groups(self, groups): FakeRepo.saved = groups
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("services.sheet_sync.DATA_DIR", Path(directory)), \
+             patch("repositories.group_repo.GroupRepository", FakeRepo):
+            existing = [{"id":"old","url":"https://facebook.com/groups/existing","name":"Existing"}]
+            (Path(directory) / "group_registry.json").write_text(json.dumps(existing), encoding="utf-8")
+            result = sync_to_group_registry([{"id":"new","url":"https://facebook.com/groups/new","name":"New"}])
+            stored = json.loads((Path(directory) / "group_registry.json").read_text(encoding="utf-8"))
+            self.assertEqual({g["id"] for g in stored}, {"old", "new"})
+            self.assertEqual(result["imported_count"], 1)
+            self.assertEqual(result["registry_count"], 2)
+            self.assertEqual(len(FakeRepo.saved), 2)
 
 
 class ApiEndpointTests(unittest.TestCase):
