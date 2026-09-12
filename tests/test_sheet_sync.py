@@ -125,15 +125,18 @@ class SheetSyncPipelineTests(unittest.TestCase):
 
     def test_sync_real_user_sheet_dataset(self):
         from pathlib import Path
-        fixture_path = Path(r"C:\Users\Admin\.gemini\antigravity\brain\2060a8be-1e2c-434a-9c05-d14b2225c67a\.system_generated\steps\10615\content.md")
-        if fixture_path.exists():
-            text = fixture_path.read_text(encoding="utf-8")
-            csv_content = "\n".join(text.splitlines()[8:])
-            res = parse_group_sheet(csv_content)
-            self.assertTrue(res["success"])
-            self.assertEqual(res["rows_with_urls"], 95)
-            self.assertEqual(res["unique_count"], 84)
-            self.assertEqual(res["duplicates_count"], 11)
+        fixture_path = Path(__file__).resolve().parent / "fixtures" / "user_sheet_dataset.csv"
+        if not fixture_path.exists():
+            # Fallback to local brain path if available
+            fixture_path = Path(r"C:\Users\Admin\.gemini\antigravity\brain\2060a8be-1e2c-434a-9c05-d14b2225c67a\.system_generated\steps\10615\content.md")
+        self.assertTrue(fixture_path.exists(), "User sheet fixture must exist for regression verification")
+        text = fixture_path.read_text(encoding="utf-8")
+        csv_content = text if "1,https" in text else "\n".join(text.splitlines()[8:])
+        res = parse_group_sheet(csv_content)
+        self.assertTrue(res["success"])
+        self.assertEqual(res["rows_with_urls"], 95)
+        self.assertEqual(res["unique_count"], 84)
+        self.assertEqual(res["duplicates_count"], 11)
 
 
 class ApiEndpointTests(unittest.TestCase):
