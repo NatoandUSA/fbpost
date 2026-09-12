@@ -91,27 +91,36 @@ def _locate_target_post_article(page, canonical_url):
                         visible_dialogs.append(dialog)
                 except Exception:
                     continue
-            if len(visible_dialogs) == 1:
-                dialog = visible_dialogs[0]
-                try:
-                    dialog_text = dialog.inner_text(timeout=700).strip()
-                except Exception:
-                    dialog_text = ""
-                try:
-                    has_identity_link = dialog.locator(f"a[href*='{post_id}']").count() > 0
-                except Exception:
-                    has_identity_link = False
-                try:
-                    has_article = dialog.locator("div[role='article']").count() > 0
-                except Exception:
-                    has_article = False
-                if has_identity_link or has_article or len(dialog_text) >= 80:
-                    print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={len(dialog_text)}")
-                    return dialog
-                print(f"[Comment Resolver] post_identity={post_id} scope=permalink-shell-wait chars={len(dialog_text)}")
-            if len(visible_dialogs) > 1:
-                print(f"[Comment Resolver] post_identity={post_id} scope=ambiguous-dialogs count={len(visible_dialogs)}")
-                return None
+            if visible_dialogs:
+                ranked = []
+                for dialog_idx, dialog in enumerate(visible_dialogs):
+                    try:
+                        dialog_text = dialog.inner_text(timeout=700).strip()
+                    except Exception:
+                        dialog_text = ""
+                    try:
+                        has_identity_link = dialog.locator(f"a[href*='{post_id}']").count() > 0
+                    except Exception:
+                        has_identity_link = False
+                    try:
+                        article_count = dialog.locator("div[role='article']").count()
+                    except Exception:
+                        article_count = 0
+                    score = (100 if has_identity_link else 0) + (20 if article_count else 0) + min(len(dialog_text), 500) / 500.0
+                    ranked.append((score, has_identity_link, article_count, len(dialog_text), dialog_idx, dialog))
+                ranked.sort(key=lambda row: row[0], reverse=True)
+                top = ranked[0]
+                second_score = ranked[1][0] if len(ranked) > 1 else -1
+                if top[1] or (top[2] and top[0] > second_score + 5):
+                    print(f"[Comment Resolver] post_identity={post_id} scope=ranked-permalink-dialog index={top[4]} links={int(top[1])} articles={top[2]} chars={top[3]} dialogs={len(visible_dialogs)}")
+                    return top[5]
+                if len(visible_dialogs) == 1 and (top[2] or top[3] >= 80):
+                    print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={top[3]}")
+                    return top[5]
+                if len(visible_dialogs) > 1:
+                    print(f"[Comment Resolver] post_identity={post_id} scope=ambiguous-dialogs count={len(visible_dialogs)} top_score={top[0]:.2f} second_score={second_score:.2f}")
+                    return None
+                print(f"[Comment Resolver] post_identity={post_id} scope=permalink-shell-wait chars={top[3]}")
         except Exception:
             pass
         time.sleep(0.35)
@@ -197,6 +206,22 @@ def _find_comment_input(page, post_scope, canonical_url, wait_rounds=8):
 
 def _open_comment_surface(page, post_scope, canonical_url):
     """Activate comment UI inside the exact post and wait for a portalled/lazy editor."""
+    # Facebook often mounts the comment footer only after the permalink modal is scrolled.
+    # Scroll only descendants of the already-verified exact-post scope; never the global page.
+    try:
+        post_scope.evaluate("""root => {
+            const nodes = [root, ...root.querySelectorAll('div')];
+            for (const el of nodes) {
+                if (el.scrollHeight > el.clientHeight + 80) el.scrollTop = el.scrollHeight;
+            }
+        }""")
+        page.wait_for_timeout(1200)
+        found = _find_comment_input(page, post_scope, canonical_url, wait_rounds=3)
+        if found is not None:
+            print("[Comment Resolver] textbox=found-after-exact-scope-scroll")
+            return found
+    except Exception as scroll_err:
+        print(f"[Comment Resolver] exact-scope scroll warning: {scroll_err}")
     open_comment_buttons = [
         "div[role='button'][aria-label='Write a comment']",
         "div[role='button'][aria-label*='comment' i]",
