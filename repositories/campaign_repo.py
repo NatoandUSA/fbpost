@@ -141,6 +141,76 @@ class CampaignRepository(BaseRepository):
                 approved += 1
         return approved
 
+    def approve_all_drafts(self) -> int:
+        now = datetime.now().isoformat()
+        approved = 0
+        with self.transaction() as conn:
+            rows = conn.execute("SELECT id, raw_json FROM publication_jobs WHERE state = 'draft'").fetchall()
+            for row in rows:
+                item = self.loads(row["raw_json"], {}) or {}
+                item["state"] = "approved"
+                item["approved_at"] = now
+                item["updated_at"] = now
+                item.setdefault("audit", []).append({"at": now, "event": "approved_all_drafts", "state": "approved"})
+                conn.execute(
+                    "UPDATE publication_jobs SET state='approved', approved_at=?, error=NULL, raw_json=? WHERE id=? AND state='draft'",
+                    (now, self.dumps(item), row["id"]),
+                )
+                approved += 1
+        return approved
+
+    def cancel_all_queue(self, states=("draft", "approved")) -> int:
+        now = datetime.now().isoformat()
+        cancelled = 0
+        placeholders = ",".join("?" for _ in states)
+        with self.transaction() as conn:
+            rows = conn.execute(f"SELECT id, raw_json FROM publication_jobs WHERE state IN ({placeholders})", tuple(states)).fetchall()
+            for row in rows:
+                item = self.loads(row["raw_json"], {}) or {}
+                item["state"] = "cancelled"
+                item["updated_at"] = now
+                item.setdefault("audit", []).append({"at": now, "event": "cancelled_batch", "state": "cancelled"})
+                conn.execute(
+                    "UPDATE publication_jobs SET state='cancelled', raw_json=? WHERE id=?",
+                    (self.dumps(item), row["id"]),
+                )
+                cancelled += 1
+        return cancelled
+
+    def delete_queue_items(
+        self,
+        item_ids: Optional[List[str]] = None,
+        states: Optional[List[str]] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        clear_all: bool = False
+    ) -> int:
+        conditions = []
+        params = []
+        if not clear_all:
+            if item_ids:
+                placeholders = ",".join("?" for _ in item_ids)
+                conditions.append(f"id IN ({placeholders})")
+                params.extend(item_ids)
+            if states:
+                placeholders = ",".join("?" for _ in states)
+                conditions.append(f"state IN ({placeholders})")
+                params.extend(states)
+            if date_from:
+                conditions.append("substr(created_at, 1, 10) >= ?")
+                params.append(date_from.strip()[:10])
+            if date_to:
+                conditions.append("substr(created_at, 1, 10) <= ?")
+                params.append(date_to.strip()[:10])
+
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        if not where_clause and not clear_all:
+            return 0
+
+        with self.transaction() as conn:
+            cursor = conn.execute(f"DELETE FROM publication_jobs {where_clause}", tuple(params))
+            return cursor.rowcount
+
     def reconcile_processing_queue(self) -> int:
         now = datetime.now().isoformat()
         recovered = 0

@@ -655,8 +655,8 @@ def execute_automation_task(
             targets = data.get("targets", []) or []
             content = str(data.get("content") or "")
             tasks = [{"target": t, "content": content, "image": None} for t in targets]
-        if not tasks or len(tasks) > 100:
-            on_line("Error: Thread batch must contain 1-100 tasks.\nRUN_RESULT:failed\n")
+        if not tasks or len(tasks) > 999:
+            on_line("Error: Thread batch must contain 1-999 tasks.\nRUN_RESULT:failed\n")
             return False
         verified_count = unverified_count = failed_count = 0
         if job_repo: job_repo.update_job(job_id, progress_total=len(tasks))
@@ -707,8 +707,8 @@ def execute_automation_task(
         on_line("Error: No tasks or targets provided.\n")
         return False
 
-    if not isinstance(tasks, list) or len(tasks) > 100:
-        on_line("Error: Batch must contain between 1 and 100 tasks.\n")
+    if not isinstance(tasks, list) or len(tasks) > 999:
+        on_line("Error: Batch must contain between 1 and 999 tasks.\n")
         return False
 
     total = len(tasks)

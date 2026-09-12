@@ -1931,7 +1931,7 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 class V618QueueVisibilityAndArchiveTests(unittest.TestCase):
     def test_queue_loads_all_supported_rows_and_reports_visible_count(self):
         js = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
-        self.assertIn("?active=1&limit=500", js)
+        self.assertIn("?active=1&limit=999", js)
         self.assertIn("đang hiển thị ${visibleItems.length}", js)
         self.assertIn("queueFilter.value = 'active'", js)
         self.assertIn("await loadQueue();", js)
