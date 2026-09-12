@@ -3,7 +3,10 @@ import os
 import time
 import random
 import re
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:
+    sync_playwright = None
 from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult
 from paths import DATA_DIR
 
@@ -15,10 +18,16 @@ def _canonicalize_comment_url(url):
     m = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.IGNORECASE)
     if m:
         return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
-    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/(\d+)", value, re.IGNORECASE)
+    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
     if m:
         return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
-    if re.search(r"facebook\.com/.+/(?:posts|videos)/\d+", value, re.IGNORECASE):
+    m = re.search(r"facebook\.com/share/([pv])/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
+    if m:
+        return f"https://www.facebook.com/share/{m.group(1).lower()}/{m.group(2)}"
+    m = re.search(r"facebook\.com/reel/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
+    if m:
+        return f"https://www.facebook.com/reel/{m.group(1)}"
+    if re.search(r"facebook\.com/.+/(?:posts|videos)/[a-zA-Z0-9_-]+", value, re.IGNORECASE):
         return value.split("?", 1)[0]
     if re.search(r"facebook\.com/(?:story\.php|permalink\.php)\?.*(?:story_fbid|fbid)=\d+", value, re.IGNORECASE):
         return value
@@ -26,10 +35,16 @@ def _canonicalize_comment_url(url):
 
 def _post_identity(url):
     value = (url or "").strip()
-    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/(\d+)", value, re.IGNORECASE)
+    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
     if m:
         return {"group_id": m.group(1), "post_id": m.group(2)}
-    m = re.search(r"facebook\.com/.+/(?:posts|videos)/(\d+)", value, re.IGNORECASE)
+    m = re.search(r"facebook\.com/share/[pv]/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
+    if m:
+        return {"group_id": "", "post_id": m.group(1)}
+    m = re.search(r"facebook\.com/reel/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
+    if m:
+        return {"group_id": "", "post_id": m.group(1)}
+    m = re.search(r"facebook\.com/.+/(?:posts|videos)/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
     if m:
         return {"group_id": "", "post_id": m.group(1)}
     m = re.search(r"[?&](?:story_fbid|fbid)=(\d+)", value, re.IGNORECASE)
@@ -37,8 +52,10 @@ def _post_identity(url):
 
 def _locate_target_post_article(page, canonical_url):
     """Resolve the exact target-post DOM scope and fail closed on ambiguity."""
+    current_url = getattr(page, "url", "") or ""
+    current_ident = _post_identity(current_url) if current_url else {}
     ident = _post_identity(canonical_url)
-    post_id = (ident.get("post_id") or "").strip()
+    post_id = (current_ident.get("post_id") or ident.get("post_id") or "").strip()
     if not post_id:
         return None
 
@@ -248,7 +265,10 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
     browser_obj = None
     context = None
     try:
-        with sync_playwright() as p:
+        _sp = sync_playwright
+        if _sp is None:
+            from playwright.sync_api import sync_playwright as _sp
+        with _sp() as p:
             if account:
                 browser_obj, context, page = launch_browser(account, p, gpm_api_url)
             else:

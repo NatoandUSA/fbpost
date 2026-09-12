@@ -353,6 +353,15 @@ class V610EndToEndTruthTests(unittest.TestCase):
         canonical = _canonicalize_comment_url("https://www.facebook.com/groups/123456/?multi_permalinks=987654")
         self.assertEqual(canonical, "https://www.facebook.com/groups/123456/posts/987654")
         self.assertEqual(_post_identity(canonical)["post_id"], "987654")
+        share_can = _canonicalize_comment_url("https://www.facebook.com/share/p/1EEocWk8Fm/?mibextid=wwXIfr")
+        self.assertEqual(share_can, "https://www.facebook.com/share/p/1EEocWk8Fm")
+        self.assertEqual(_post_identity(share_can)["post_id"], "1EEocWk8Fm")
+        share_video = _canonicalize_comment_url("https://www.facebook.com/share/v/AbC123xyz/?mibextid=wwXIfr")
+        self.assertEqual(share_video, "https://www.facebook.com/share/v/AbC123xyz")
+        self.assertEqual(_post_identity(share_video)["post_id"], "AbC123xyz")
+        reel_can = _canonicalize_comment_url("https://www.facebook.com/reel/1729793894896767/?s=ch_ps_fs")
+        self.assertEqual(reel_can, "https://www.facebook.com/reel/1729793894896767")
+        self.assertEqual(_post_identity(reel_can)["post_id"], "1729793894896767")
 
     def test_comment_verification_is_scoped_to_target_post(self):
         root = Path(__file__).resolve().parents[1]

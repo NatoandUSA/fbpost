@@ -2089,7 +2089,7 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
         if target_group and copied_group and target_group != copied_group:
             return ""
         parsed = urllib.parse.urlparse(clean)
-        is_post_route = bool(re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+", parsed.path, re.I))
+        is_post_route = bool(re.search(r"(?:/groups/[^/]+/(?:posts|permalink)/[^/]+|/share/[pv]/[^/]+|/reel/[^/]+)", parsed.path, re.I))
         qs = urllib.parse.parse_qs(parsed.query)
         if not is_post_route and "multi_permalinks" not in qs:
             return ""

@@ -1827,7 +1827,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (submitJoinGroupBtn) {
         submitJoinGroupBtn.addEventListener('click', async () => {
-            const accId = joinGroupProfileSelect ? joinGroupProfileSelect.value : '';
+            let accId = joinGroupProfileSelect ? joinGroupProfileSelect.value : '';
+            if (!accId && accountSelector) {
+                accId = accountSelector.value;
+            }
+            if (!accId && accountsList && accountsList.length > 0) {
+                accId = accountsList[0].id;
+            }
+            if (!accId && (!accountsList || accountsList.length === 0)) {
+                showToast('Vui lòng thêm ít nhất 1 tài khoản Facebook (hoặc mở GPM) trước khi chạy tác vụ!', 'error');
+                return;
+            }
+
             const isUrlMode = joinModeUrls && joinModeUrls.checked;
             const kwVal = joinGroupKeywords ? joinGroupKeywords.value.trim() : '';
             const urlVal = joinGroupUrls ? joinGroupUrls.value.trim() : '';
@@ -1848,6 +1859,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            let rotationIds = [];
+            if (accId === '__rotate__') {
+                if (defaultJoinProfileIds && defaultJoinProfileIds.length > 0) {
+                    rotationIds = defaultJoinProfileIds.slice(0, maxProfilesVal);
+                } else if (accountsList && accountsList.length > 0) {
+                    rotationIds = accountsList.map(a => a.id).slice(0, maxProfilesVal);
+                }
+            }
+
             appendLog(`🤝 Join Group: ${maxProfilesVal} profile · mục tiêu ${limitVal} JOINED/profile · nghỉ profile ${profileDelayMinVal}-${profileDelayMaxVal}s · ${isUrlMode ? 'URL mode' : 'Keyword mode'}.`);
             await runCommand('join-group', {
                 accountId: accId,
@@ -1858,7 +1878,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 maxProfiles: maxProfilesVal,
                 profileDelayMin: profileDelayMinVal,
                 profileDelayMax: profileDelayMaxVal,
-                accountIds: accId === '__rotate__' ? defaultJoinProfileIds.slice(0, maxProfilesVal) : [],
+                accountIds: accId === '__rotate__' ? rotationIds : [],
                 autoRules: autoRulesVal,
                 interactFeed: interactFeedVal
             });
@@ -2197,6 +2217,69 @@ document.addEventListener('DOMContentLoaded', () => {
         commentSubmitBtn.addEventListener('click', async () => {
             currentMode = 'comment';
             await submitCommentJob();
+        });
+    }
+
+    // Load/export confirmed posted permalinks for comment workflows.
+    async function fetchConfirmedPostedUrls() {
+        let links = [];
+        try {
+            const res = await fetch('/api/posted-links?state=published&limit=200');
+            if (res.ok) links = await res.json();
+        } catch (_) {}
+        if (!Array.isArray(links) || links.length === 0) {
+            links = Array.isArray(savedPostLinks) ? savedPostLinks : [];
+        }
+        const validUrls = [];
+        for (const item of links) {
+            const raw = typeof item === 'string' ? item : (item.url || item.result_url || '');
+            const url = String(raw || '').trim();
+            if (!url) continue;
+            const isPost = /facebook\.com\/(?:groups\/[^/?#]+\/(?:posts|permalink)\/[^/?#]+|share\/[pv]\/[^/?#]+|reel\/[^/?#]+|[^/?#]+\/(?:posts|videos)\/[^/?#]+|(?:story|permalink)\.php\?)/i.test(url);
+            if (isPost && !validUrls.includes(url)) validUrls.push(url);
+        }
+        return validUrls;
+    }
+
+    const loadPostedLinksBtn = document.getElementById('load-posted-links-btn');
+    if (loadPostedLinksBtn) {
+        loadPostedLinksBtn.addEventListener('click', async () => {
+            try {
+                loadPostedLinksBtn.disabled = true;
+                loadPostedLinksBtn.textContent = '⏳ Đang nạp...';
+                const validUrls = await fetchConfirmedPostedUrls();
+                if (!validUrls.length) {
+                    showToast('Chưa có permalink bài viết đã xác minh để đưa sang Comment.', 'warning');
+                    return;
+                }
+                if (commentTargets) commentTargets.value = validUrls.join('\n');
+                showToast(`Đã nạp ${validUrls.length} permalink đã đăng.`, 'success');
+            } catch (err) {
+                showToast('Lỗi khi nạp link bài viết: ' + err.message, 'error');
+            } finally {
+                loadPostedLinksBtn.disabled = false;
+                loadPostedLinksBtn.textContent = '📋 Lấy link vừa đăng';
+            }
+        });
+    }
+
+    const exportPostedLinksBtn = document.getElementById('export-posted-links-btn');
+    if (exportPostedLinksBtn) {
+        exportPostedLinksBtn.addEventListener('click', async () => {
+            const validUrls = await fetchConfirmedPostedUrls();
+            if (!validUrls.length) {
+                showToast('Chưa có permalink đã xác minh để xuất TXT.', 'warning');
+                return;
+            }
+            const blob = new Blob([validUrls.join('\r\n') + '\r\n'], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `facebook-posted-links-${new Date().toISOString().slice(0,10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            showToast(`Đã xuất ${validUrls.length} link ra TXT.`, 'success');
         });
     }
     if (threadSubmitBtn) {
@@ -2899,7 +2982,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---- Run Command ----
     async function runCommand(command, payload = {}) {
         const serverState = await syncActiveJobState();
-        if (!serverState.known) return 'unknown';
+        if (!serverState.known) {
+            appendLog('❌ Không thể kết nối tới máy chủ (Backend offline hoặc mất kết nối HTTP). Hãy kiểm tra cửa sổ chạy server!');
+            showToast('Không thể kết nối máy chủ FB Automation!', 'error');
+            return 'unknown';
+        }
         if (serverState.active) {
             appendLog('⚠️ Đang có một Job hoạt động; từ chối gửi Job mới để tránh chồng tiến trình.');
             showToast('Đang có tác vụ chạy. Hãy chờ hoàn tất hoặc bấm Dừng.', 'warning');
@@ -3223,13 +3310,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const autoSpin = autoSpinCommentOpt ? autoSpinCommentOpt.checked : false;
         const commentAntiHashOpt = document.getElementById('comment-anti-hash-opt');
         initProgressDashboard('Bình luận bài viết theo link', targets);
+        let commentAccountId = accountSelector ? accountSelector.value : '';
+        if (!commentAccountId && accountsList && accountsList.length > 0) commentAccountId = accountsList[0].id;
+        if (!commentAccountId) {
+            showToast('Chưa có profile Facebook hợp lệ để chạy Comment.', 'error');
+            return 'failed';
+        }
         return runCommand('comment', {
             tasks,
             likePost: commentLikePost ? commentLikePost.checked : false,
             antiHashText: commentAntiHashOpt ? commentAntiHashOpt.checked : false,
             autoSpin,
             geminiApiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
-            accountId: accountSelector.value
+            accountId: commentAccountId
         });
     }
 
