@@ -841,7 +841,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.1")
+        self.assertEqual(get_version(), "6.1.5")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1198,6 +1198,8 @@ class AuditV582RegressionTests(unittest.TestCase):
 
         with patch("fb_group.sync_playwright") as mock_sp, \
              patch("fb_group.find_post_composer_textbox", return_value=mock_loc), \
+             patch("fb_group.navigate_facebook_surface", return_value=True), \
+             patch("fb_group._ensure_group_membership", return_value="joined"), \
              patch("fb_group.attach_image_to_composer", return_value=False), \
              patch("fb_group.is_recently_posted", return_value=(False, 0, None)), \
              patch("time.sleep", return_value=None):
@@ -1212,6 +1214,7 @@ class AuditV582RegressionTests(unittest.TestCase):
         
         mock_p = MagicMock()
         mock_page = MagicMock()
+        mock_page.url = "https://www.facebook.com/groups/1/posts/2"
         mock_input = MagicMock()
         mock_input.is_visible.return_value = True
         mock_input.inner_text.return_value = ""
@@ -1906,8 +1909,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.0', html)
-        self.assertIn('app.js?v=6.1.0', html)
+        self.assertIn('styles.css?v=6.1.5', html)
+        self.assertIn('app.js?v=6.1.5', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):

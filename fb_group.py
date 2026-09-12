@@ -8,7 +8,7 @@ from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted,
-    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox
+    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox, navigate_facebook_surface
 )
 from ai_spinner import generate_unique_variant
 from paths import DATA_DIR
@@ -52,6 +52,35 @@ def _ensure_group_membership(page, group_url):
                 join_button.click(timeout=4000)
             except Exception:
                 return "unverified"
+            # Membership dialogs may require rules acknowledgement. Never invent answers
+            # to free-text membership questions during join-before-post.
+            try:
+                dialogs = page.locator('div[role="dialog"]')
+                for di in range(min(dialogs.count(), 8)):
+                    dlg = dialogs.nth(di)
+                    if not dlg.is_visible(timeout=250):
+                        continue
+                    text_inputs = dlg.locator('textarea, input[type="text"]')
+                    checks = dlg.locator('input[type="checkbox"], div[role="checkbox"]')
+                    if text_inputs.count() > 0:
+                        print("[Group Membership] membership questions require manual answers; fail closed.")
+                        return "unverified"
+                    if checks.count() > 0:
+                        for ci in range(min(checks.count(), 4)):
+                            try:
+                                cb = checks.nth(ci)
+                                if cb.is_visible(timeout=200): cb.click()
+                            except Exception:
+                                pass
+                        submit = dlg.locator('div[role="button"], button').filter(
+                            has_text=re.compile(r"^(Gửi|Xác nhận|Hoàn tất|Submit|Confirm|Agree)$", re.I)
+                        ).first
+                        if submit.is_visible(timeout=800):
+                            submit.click()
+                            page.wait_for_timeout(1000)
+                            break
+            except Exception:
+                pass
             for _ in range(5):
                 page.wait_for_timeout(1200)
                 state, _ = _scan_state()
@@ -117,21 +146,11 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
 
             # Mô phỏng di chuyển chuột và vào nhóm
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            try:
-                page.goto(group_url, wait_until="domcontentloaded", timeout=45000)
-            except Exception as nav_err:
-                print(f"⚠️ Cảnh báo tải trang Group: {nav_err}. Đang kiểm tra bỏ qua cảnh báo SSL...")
-                time.sleep(1.5)
-                try:
-                    if page.locator("#details-button").is_visible(timeout=2000):
-                        page.click("#details-button")
-                        time.sleep(1)
-                        if page.locator("#proceed-link").is_visible(timeout=2000):
-                            page.click("#proceed-link")
-                            time.sleep(2)
-                except Exception:
-                    pass
-            time.sleep(random.uniform(3.0, 5.0))
+            if not navigate_facebook_surface(page, group_url, prewarm=True, rounds=3, timeout=45000, label="Group"):
+                return ActionResult(success=False, code="FACEBOOK_SURFACE_NOT_HYDRATED",
+                                    message="Facebook không tải được bề mặt mục tiêu sau các lần khôi phục read-only.",
+                                    target_url=group_url)
+            time.sleep(random.uniform(1.0, 2.0))
 
             membership_state = _ensure_group_membership(page, group_url)
             print(f"[Group Membership] state={membership_state}")

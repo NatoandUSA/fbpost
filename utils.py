@@ -150,13 +150,66 @@ def verify_entered_content(locator, expected):
         return False
     expected=str(expected or "").strip()
     required=[t for t in ("#UMEEHomestay", "#LacasaHomestay") if t.casefold() in expected.casefold()]
-    if "-------------------" in expected:
-        required.append("-------------------")
-        signature_part = expected.rsplit("-------------------", 1)[1]
+    signature_part = ""
+    for separator in ("━━━━━━━━━━━━━━━━━━━━", "-------------------"):
+        if separator in expected:
+            required.append(separator)
+            # Canonical signatures are wrapped by the separator; validate every
+            # non-empty line between the first and final separator.
+            parts = expected.split(separator)
+            if len(parts) >= 3:
+                signature_part = separator.join(parts[1:-1])
+            else:
+                signature_part = parts[-1]
+            break
+    if signature_part:
         required.extend([line.strip() for line in signature_part.splitlines() if line.strip()])
     if not required:
         return True
     return all(t.casefold() in actual.casefold() for t in required) and len(actual) >= min(20,len(expected))
+
+
+def navigate_facebook_surface(page, target_url, *, prewarm=True, rounds=3, timeout=45000, label="Facebook"):
+    """Read-only navigation with cold-session hydration recovery.
+
+    Returns True only when Facebook exposes a meaningful body or interactive controls.
+    No write action is performed here.
+    """
+    if prewarm:
+        try:
+            page.goto("https://www.facebook.com/", wait_until="domcontentloaded", timeout=min(timeout, 35000))
+            page.wait_for_timeout(2500)
+        except Exception as warm_err:
+            print(f"[{label} Surface] prewarm warning: {warm_err}")
+    last_err = None
+    for attempt in range(1, max(1, int(rounds)) + 1):
+        try:
+            if attempt == 1:
+                page.goto(target_url, wait_until="domcontentloaded", timeout=timeout)
+            else:
+                page.reload(wait_until="domcontentloaded", timeout=min(timeout, 35000))
+        except Exception as nav_err:
+            last_err = nav_err
+        try:
+            page.wait_for_timeout(1800 if attempt == 1 else 2500)
+        except Exception:
+            pass
+        try:
+            body_text = (page.locator("body").inner_text(timeout=3000) or "").strip()
+        except Exception:
+            body_text = ""
+        try:
+            controls = page.locator("a, div[role='button'], button").count()
+        except Exception:
+            controls = 0
+        current = (getattr(page, "url", "") or "").lower()
+        if "facebook.com" in current and (len(body_text) >= 20 or controls >= 8):
+            print(f"[{label} Surface] hydrated round={attempt} chars={len(body_text)} controls={controls}")
+            return True
+        print(f"[{label} Surface] not hydrated round={attempt} chars={len(body_text)} controls={controls}")
+    if last_err:
+        print(f"[{label} Surface] navigation failed after recovery: {last_err}")
+    return False
 
 
 def safe_mouse_wheel(page, dx, dy):
@@ -2089,9 +2142,15 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
         if target_group and copied_group and target_group != copied_group:
             return ""
         parsed = urllib.parse.urlparse(clean)
-        is_post_route = bool(re.search(r"(?:/groups/[^/]+/(?:posts|permalink)/[^/]+|/share/[pv]/[^/]+|/reel/[^/]+)", parsed.path, re.I))
+        is_post_route = bool(re.search(
+            r"(?:/groups/[^/]+/(?:posts|permalink)/[^/]+|/[^/]+/(?:posts|videos)/[^/]+|/share/[pv]/[^/]+|/reel/[^/]+)",
+            parsed.path, re.I
+        ))
         qs = urllib.parse.parse_qs(parsed.query)
-        if not is_post_route and "multi_permalinks" not in qs:
+        is_query_post = parsed.path.lower().endswith(("/permalink.php", "/story.php")) and any(
+            key in qs for key in ("story_fbid", "fbid", "post_id")
+        )
+        if not is_post_route and not is_query_post and "multi_permalinks" not in qs:
             return ""
         return clean
     except Exception:
@@ -2146,7 +2205,7 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
         time.sleep(1.5)
         for attempt in range(3):
             clean_href = _scan_post_permalink_once(page, target=target, content=content, max_articles=12)
-            if not clean_href and target_type == "group" and attempt >= 1:
+            if not clean_href and target_type in ("group", "page") and attempt >= 1:
                 clean_href = _copy_post_permalink_via_share_sheet(page, target=target, content=content)
             if clean_href:
                 return _published(clean_href, "Đã đăng bài và trích xuất thành công permalink.")
@@ -2161,8 +2220,8 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
             if attempt < 2:
                 time.sleep(2.0)
 
-        if target_type == "group":
-            print("🔄 Chưa thấy permalink; refresh Group một lần rồi tiếp tục native resolver...")
+        if target_type in ("group", "page"):
+            print(f"🔄 Chưa thấy permalink; refresh {target_type.title()} một lần rồi tiếp tục native resolver...")
             try:
                 page.reload(wait_until="domcontentloaded", timeout=20000)
             except Exception as reload_err:

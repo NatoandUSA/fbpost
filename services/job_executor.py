@@ -616,7 +616,7 @@ def execute_automation_task(
                 mins = delay // 60
                 secs = delay % 60
                 on_line(f"\n⏳ [Giãn cách] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước khi chuyển bài tiếp theo...\n")
-                if auto_join_groups and group_keywords:
+                if auto_join_groups and group_keywords and delay >= 180:
                     on_line(f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n")
                     on_line("⏳ [GPM Cooldown] Nghỉ 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
                     if not sleep_with_cancel(7):
@@ -782,7 +782,7 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
-            has_sig="yes" if "-------------------" in task_content else "no"
+            has_sig="yes" if ("━━━━━━━━━━━━━━━━━━━━" in task_content or "-------------------" in task_content) else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
             on_line(f"🧾 [Spin Evidence] original={len(content)} chars → final={len(task_content)} chars · project={brand_key or 'none'} · signature={has_sig} · global_tags={has_tags}\n")
@@ -992,7 +992,7 @@ def execute_automation_task(
                 on_line(f"\n🔎 Target {i+1} đã submit nhưng còn cần đối soát permalink. Giữ khóa chống duplicate và giãn cách {delay}s trước target tiếp theo.\n")
             else:
                 on_line(f"\n⏳ [Giãn cách] Nghỉ ngẫu nhiên {delay} giây ({mins}p {secs}s) trước bài tiếp theo...\n")
-            if auto_join_groups and group_keywords:
+            if auto_join_groups and group_keywords and delay >= 180:
                 on_line(f"\n🔍 [Tự động gia nhập Group] Tận dụng thời gian chờ để tìm và xin vào nhóm theo từ khóa: '{group_keywords}'...\n")
                 on_line("⏳ [GPM Cooldown] Nghỉ 7s để trình duyệt đóng hoàn tất trước khi mở lại profile...\n")
                 if not sleep_with_cancel(7):
