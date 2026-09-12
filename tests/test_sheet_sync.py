@@ -1,6 +1,9 @@
 """Unit and Integration Tests for Google Sheet Group Synchronization & Deduplication."""
 
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from services.sheet_sync import (
@@ -9,6 +12,7 @@ from services.sheet_sync import (
     parse_privacy_type,
     is_active_flag,
     parse_group_sheet,
+    sync_to_group_registry,
     DEFAULT_SHEET_URL,
 )
 

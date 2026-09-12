@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const historyTab = document.createElement('button');
         historyTab.className = 'composer-tab nav-item';
         historyTab.dataset.target = 'history'; historyTab.id = 'tab-history';
-        historyTab.innerHTML = '<span style="font-size:17px">🔗</span><span>Lịch sử & Đối soát</span>';
+        historyTab.innerHTML = '<span style="font-size:17px">🔗</span><span>Lịch Sử & Đối Soát Bài Đăng</span>';
         queueTab.insertAdjacentElement('afterend', historyTab);
     }
     const workspaceGrid = document.querySelector('.workspace-grid');
@@ -433,6 +433,17 @@ document.addEventListener('DOMContentLoaded', () => {
             preview.style.cssText = 'font-size:11px;color:#64748B;line-height:1.35;max-height:32px;overflow:hidden;background:#F8FAFC;padding:4px 6px;border-radius:5px;';
             preview.textContent = item.content;
 
+            const meta = document.createElement('div');
+            meta.className = 'queue-item-meta';
+            meta.style.cssText = 'font-size:10px;color:#64748B;display:flex;gap:10px;flex-wrap:wrap;align-items:center;';
+            const rawCreatedAt = item.created_at || item.updated_at || '';
+            const parsedCreatedAt = rawCreatedAt ? new Date(rawCreatedAt) : null;
+            const createdLabel = parsedCreatedAt && !Number.isNaN(parsedCreatedAt.getTime())
+                ? parsedCreatedAt.toLocaleString('vi-VN', { hour12: false })
+                : (rawCreatedAt || 'Không rõ');
+            const sessionLabel = item.campaign_id || item.session_id || item.id || 'Không rõ';
+            meta.innerHTML = `<span>🕒 Tạo: <strong>${escapeHtml(createdLabel)}</strong></span><span>🧾 Phiên/Mã: <strong>${escapeHtml(sessionLabel)}</strong></span>`;
+
             const actions = document.createElement('div');
             actions.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-top: 4px;';
 
@@ -490,7 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 actions.appendChild(cancel);
             }
 
-            row.append(title, preview, actions);
+            row.append(title, preview, meta, actions);
             approvalQueueList.appendChild(row);
         });
 
@@ -558,18 +569,45 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadQueue() {
         try {
             const filter = document.getElementById('queue-filter')?.value || 'active';
-            const query = filter === 'active' ? '?active=1&limit=500' : (filter === 'all' ? '?limit=500' : `?state=${encodeURIComponent(filter)}&limit=500`);
-            const [response, summaryRes] = await Promise.all([fetch('/api/queue' + query), fetch('/api/queue-summary')]);
+            const dateFilter = document.getElementById('queue-date-filter')?.value || '';
+            let query = filter === 'active' ? '?active=1&limit=500' : (filter === 'all' ? '?limit=500' : `?state=${encodeURIComponent(filter)}&limit=500`);
+            if (dateFilter) {
+                query += `&date=${encodeURIComponent(dateFilter)}`;
+            }
+            const summaryQuery = dateFilter ? `?date=${encodeURIComponent(dateFilter)}` : '';
+            const [response, summaryRes] = await Promise.all([fetch('/api/queue' + query), fetch('/api/queue-summary' + summaryQuery)]);
             const visibleItems = await response.json();
             renderQueue(visibleItems);
             if (summaryRes.ok) {
                 const q = await summaryRes.json();
                 const el = document.getElementById('queue-summary-text');
-                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.needs_reconcile||0} cần đối soát · ${q.pending||0} chờ duyệt FB · ${archived} lưu trữ · đang hiển thị ${visibleItems.length})`; }
+                if (el) {
+                    const archived = (q.published || 0) + (q.failed || 0) + (q.cancelled || 0);
+                    const dateTag = dateFilter ? ` · Ngày: ${dateFilter}` : '';
+                    el.textContent = `(${q.active || 0} hoạt động · ${q.needs_reconcile || 0} cần đối soát · ${q.pending || 0} chờ duyệt FB · ${archived} lưu trữ · đang hiển thị ${visibleItems.length}${dateTag})`;
+                }
             }
         } catch (_) { approvalQueueList.textContent = 'Không thể tải hàng đợi.'; }
     }
     document.getElementById('queue-filter')?.addEventListener('change', loadQueue);
+
+    const queueDateFilter = document.getElementById('queue-date-filter');
+    const clearDateFilterBtn = document.getElementById('clear-date-filter-btn');
+    if (queueDateFilter) {
+        queueDateFilter.addEventListener('change', () => {
+            if (clearDateFilterBtn) {
+                clearDateFilterBtn.style.display = queueDateFilter.value ? 'inline-block' : 'none';
+            }
+            loadQueue();
+        });
+    }
+    if (clearDateFilterBtn) {
+        clearDateFilterBtn.addEventListener('click', () => {
+            if (queueDateFilter) queueDateFilter.value = '';
+            clearDateFilterBtn.style.display = 'none';
+            loadQueue();
+        });
+    }
 
     async function updateQueueItem(id, action) {
         const response = await fetch(`/api/queue/${id}/${action}`, { method: 'POST' });
@@ -627,6 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
             addToQueueBtn.innerHTML = '⏳ Đang thêm...';
 
             let addedCount = 0;
+            let skippedDuplicates = 0;
             for (const target of targets) {
                 try {
                     const res = await fetch('/api/queue', {
@@ -638,7 +677,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             image_url: ''
                         })
                     });
-                    if (res.ok) addedCount++;
+                    if (res.status === 409) {
+                        skippedDuplicates++;
+                    } else if (res.ok) {
+                        addedCount++;
+                    }
                 } catch (e) {
                     console.error(e);
                 }
@@ -647,37 +690,146 @@ document.addEventListener('DOMContentLoaded', () => {
             addToQueueBtn.disabled = false;
             addToQueueBtn.innerHTML = originalText;
 
-            if (addedCount > 0) {
-                showToast(`Đã đưa ${addedCount} bài vào Hàng đợi! Vui lòng bấm '✅ Duyệt' để tiến hành đăng.`);
+            if (addedCount > 0 || skippedDuplicates > 0) {
+                const dupMsg = skippedDuplicates > 0 ? ` (Bỏ qua ${skippedDuplicates} nhóm đã có trong hàng đợi)` : '';
+                showToast(`Đã đưa ${addedCount} bài vào Hàng đợi${dupMsg}! Vui lòng bấm '✅ Duyệt' để tiến hành đăng.`);
                 const queueFilter = document.getElementById('queue-filter');
                 if (queueFilter) queueFilter.value = 'active';
                 const queueTab = document.getElementById('tab-queue');
                 if (queueTab) queueTab.click();
                 await loadQueue();
             } else {
-                showToast('Không thể thêm bài vào hàng đợi.', 'error');
+                showToast('Không thể thêm bài vào hàng đợi hoặc tất cả mục tiêu đã có trong hàng đợi.', 'error');
             }
         });
     }
 
-    // ---- Approve All Queue Drafts (Duyệt tất cả bài nháp) ----
+    // ---- Batch Queue Operations (Quản lý hàng loạt) ----
     const approveAllQueueBtn = document.getElementById('approve-all-queue-btn');
     if (approveAllQueueBtn) {
         approveAllQueueBtn.addEventListener('click', async () => {
             try {
-                const res = await fetch('/api/queue?state=draft&limit=500');
-                const drafts = await res.json();
-                if (!drafts.length) {
-                    showToast('Không có bài nháp nào cần duyệt trong hàng đợi!', 'info');
-                    return;
+                approveAllQueueBtn.disabled = true;
+                approveAllQueueBtn.textContent = '⏳ Đang duyệt...';
+                const res = await fetch('/api/queue/approve-all', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✅ Đã duyệt thành công ${data.approved} bài đăng! Bây giờ bạn có thể bấm '🚀 Đăng bài đã duyệt'.`);
+                    loadQueue();
+                } else {
+                    showToast(data.error || 'Lỗi khi duyệt bài', 'error');
                 }
-                for (const d of drafts) {
-                    await fetch(`/api/queue/${d.id}/approve`, { method: 'POST' });
+            } catch (e) {
+                showToast('Lỗi khi duyệt bài: ' + e.message, 'error');
+            } finally {
+                approveAllQueueBtn.disabled = false;
+                approveAllQueueBtn.textContent = '✅ Duyệt tất cả';
+            }
+        });
+    }
+
+    const cancelApprovedQueueBtn = document.getElementById('cancel-approved-queue-btn');
+    if (cancelApprovedQueueBtn) {
+        cancelApprovedQueueBtn.addEventListener('click', async () => {
+            if (!confirm('Bạn có chắc chắn muốn HỦY tất cả các bài đã duyệt (Approved) trong hàng đợi không?')) return;
+            try {
+                cancelApprovedQueueBtn.disabled = true;
+                cancelApprovedQueueBtn.textContent = '⏳ Đang hủy...';
+                const res = await fetch('/api/queue/cancel-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ states: ['approved'] })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`⏹ Đã hủy ${data.cancelled} bài đã duyệt (đã chuyển vào lưu trữ).`, 'success');
+                    loadQueue();
+                } else {
+                    showToast(data.error || 'Lỗi khi hủy', 'error');
                 }
-                showToast(`✅ Đã duyệt thành công ${drafts.length} bài đăng! Bây giờ bạn có thể bấm '🚀 Đăng bài đã duyệt'.`);
+            } catch (e) {
+                showToast('Lỗi: ' + e.message, 'error');
+            } finally {
+                cancelApprovedQueueBtn.disabled = false;
+                cancelApprovedQueueBtn.textContent = '⏹ Hủy bài đã duyệt';
+            }
+        });
+    }
+
+    const clearQueueMenuBtn = document.getElementById('clear-queue-menu-btn');
+    const clearQueueDropdown = document.getElementById('clear-queue-dropdown');
+    const closeClearDropdownBtn = document.getElementById('close-clear-dropdown-btn');
+    const clearCancelledFailedBtn = document.getElementById('clear-cancelled-failed-btn');
+    const clearByDateBtn = document.getElementById('clear-by-date-btn');
+    const clearAllQueueBtn = document.getElementById('clear-all-queue-btn');
+
+    if (clearQueueMenuBtn && clearQueueDropdown) {
+        clearQueueMenuBtn.addEventListener('click', () => {
+            clearQueueDropdown.style.display = (clearQueueDropdown.style.display === 'none' || !clearQueueDropdown.style.display) ? 'flex' : 'none';
+        });
+    }
+    if (closeClearDropdownBtn && clearQueueDropdown) {
+        closeClearDropdownBtn.addEventListener('click', () => {
+            clearQueueDropdown.style.display = 'none';
+        });
+    }
+    if (clearCancelledFailedBtn) {
+        clearCancelledFailedBtn.addEventListener('click', async () => {
+            if (!confirm('Xác nhận xóa vĩnh viễn các bài Đã hủy và Lỗi?')) return;
+            try {
+                const res = await fetch('/api/queue/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scope: 'cancelled_or_failed' })
+                });
+                const data = await res.json();
+                showToast(`Đã dọn dẹp ${data.deleted} bài rác/hủy!`);
+                if (clearQueueDropdown) clearQueueDropdown.style.display = 'none';
                 loadQueue();
             } catch (e) {
-                showToast('Lỗi khi duyệt bài', 'error');
+                showToast('Lỗi: ' + e.message, 'error');
+            }
+        });
+    }
+    if (clearByDateBtn) {
+        clearByDateBtn.addEventListener('click', async () => {
+            const selectedDate = document.getElementById('queue-date-filter')?.value;
+            if (!selectedDate) {
+                showToast('Vui lòng chọn một ngày trong ô [📅] trước khi bấm Xóa theo ngày!', 'error');
+                return;
+            }
+            if (!confirm(`Xác nhận xóa toàn bộ bài thuộc ngày ${selectedDate}?`)) return;
+            try {
+                const res = await fetch('/api/queue/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scope: 'date', date: selectedDate })
+                });
+                const data = await res.json();
+                showToast(`Đã xóa ${data.deleted} bài của ngày ${selectedDate}!`);
+                if (clearQueueDropdown) clearQueueDropdown.style.display = 'none';
+                loadQueue();
+            } catch (e) {
+                showToast('Lỗi: ' + e.message, 'error');
+            }
+        });
+    }
+    if (clearAllQueueBtn) {
+        clearAllQueueBtn.addEventListener('click', async () => {
+            const confirmed = confirm('⚠️ CẢNH BÁO: Thao tác này sẽ XÓA SẠCH toàn bộ các bài trong Hàng đợi! Bạn có chắc chắn 100% không?');
+            if (!confirmed) return;
+            try {
+                const res = await fetch('/api/queue/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scope: 'all' })
+                });
+                const data = await res.json();
+                showToast(`Đã xóa sạch ${data.deleted} bài trong hàng đợi!`);
+                if (clearQueueDropdown) clearQueueDropdown.style.display = 'none';
+                loadQueue();
+            } catch (e) {
+                showToast('Lỗi: ' + e.message, 'error');
             }
         });
     }

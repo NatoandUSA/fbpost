@@ -522,8 +522,8 @@ def api_sync_groups_from_sheet():
     filter_active = bool(data.get("filter_active_only", False))
     save_registry = bool(data.get("save_registry", True))
 
-    csv_url = to_csv_export_url(raw_sheet_url)
     try:
+        csv_url = to_csv_export_url(raw_sheet_url)
         csv_text = fetch_sheet_csv(csv_url)
     except Exception as e:
         return jsonify({"success": False, "error": f"Lỗi tải Google Sheet: {str(e)}"}), 400
@@ -534,7 +534,7 @@ def api_sync_groups_from_sheet():
 
     if save_registry and parsed.get("groups"):
         try:
-            sync_to_group_registry(parsed["groups"])
+            parsed["registry"] = sync_to_group_registry(parsed["groups"])
         except Exception as se:
             print(f"Warning: sync_to_group_registry error: {se}")
 
@@ -713,8 +713,14 @@ def get_queue():
     items = load_queue()
     active = request.args.get("active", "0") == "1"
     state = (request.args.get("state") or "").strip().lower()
+    date_filter = (request.args.get("date") or "").strip()[:10]
+    date_from = (request.args.get("date_from") or "").strip()[:10]
+    date_to = (request.args.get("date_to") or "").strip()[:10]
+    if date_filter:
+        if not date_from: date_from = date_filter
+        if not date_to: date_to = date_filter
     try:
-        limit = max(1, min(int(request.args.get("limit", 200)), 500))
+        limit = max(1, min(int(request.args.get("limit", 500)), 1000))
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
         return jsonify({"error": "limit/offset không hợp lệ"}), 400
@@ -724,12 +730,19 @@ def get_queue():
         items = [i for i in items if str(i.get("state", "")).lower() in ("unverified", "manual_review")]
     elif state:
         items = [i for i in items if str(i.get("state", "")).lower() == state]
+    if date_from:
+        items = [i for i in items if str(i.get("created_at") or "")[:10] >= date_from]
+    if date_to:
+        items = [i for i in items if str(i.get("created_at") or "")[:10] <= date_to]
     items = sorted(items, key=lambda i: i.get("updated_at") or i.get("created_at") or "", reverse=True)
     return jsonify(items[offset:offset + limit])
 
 @app.route('/api/queue-summary', methods=['GET'])
 def queue_summary():
     items = load_queue()
+    date_filter = (request.args.get("date") or "").strip()[:10]
+    if date_filter:
+        items = [i for i in items if str(i.get("created_at") or "")[:10] == date_filter]
     counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "manual_review": 0, "failed": 0, "cancelled": 0, "published": 0}
     for item in items:
         st = str(item.get("state") or "")
@@ -739,6 +752,16 @@ def queue_summary():
     counts["needs_reconcile"] = counts["unverified"] + counts["manual_review"]
     return jsonify(counts)
 
+@app.route('/api/queue/dates', methods=['GET'])
+def get_queue_dates():
+    items = load_queue()
+    dates_set = set()
+    for item in items:
+        dt = (item.get("created_at") or "")[:10]
+        if len(dt) == 10:
+            dates_set.add(dt)
+    return jsonify(sorted(list(dates_set), reverse=True))
+
 @app.route('/api/queue', methods=['POST'])
 def create_queue_item():
     data = json_body()
@@ -746,6 +769,7 @@ def create_queue_item():
     content = data.get("content", "").strip()
     image_url = data.get("image_url", "").strip()
     campaign_id = data.get("campaign_id", "").strip()
+    allow_duplicate = bool(data.get("allow_duplicate", False))
     if not target or not content:
         return jsonify({"error": "Target và nội dung là bắt buộc."}), 400
     if len(target) > 2_000 or len(content) > 60_000:
@@ -759,6 +783,11 @@ def create_queue_item():
         if campaign.get("state") != "active":
             return jsonify({"error": "Chiến dịch đang tạm dừng."}), 409
     queue = load_queue()
+    if not allow_duplicate:
+        # Check if target already has an unfinished item with the exact same target and content in draft/approved/pending
+        existing = next((i for i in queue if i.get("target") == target and i.get("content") == content and i.get("state") in ("draft", "approved", "pending")), None)
+        if existing:
+            return jsonify({"error": f"Bài viết với mục tiêu này đã có trong hàng đợi ({existing.get('state')}).", "duplicate": True, "existing_id": existing.get("id")}), 409
     item = {
         "id": uuid.uuid4().hex[:12],
         "target": target,
@@ -825,6 +854,94 @@ def cancel_queue_item(item_id):
     item.setdefault("audit", []).append({"at": now_iso(), "event": "cancelled"})
     save_queue(queue)
     return jsonify(item)
+
+@app.route('/api/queue/approve-all', methods=['POST'])
+def approve_all_queue():
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        approved = CampaignRepository().approve_all_drafts()
+        _write_queue_json(CampaignRepository().list_queue())
+    else:
+        queue = load_queue()
+        now = now_iso()
+        approved = 0
+        for item in queue:
+            if item.get("state") == "draft":
+                item["state"] = "approved"
+                item["approved_at"] = now
+                item["updated_at"] = now
+                item.setdefault("audit", []).append({"at": now, "event": "approved_all_drafts"})
+                approved += 1
+        save_queue(queue)
+    return jsonify({"success": True, "approved": approved})
+
+@app.route('/api/queue/cancel-all', methods=['POST'])
+def cancel_all_queue():
+    data = json_body()
+    states = data.get("states") or ["approved", "draft"]
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        cancelled = CampaignRepository().cancel_all_queue(states=tuple(states))
+        _write_queue_json(CampaignRepository().list_queue())
+    else:
+        queue = load_queue()
+        now = now_iso()
+        cancelled = 0
+        for item in queue:
+            if item.get("state") in states:
+                item["state"] = "cancelled"
+                item["updated_at"] = now
+                item.setdefault("audit", []).append({"at": now, "event": "cancelled_batch"})
+                cancelled += 1
+        save_queue(queue)
+    return jsonify({"success": True, "cancelled": cancelled})
+
+@app.route('/api/queue/clear', methods=['POST'])
+def clear_queue_items():
+    data = json_body()
+    scope = data.get("scope", "all") # "all", "cancelled_or_failed", "date", "approved", "draft"
+    target_date = data.get("date") # "YYYY-MM-DD"
+    date_from = (data.get("date_from") or target_date or "").strip()[:10]
+    date_to = (data.get("date_to") or target_date or "").strip()[:10]
+
+    if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
+        repo = CampaignRepository()
+        if scope == "all":
+            deleted = repo.delete_queue_items(clear_all=True)
+        elif scope == "cancelled_or_failed":
+            deleted = repo.delete_queue_items(states=["cancelled", "failed"])
+        elif scope == "approved":
+            deleted = repo.delete_queue_items(states=["approved"])
+        elif scope == "draft":
+            deleted = repo.delete_queue_items(states=["draft"])
+        elif scope == "date":
+            states_filter = data.get("states")
+            deleted = repo.delete_queue_items(states=states_filter, date_from=date_from, date_to=date_to)
+        else:
+            deleted = 0
+        _write_queue_json(repo.list_queue())
+    else:
+        queue = load_queue()
+        initial_len = len(queue)
+        if scope == "all":
+            queue = []
+        elif scope == "cancelled_or_failed":
+            queue = [i for i in queue if i.get("state") not in ("cancelled", "failed")]
+        elif scope == "approved":
+            queue = [i for i in queue if i.get("state") != "approved"]
+        elif scope == "draft":
+            queue = [i for i in queue if i.get("state") != "draft"]
+        elif scope == "date" and date_from:
+            states_filter = set(data.get("states") or [])
+            def keep(item):
+                d = str(item.get("created_at") or "")[:10]
+                if date_from and date_to and (date_from <= d <= date_to):
+                    if not states_filter or item.get("state") in states_filter:
+                        return False
+                return True
+            queue = [i for i in queue if keep(i)]
+        deleted = initial_len - len(queue)
+        save_queue(queue)
+
+    return jsonify({"success": True, "deleted": deleted})
 
 @app.route('/api/content/generate', methods=['POST'])
 def generate_content():
