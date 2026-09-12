@@ -421,6 +421,8 @@ class AuditV582RegressionTests(unittest.TestCase):
 
         with patch("fb_group.sync_playwright") as mock_pw, \
              patch("fb_group.is_recently_posted", return_value=(False, 0, None)), \
+             patch("fb_group.navigate_facebook_surface", return_value=True), \
+             patch("fb_group._ensure_group_membership", return_value="joined"), \
              patch("fb_group.attach_image_to_composer", return_value=False), \
              patch("fb_group.safe_mouse_wheel"), \
              patch("time.sleep", return_value=None):

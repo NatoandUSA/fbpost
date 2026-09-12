@@ -829,10 +829,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const publishedLinks = savedPostLinks.filter(item => {
                 if (typeof item === 'string') {
-                    return item.includes('/posts/') || item.includes('/permalink/') || item.includes('permalink.php') || item.includes('/videos/');
+                    return /(?:\/posts\/|\/permalink\/|permalink\.php|story\.php|\/videos\/|\/share\/[pv]\/|\/reel\/)/i.test(item);
                 }
                 const url = item.url || '';
-                const isPostUrl = url.includes('/posts/') || url.includes('/permalink/') || url.includes('permalink.php') || url.includes('/videos/');
+                const isPostUrl = /(?:\/posts\/|\/permalink\/|permalink\.php|story\.php|\/videos\/|\/share\/[pv]\/|\/reel\/)/i.test(url);
                 const urlType = item.url_type || (isPostUrl ? 'post' : 'unknown');
                 const pubState = item.publish_state || ((item.status && item.status.toLowerCase().includes('đã xuất bản')) ? 'published' : 'unknown');
                 return (urlType === 'post' || isPostUrl) && pubState === 'published';
@@ -842,7 +842,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Chưa có link bài viết đã xuất bản hợp lệ để bình luận!', 'warning');
                 return;
             }
-            const commentTargetInput = document.getElementById('comment-target-input');
+            const commentTargetInput = document.getElementById('comment-targets');
             if (commentTargetInput) {
                 commentTargetInput.value = urls.join('\n');
             }

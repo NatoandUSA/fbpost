@@ -8,7 +8,7 @@ from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted,
-    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox
+    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox, navigate_facebook_surface
 )
 from ai_spinner import generate_unique_variant
 from paths import DATA_DIR
@@ -62,21 +62,11 @@ def post_to_page(page_url, content, image_path=None, account_id=None, gpm_api_ur
             page.set_default_timeout(45000)
 
             page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            try:
-                page.goto(page_url, wait_until="domcontentloaded", timeout=45000)
-            except Exception as nav_err:
-                print(f"⚠️ Cảnh báo tải trang Fanpage: {nav_err}. Đang kiểm tra bỏ qua cảnh báo SSL...")
-                time.sleep(1.5)
-                try:
-                    if page.locator("#details-button").is_visible(timeout=2000):
-                        page.click("#details-button")
-                        time.sleep(1)
-                        if page.locator("#proceed-link").is_visible(timeout=2000):
-                            page.click("#proceed-link")
-                            time.sleep(2)
-                except Exception:
-                    pass
-            time.sleep(random.uniform(3.0, 5.0))
+            if not navigate_facebook_surface(page, page_url, prewarm=True, rounds=3, timeout=45000, label="Page"):
+                return ActionResult(success=False, code="FACEBOOK_SURFACE_NOT_HYDRATED",
+                                    message="Facebook không tải được bề mặt mục tiêu sau các lần khôi phục read-only.",
+                                    target_url=page_url)
+            time.sleep(random.uniform(1.0, 2.0))
             
             # 1. Kiểm tra New Page Experience: Có nút "Chuyển sang trang" / "Switch now" hay không
             try:
