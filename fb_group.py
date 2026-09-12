@@ -15,6 +15,60 @@ from paths import DATA_DIR
 
 STATE_FILE = str(DATA_DIR / "state.json")
 
+def _ensure_group_membership(page, group_url):
+    """Require confirmed membership before posting. Never treat pending/unverified as joined."""
+    joined_markers = ("đã tham gia", "joined", "rời khỏi nhóm", "leave group")
+    pending_markers = ("đã yêu cầu", "yêu cầu đã gửi", "requested", "hủy yêu cầu", "cancel request")
+
+    def _scan_state():
+        try:
+            controls = page.locator('div[role="banner"] div[role="button"], div[role="main"] div[role="button"], button').all()
+        except Exception:
+            controls = []
+        join_button = None
+        for control in controls:
+            try:
+                if not control.is_visible():
+                    continue
+                combined = f"{control.inner_text() or ''} {control.get_attribute('aria-label') or ''}".strip().lower()
+                if any(m in combined for m in joined_markers):
+                    return "joined", None
+                if any(m in combined for m in pending_markers):
+                    return "pending", None
+                if join_button is None and any(m in combined for m in ("tham gia", "join")):
+                    if not any(m in combined for m in ("chia sẻ", "share", "nhắn tin", "message")):
+                        join_button = control
+            except Exception:
+                continue
+        return "unknown", join_button
+
+    for _ in range(3):
+        state, join_button = _scan_state()
+        if state != "unknown":
+            return state
+        if join_button is not None:
+            try:
+                join_button.scroll_into_view_if_needed()
+                join_button.click(timeout=4000)
+            except Exception:
+                return "unverified"
+            for _ in range(5):
+                page.wait_for_timeout(1200)
+                state, _ = _scan_state()
+                if state != "unknown":
+                    return state
+            return "unverified"
+        page.wait_for_timeout(1200)
+
+    try:
+        page.reload(wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(2500)
+        state, _ = _scan_state()
+        return state if state != "unknown" else "unverified"
+    except Exception:
+        return "unverified"
+
+
 def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
                   photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False,
                   anti_hash_text=False, clean_exif=True):
@@ -78,6 +132,13 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 except Exception:
                     pass
             time.sleep(random.uniform(3.0, 5.0))
+
+            membership_state = _ensure_group_membership(page, group_url)
+            print(f"[Group Membership] state={membership_state}")
+            if membership_state != "joined":
+                code = "GROUP_MEMBERSHIP_PENDING" if membership_state == "pending" else "GROUP_MEMBERSHIP_UNVERIFIED"
+                message = "Nhóm đang chờ duyệt thành viên." if membership_state == "pending" else "Không xác minh được trạng thái đã tham gia nhóm; dừng trước khi đăng."
+                return ActionResult(success=False, code=code, state=membership_state, message=message, target_url=group_url)
             
             # Tự động đóng popup / thông báo che khuất giao diện nếu có
             try:

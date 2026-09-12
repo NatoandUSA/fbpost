@@ -121,19 +121,26 @@ def _ensure_focus(locator):
             return False
 
 def human_type(page, locator, text, multiline_key="Enter"):
-    """Enter the exact supplied text; no typo simulation or random character loss."""
-    print("Typing content reliably...")
+    """Enter exact text with conservative pacing; never simulate typos or character loss."""
+    print("Typing content with conservative pacing...")
     _ensure_focus(locator)
+    value = str(text or "")
     try:
-        locator.fill(str(text or ""))
+        locator.fill(value)
+        time.sleep(0.45)
         return
     except Exception:
         pass
-    keyboard=page.keyboard
-    lines=str(text or "").split("\n")
-    for idx,line in enumerate(lines):
-        if line: keyboard.insert_text(line)
-        if idx < len(lines)-1: keyboard.press("Shift+Enter" if multiline_key == "Shift+Enter" else "Enter")
+    keyboard = page.keyboard
+    lines = value.split("\n")
+    for idx, line in enumerate(lines):
+        if line:
+            for pos in range(0, len(line), 80):
+                keyboard.insert_text(line[pos:pos + 80])
+                time.sleep(0.06)
+        if idx < len(lines) - 1:
+            keyboard.press("Shift+Enter" if multiline_key == "Shift+Enter" else "Enter")
+            time.sleep(0.12)
 
 
 def verify_entered_content(locator, expected):
