@@ -436,13 +436,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const meta = document.createElement('div');
             meta.className = 'queue-item-meta';
             meta.style.cssText = 'font-size:10px;color:#64748B;display:flex;gap:10px;flex-wrap:wrap;align-items:center;';
-            const rawCreatedAt = item.created_at || item.updated_at || '';
-            const parsedCreatedAt = rawCreatedAt ? new Date(rawCreatedAt) : null;
-            const createdLabel = parsedCreatedAt && !Number.isNaN(parsedCreatedAt.getTime())
-                ? parsedCreatedAt.toLocaleString('vi-VN', { hour12: false })
-                : (rawCreatedAt || 'Không rõ');
+            const rawQueueTime = item.created_at || item.updated_at || '';
+            const queueTimeKind = item.created_at ? 'Tạo' : (item.updated_at ? 'Cập nhật' : 'Thời gian');
+            const parsedQueueTime = rawQueueTime ? new Date(rawQueueTime) : null;
+            const queueTimeLabel = parsedQueueTime && !Number.isNaN(parsedQueueTime.getTime())
+                ? parsedQueueTime.toLocaleString('vi-VN', { hour12: false })
+                : (rawQueueTime || 'Không rõ');
             const sessionLabel = item.campaign_id || item.session_id || item.id || 'Không rõ';
-            meta.innerHTML = `<span>🕒 Tạo: <strong>${escapeHtml(createdLabel)}</strong></span><span>🧾 Phiên/Mã: <strong>${escapeHtml(sessionLabel)}</strong></span>`;
+            meta.innerHTML = `<span>🕒 ${queueTimeKind}: <strong>${escapeHtml(queueTimeLabel)}</strong></span><span>🧾 Phiên/Mã: <strong>${escapeHtml(sessionLabel)}</strong></span>`;
 
             const actions = document.createElement('div');
             actions.style.cssText = 'display: flex; gap: 8px; align-items: center; margin-top: 4px;';
@@ -5257,4 +5258,3 @@ document.addEventListener('DOMContentLoaded', () => {
         appendLog('📋 Quy trình duyệt: Hỗ trợ Đưa vào hàng đợi & bấm Duyệt bài trước khi đăng.');
     }, 500);
 });
-
