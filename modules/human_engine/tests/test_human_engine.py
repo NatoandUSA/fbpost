@@ -1,7 +1,7 @@
-﻿"""Comprehensive Unit Tests for Human Behavior & Anti-Checkpoint Engine.
+"""Unit tests for the optional interaction pacing engine.
 
 Validates mathematical models, biometric distributions, WindMouse trajectory mechanics,
-keystroke DU telemetry, stealth scripts, and text integrity under simulated browser conditions.
+keystroke timing, scrolling, and text integrity under simulated browser conditions.
 """
 
 import math
@@ -13,7 +13,6 @@ from modules.human_engine.kinematic_mouse import KinematicMouse, _cubic_bezier
 from modules.human_engine.biometric_typing import BiometricTyping
 from modules.human_engine.kinetic_scroll import KineticScroll
 from modules.human_engine.engine import HumanEngine
-from modules.human_engine.stealth_evasion import apply_stealth_scripts, STEALTH_INJECTION_SCRIPT
 from modules.human_engine import adapter
 
 
@@ -127,9 +126,9 @@ class BiometricTypingTests(unittest.TestCase):
         self.assertEqual("".join(typed_chars), test_text)
 
     def test_multiline_typing_fidelity(self):
-        down_events = []
+        pressed_events = []
         mock_page = MagicMock()
-        mock_page.keyboard.down.side_effect = lambda k: down_events.append(k)
+        mock_page.keyboard.press.side_effect = lambda k: pressed_events.append(k)
         mock_locator = MagicMock()
 
         test_text = "Dong 1\nDong 2"
@@ -137,7 +136,7 @@ class BiometricTypingTests(unittest.TestCase):
             ok = self.typing.type_text(mock_page, mock_locator, test_text, multiline_key="Shift+Enter", allow_typos=False)
         
         self.assertTrue(ok)
-        self.assertIn("Shift+Enter", down_events)
+        self.assertIn("Shift+Enter", pressed_events)
 
 
 class KineticScrollTests(unittest.TestCase):
@@ -156,17 +155,6 @@ class KineticScrollTests(unittest.TestCase):
         self.assertGreater(len(wheel_deltas), 3)
         self.assertAlmostEqual(sum(wheel_deltas), 600, delta=25)
 
-
-class StealthEvasionTests(unittest.TestCase):
-    def test_apply_stealth_scripts_context(self):
-        mock_context = MagicMock()
-        ok = apply_stealth_scripts(mock_context)
-        self.assertTrue(ok)
-        mock_context.add_init_script.assert_called_once()
-        script_arg = mock_context.add_init_script.call_args[0][0]
-        self.assertIn("navigator.webdriver", script_arg)
-        self.assertIn("window.chrome", script_arg)
-        self.assertIn("UNMASKED_VENDOR_WEBGL", script_arg)
 
 
 class EngineFacadeAndAdapterTests(unittest.TestCase):
@@ -187,6 +175,92 @@ class EngineFacadeAndAdapterTests(unittest.TestCase):
 
             ok_scroll = adapter.kinetic_mouse_wheel(mock_page, 0, 400, account_id="m14")
             self.assertTrue(ok_scroll)
+
+
+class UtilsBridgeAccountTests(unittest.TestCase):
+    def test_utils_bridge_propagates_page_account_identity(self):
+        import utils
+        page = MagicMock()
+        page._fb_automation_account_id = "profile-real-123"
+        locator = MagicMock()
+        old = utils.ENABLE_ADVANCED_HUMAN_ENGINE
+        utils.ENABLE_ADVANCED_HUMAN_ENGINE = True
+        try:
+            with patch("modules.human_engine.adapter.human_type_advanced", return_value=True) as typed:
+                utils.human_type(page, locator, "hello")
+                self.assertEqual(typed.call_args.kwargs["account_id"], "profile-real-123")
+            with patch("modules.human_engine.adapter.kinetic_mouse_wheel", return_value=True) as scrolled:
+                self.assertTrue(utils.safe_mouse_wheel(page, 0, 240))
+                self.assertEqual(scrolled.call_args.kwargs["account_id"], "profile-real-123")
+        finally:
+            utils.ENABLE_ADVANCED_HUMAN_ENGINE = old
+
+
+class PlaywrightTextFidelityIntegrationTests(unittest.TestCase):
+    """Real headless Playwright integration tests verifying exact-text fidelity and multiline pacing."""
+
+    def test_playwright_textarea_exact_fidelity_and_multiline(self):
+        from playwright.sync_api import sync_playwright
+        import utils
+
+        test_text = (
+            "Chào mừng đến với UMEE & Lacasa 2026!\n"
+            "Dòng 2: Ký tự đặc biệt @#$% & số 0905555317.\n"
+            "Dòng 3: Tiếng Việt có dấu: Huế, Đà Nẵng, Hà Nội.\n"
+            "#UMEEHomestay #LacasaHomestay"
+        )
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            try:
+                page.set_content('<textarea id="editor" rows="10" cols="60"></textarea>')
+                locator = page.locator('#editor')
+                page._fb_automation_account_id = "acc_test_playwright"
+
+                old_flag = utils.ENABLE_ADVANCED_HUMAN_ENGINE
+                utils.ENABLE_ADVANCED_HUMAN_ENGINE = True
+                try:
+                    with patch("time.sleep", return_value=None):
+                        utils.human_type(page, locator, test_text, multiline_key="Enter")
+                    
+                    actual_value = locator.input_value()
+                    self.assertEqual(actual_value, test_text)
+                    self.assertTrue(utils.verify_entered_content(locator, test_text))
+                finally:
+                    utils.ENABLE_ADVANCED_HUMAN_ENGINE = old_flag
+            finally:
+                page.close()
+                browser.close()
+
+    def test_playwright_contenteditable_shift_enter_multiline(self):
+        from playwright.sync_api import sync_playwright
+        import utils
+
+        test_text = "Dòng 1 trong editor\nDòng 2 với Shift+Enter\n#LacasaHomestay"
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            try:
+                page.set_content('<div id="composer" contenteditable="true" style="min-height:50px"></div>')
+                locator = page.locator('#composer')
+                page._fb_automation_account_id = "acc_contenteditable"
+
+                old_flag = utils.ENABLE_ADVANCED_HUMAN_ENGINE
+                utils.ENABLE_ADVANCED_HUMAN_ENGINE = True
+                try:
+                    with patch("time.sleep", return_value=None):
+                        utils.human_type(page, locator, test_text, multiline_key="Shift+Enter")
+                    
+                    text_content = locator.inner_text()
+                    self.assertIn("#LacasaHomestay", text_content)
+                    self.assertTrue(utils.verify_entered_content(locator, test_text))
+                finally:
+                    utils.ENABLE_ADVANCED_HUMAN_ENGINE = old_flag
+            finally:
+                page.close()
+                browser.close()
 
 
 if __name__ == "__main__":

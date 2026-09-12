@@ -18,7 +18,7 @@ from services.profile_session_manager import (
 
 # GPM profiles with proxies/extensions can take longer than 15s to start.
 GPM_START_TIMEOUT_SECONDS = 30
-ENABLE_ADVANCED_HUMAN_ENGINE = os.getenv("ENABLE_ADVANCED_HUMAN_ENGINE", "true").lower() in ("true", "1", "yes")
+ENABLE_ADVANCED_HUMAN_ENGINE = os.getenv("ENABLE_ADVANCED_HUMAN_ENGINE", "false").lower() in ("true", "1", "yes")
 
 if sys.platform == "win32":
     try:
@@ -127,12 +127,15 @@ def human_type(page, locator, text, multiline_key="Enter"):
     _ensure_focus(locator)
     value = str(text or "")
     if ENABLE_ADVANCED_HUMAN_ENGINE:
+        account_id = getattr(page, "_fb_automation_account_id", None)
         try:
             from modules.human_engine.adapter import human_type_advanced
-            if human_type_advanced(page, locator, value, multiline_key=multiline_key, allow_typos=False):
+            if human_type_advanced(page, locator, value, multiline_key=multiline_key, account_id=account_id, allow_typos=False):
+                print(f"[Human Engine] op=type status=used account={account_id or 'default'}")
                 return
-        except Exception:
-            pass
+            print(f"[Human Engine] op=type status=fallback account={account_id or 'default'} reason=advanced_returned_false")
+        except Exception as exc:
+            print(f"[Human Engine] op=type status=fallback account={account_id or 'default'} reason={type(exc).__name__}")
     try:
         locator.fill(value)
         time.sleep(0.45)
@@ -155,7 +158,12 @@ def human_type(page, locator, text, multiline_key="Enter"):
 
 def verify_entered_content(locator, expected):
     try:
-        actual=(locator.inner_text() or locator.text_content() or "").strip()
+        actual = (locator.inner_text() or locator.text_content() or "").strip()
+        if not actual and hasattr(locator, "input_value"):
+            try:
+                actual = (locator.input_value() or "").strip()
+            except Exception:
+                pass
     except Exception:
         return False
     expected=str(expected or "").strip()
@@ -229,12 +237,15 @@ def safe_mouse_wheel(page, dx, dy):
     if not page:
         return False
     if ENABLE_ADVANCED_HUMAN_ENGINE:
+        account_id = getattr(page, "_fb_automation_account_id", None)
         try:
             from modules.human_engine.adapter import kinetic_mouse_wheel
-            if kinetic_mouse_wheel(page, dx, dy):
+            if kinetic_mouse_wheel(page, dx, dy, account_id=account_id):
+                print(f"[Human Engine] op=scroll status=used account={account_id or 'default'}")
                 return True
-        except Exception:
-            pass
+            print(f"[Human Engine] op=scroll status=fallback account={account_id or 'default'} reason=advanced_returned_false")
+        except Exception as exc:
+            print(f"[Human Engine] op=scroll status=fallback account={account_id or 'default'} reason={type(exc).__name__}")
     try:
         if hasattr(page, "is_closed") and page.is_closed():
             return False
@@ -570,7 +581,7 @@ def _ensure_gpm_service_reachable(api_url, timeout=3.0):
 def launch_browser(account, p, api_url=None):
     """
     Launches browser for a given account. Unifies local profile and GPM profile methods.
-    Enhanced with anti-detection fingerprint features.
+    Preserves the existing browser/session configuration and exposes account identity for optional interaction pacing.
     """
     acc_type = account.get("type", "local")
     profile_id = account.get("profile_path_or_id", "")
@@ -781,13 +792,10 @@ def launch_browser(account, p, api_url=None):
         except Exception:
             pass
 
-        if ENABLE_ADVANCED_HUMAN_ENGINE:
-            try:
-                from modules.human_engine.stealth_evasion import apply_stealth_scripts
-                apply_stealth_scripts(context)
-                apply_stealth_scripts(page)
-            except Exception:
-                pass
+        try:
+            setattr(page, "_fb_automation_account_id", str(account.get("id") or profile_id or "default"))
+        except Exception:
+            pass
 
         return browser, context, page
         
@@ -862,13 +870,10 @@ def launch_browser(account, p, api_url=None):
         except Exception:
             pass
 
-        if ENABLE_ADVANCED_HUMAN_ENGINE:
-            try:
-                from modules.human_engine.stealth_evasion import apply_stealth_scripts
-                apply_stealth_scripts(context)
-                apply_stealth_scripts(page)
-            except Exception:
-                pass
+        try:
+            setattr(page, "_fb_automation_account_id", str(account.get("id") or profile_id or "default"))
+        except Exception:
+            pass
 
         return None, context, page
 

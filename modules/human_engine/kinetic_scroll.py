@@ -1,7 +1,6 @@
-﻿"""Kinetic & Impulse Scrolling Engine.
+"""Kinetic & Impulse Scrolling Engine.
 
-Simulates human mouse-wheel and trackpad scrolling with inertia, deceleration curves,
-reading pauses, and micro-backscrolls. Supports both discrete notched wheels and continuous trackpads.
+Provides bounded mouse-wheel and trackpad scrolling with optional pacing pauses.
 """
 
 import math
@@ -12,7 +11,7 @@ from .behavioral_profile import BehavioralProfile
 
 
 class KineticScroll:
-    """Simulates physical inertia scrolling and natural reading pauses."""
+    """Bounded scrolling with optional pacing."""
 
     def __init__(self, profile: Optional[BehavioralProfile] = None):
         self.profile = profile or BehavioralProfile.from_seed("default")
@@ -22,14 +21,17 @@ class KineticScroll:
         sign = 1 if target_dy > 0 else -1
         total_abs = abs(target_dy)
         step_size = 100
-        steps = max(1, int(round(total_abs / step_size)))
-
-        for i in range(steps):
+        full_steps, remainder = divmod(total_abs, step_size)
+        deltas = [sign * step_size] * full_steps
+        if remainder:
+            deltas.append(sign * remainder)
+        if not deltas:
+            deltas = [target_dy]
+        for delta in deltas:
             try:
-                page.mouse.wheel(0, sign * step_size)
+                page.mouse.wheel(0, delta)
             except Exception:
-                break
-            # Physical notched wheel tick interval: 40ms to 90ms with micro-variance
+                return False
             time.sleep(random.uniform(0.045, 0.095))
         return True
 
@@ -82,7 +84,7 @@ class KineticScroll:
                 time.sleep(dwell)
 
             # 18% probability of micro-backscroll (user scrolled past something interesting)
-            if random.random() < 0.18 and abs(target_dy) > 200:
+            if with_reading_pause and random.random() < 0.18 and abs(target_dy) > 200:
                 sign = 1 if target_dy > 0 else -1
                 back_dy = -int(sign * random.randint(50, 140))
                 self._scroll_smooth_touchpad(page, back_dy, steps=6)
@@ -93,7 +95,7 @@ class KineticScroll:
             return False
 
     def browse_feed(self, page: Any, rounds: int = 2) -> bool:
-        """Simulate browsing a social feed naturally (scrolls, pauses, occasional look-backs)."""
+        """Apply paced scrolling across a feed surface."""
         if not page:
             return False
         for _ in range(max(1, rounds)):

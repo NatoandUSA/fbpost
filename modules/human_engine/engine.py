@@ -14,7 +14,7 @@ from .kinetic_scroll import KineticScroll
 
 
 class HumanEngine:
-    """Complete Human Simulation & Anti-Bot Evasion Engine."""
+    """Optional interaction pacing engine for typing, pointer motion, and scrolling."""
 
     def __init__(self, account_id: Optional[str] = None):
         self.account_id = str(account_id or "default")
@@ -96,7 +96,7 @@ class HumanEngine:
     def warm_up(self, page: Any, rounds: int = 2) -> bool:
         """
         Browse and establish natural session entropy (scrolling, looking at posts, random cursor drift)
-        prior to executing sensitive actions like posting or joining groups.
+        before normal UI actions when a caller explicitly opts in.
         """
         if not page:
             return False

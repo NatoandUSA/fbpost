@@ -53,7 +53,8 @@ class BiometricTyping:
 
         log_mean = math.log(max(20.0, mean_ms))
         val_ms = math.exp(random.gauss(log_mean, sigma))
-        clamped_ms = max(35.0, min(650.0, val_ms))
+        max_ms = 400.0 if char == " " else 650.0
+        clamped_ms = max(35.0, min(max_ms, val_ms))
         return clamped_ms / 1000.0
 
     def _sample_dwell(self) -> float:
@@ -64,22 +65,8 @@ class BiometricTyping:
     def _emit_keystroke(self, keyboard: Any, char: str) -> None:
         """Emit authentic Down-Up (DU) telemetry pair for a single character."""
         dwell = self._sample_dwell()
-        
-        # Physical Shift-key sequence for standard ASCII uppercase letters
-        if char.isupper() and char.isascii():
-            try:
-                keyboard.down("Shift")
-                time.sleep(random.uniform(0.04, 0.08))
-                keyboard.down(char.lower())
-                time.sleep(dwell)
-                keyboard.up(char.lower())
-                time.sleep(random.uniform(0.03, 0.06))
-                keyboard.up("Shift")
-                return
-            except Exception:
-                pass
 
-        # Standard ASCII lowercase/punctuation: explicit down -> dwell -> up
+        # Standard ASCII letter/digit/symbol/space: explicit down -> dwell -> up
         if char.isascii() and (char.isprintable() or char == ' '):
             try:
                 keyboard.down(char)
@@ -93,7 +80,10 @@ class BiometricTyping:
         try:
             keyboard.type(char)
         except Exception:
-            keyboard.insert_text(char)
+            try:
+                keyboard.insert_text(char)
+            except Exception:
+                pass
 
     def type_text(
         self,
@@ -101,10 +91,10 @@ class BiometricTyping:
         locator: Any,
         text: str,
         multiline_key: str = "Enter",
-        allow_typos: bool = True
+        allow_typos: bool = False
     ) -> bool:
         """
-        Type text into the focused target locator simulating human keystroke dynamics.
+        Type exact text into the focused target locator with bounded key timing.
         
         Guarantees exact final content while emitting natural biometric event delays.
         """
@@ -172,12 +162,17 @@ class BiometricTyping:
             # Handle multiline newline
             if line_idx < len(lines) - 1:
                 key_to_press = "Shift+Enter" if multiline_key == "Shift+Enter" else "Enter"
-                if hasattr(keyboard, "down") and hasattr(keyboard, "up"):
-                    keyboard.down(key_to_press)
-                    time.sleep(random.uniform(0.06, 0.12))
-                    keyboard.up(key_to_press)
-                elif hasattr(keyboard, "press"):
-                    keyboard.press(key_to_press)
+                try:
+                    if hasattr(keyboard, "press"):
+                        keyboard.press(key_to_press)
+                    elif hasattr(keyboard, "down") and hasattr(keyboard, "up"):
+                        keyboard.down(key_to_press)
+                        keyboard.up(key_to_press)
+                except Exception:
+                    try:
+                        keyboard.insert_text("\n")
+                    except Exception:
+                        pass
                 # Thinking delay between paragraphs
                 time.sleep(random.uniform(0.40, 1.30))
                 prev_char = '\n'
