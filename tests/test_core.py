@@ -464,7 +464,7 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         twice = apply_brand_signature(once, "umee", True)
         self.assertEqual(once, twice)
         self.assertTrue(once.endswith(BRAND_SIGNATURES["umee"]["signatureText"]))
-        self.assertIn("Zalo: 0905555317", once)
+        self.assertIn("Hotline / Zalo: 0905 555 317", once)
 
     def test_brand_signature_switches_projects(self):
         from brand_profiles import apply_brand_signature
@@ -1900,9 +1900,9 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         for text in (lacasa, umee):
             self.assertIn("#UMEEHomestay", text)
             self.assertIn("#LacasaHomestay", text)
-            self.assertIn("-------------------", text)
-        self.assertIn("Lacasa", lacasa)
-        self.assertIn("Umee", umee)
+            self.assertIn("━━━━━━━━━━━━━━━━━━━━", text)
+        self.assertTrue("lacasa" in lacasa.lower())
+        self.assertTrue("umee" in umee.lower())
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")

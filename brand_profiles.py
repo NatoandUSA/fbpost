@@ -3,15 +3,20 @@
 BRAND_SIGNATURES = {
     "umee": {
         "brandName": "Umee Homestay",
-        "signatureText": "HOMESTAY\nUmee\nhttps://www.facebook.com/umeehomestay\nhttps://www.tiktok.com/@umee.homestay\nhttps://www.umeehomestay.com/Home\nhttps://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n\nZalo: 0905555317",
+        "signatureText": "🏡 UMEE HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📍 Chỉ đường (Maps): https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n🌐 Website: https://www.umeehomestay.com/Home\n📘 Fanpage: https://www.facebook.com/umeehomestay\n🎵 TikTok: https://www.tiktok.com/@umee.homestay\n━━━━━━━━━━━━━━━━━━━━",
     },
     "lacasa": {
         "brandName": "Lacasa Homestay",
-        "signatureText": "Lacasa\n\nhttps://www.facebook.com/lacasahomestayinvietnam\nhttps://www.tiktok.com/@lacasahomestayhue\nhttps://www.lacasahomestay.com/\nhttps://maps.app.goo.gl/yatorSbnQBytZCEk9\nZalo: 0905555317",
+        "signatureText": "🏡 LACASA HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📍 Chỉ đường (Maps): https://maps.app.goo.gl/yatorSbnQBytZCEk9\n🌐 Website: https://www.lacasahomestay.com/\n📘 Fanpage: https://www.facebook.com/lacasahomestayinvietnam\n🎵 TikTok: https://www.tiktok.com/@lacasahomestayhue\n━━━━━━━━━━━━━━━━━━━━",
     },
 }
 
-SIGNATURE_SEPARATOR = "-------------------"
+SIGNATURE_SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
+LEGACY_SIGNATURE_SEPARATORS = ("-------------------", "━━━━━━━━━━━━━━━━━━━━")
+LEGACY_SIGNATURE_TEXTS = (
+    "HOMESTAY\nUmee\nhttps://www.facebook.com/umeehomestay\nhttps://www.tiktok.com/@umee.homestay\nhttps://www.umeehomestay.com/Home\nhttps://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n\nZalo: 0905555317",
+    "Lacasa\n\nhttps://www.facebook.com/lacasahomestayinvietnam\nhttps://www.tiktok.com/@lacasahomestayhue\nhttps://www.lacasahomestay.com/\nhttps://maps.app.goo.gl/yatorSbnQBytZCEk9\nZalo: 0905555317",
+)
 GLOBAL_REQUIRED_HASHTAGS = ("#UMEEHomestay", "#LacasaHomestay")
 
 
@@ -35,11 +40,30 @@ def brand_name(value):
 
 def strip_known_signature(content):
     text = (content or "").strip()
-    for profile in BRAND_SIGNATURES.values():
-        signature = profile["signatureText"]
-        for suffix in (f"{SIGNATURE_SEPARATOR}\n{signature}", signature):
-            if text.endswith(suffix):
-                text = text[:-len(suffix)].rstrip()
+    all_signatures = [p["signatureText"] for p in BRAND_SIGNATURES.values()] + list(LEGACY_SIGNATURE_TEXTS)
+    all_separators = list(LEGACY_SIGNATURE_SEPARATORS)
+    changed = True
+    while changed:
+        changed = False
+        for signature in all_signatures:
+            for sep in all_separators:
+                full_suffix = f"{sep}\n{signature}"
+                if text.endswith(full_suffix):
+                    text = text[:-len(full_suffix)].rstrip()
+                    changed = True
+                    break
+            if changed:
+                break
+        if not changed:
+            for signature in all_signatures:
+                if text.endswith(signature):
+                    text = text[:-len(signature)].rstrip()
+                    changed = True
+                    break
+        for sep in all_separators:
+            if text.endswith(sep):
+                text = text[:-len(sep)].rstrip()
+                changed = True
     return text
 
 
