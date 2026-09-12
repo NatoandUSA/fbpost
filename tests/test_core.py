@@ -844,7 +844,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.6")
+        self.assertEqual(get_version(), "6.1.7")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1912,8 +1912,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.6', html)
-        self.assertIn('app.js?v=6.1.6', html)
+        self.assertIn('styles.css?v=6.1.7', html)
+        self.assertIn('app.js?v=6.1.7', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
@@ -1961,3 +1961,44 @@ class V6010JoinDispatchRegressionTests(unittest.TestCase):
         self.assertNotIn("postBtnBottom", js)
         self.assertIn("const serverState = await syncActiveJobState();", js)
         self.assertIn("await runCommand('join-group'", js)
+
+
+class V617ConfigurablePostingFlowTests(unittest.TestCase):
+    def test_duplicate_window_accepts_only_supported_choices(self):
+        from services.job_executor import resolve_duplicate_window_hours
+        for hours in (4, 8, 12, 16, 24):
+            self.assertEqual(resolve_duplicate_window_hours(hours), hours)
+        for invalid in (None, "", 3, 25, "bad"):
+            self.assertEqual(resolve_duplicate_window_hours(invalid), 24)
+
+    def test_ui_wires_configurable_duplicate_window(self):
+        html = Path("static/index.html").read_text(encoding="utf-8")
+        app = Path("static/app.js").read_text(encoding="utf-8")
+        for hours in (4, 8, 12, 16, 24):
+            self.assertIn(f'<option value="{hours}"', html)
+        self.assertIn("payload.skipDuplicateHours", app)
+        self.assertIn("hours=float(skip_duplicate_hours)", Path("services/job_executor.py").read_text(encoding="utf-8"))
+
+    def test_content_hub_reference_is_loaded_by_brand(self):
+        from ai_spinner import content_reference_context, load_content_reference
+        reference = load_content_reference()
+        self.assertEqual(reference["source"]["sha256"], "e0b200df3fad9df1e24ae5fa618b7b64f5b408ac9b54e2a84dd74a96f84f2a80")
+        umee = content_reference_context("umee")
+        self.assertIn("SH44", umee)
+        self.assertIn("không tự bịa", umee.casefold())
+        self.assertNotIn("Số 3 kiệt 17", umee)
+        self.assertIn("content_reference.json", Path("BUILD_PORTABLE.ps1").read_text(encoding="utf-8"))
+
+    def test_group_flow_browses_before_join_post_and_close(self):
+        source = Path("fb_group.py").read_text(encoding="utf-8")
+        arrival = source.index('_browse_group_context(page, "arrival")')
+        membership = source.index("membership_state = _ensure_group_membership")
+        before_post = source.index('_browse_group_context(page, "before-post")')
+        publish = source.index("published = click_post_publish_button")
+        after_post = source.index('_browse_group_context(page, "after-post")')
+        close = source.index("close_browser(", after_post)
+        self.assertLess(arrival, membership)
+        self.assertLess(membership, before_post)
+        self.assertLess(before_post, publish)
+        self.assertLess(publish, after_post)
+        self.assertLess(after_post, close)

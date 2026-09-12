@@ -16,6 +16,35 @@ import urllib.error
 import time as _time
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")
+
+
+def load_content_reference() -> dict:
+    """Load the audited Content Hub facts. Missing/invalid data fails closed to an empty reference."""
+    try:
+        with open(CONTENT_REFERENCE_FILE, "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def content_reference_context(brand_key: str = "") -> str:
+    reference = load_content_reference()
+    common = reference.get("global") or {}
+    brand = reference.get((brand_key or "").strip().lower()) or {}
+    facts = list(common.get("stable_facts") or []) + list(brand.get("facts") or [])
+    rules = list(common.get("dynamic_rules") or []) + list(brand.get("rules") or [])
+    if not facts and not rules:
+        return ""
+    source = reference.get("source") or {}
+    return (
+        f"CONTENT HUB REFERENCE [{source.get('knowledge_updated', 'unknown')} | {source.get('sha256', 'no-hash')}]:\n"
+        + "\n".join(f"- FACT: {item}" for item in facts)
+        + "\n"
+        + "\n".join(f"- RULE: {item}" for item in rules)
+    )
+
 
 def _preserves_core_info(original: str, generated: str) -> bool:
     """Reject AI output that drops phone/price/link/address invariants from the source."""
@@ -132,7 +161,7 @@ def spin_content_local(content: str) -> str:
     return "\n".join(out).strip()
 
 
-def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "") -> str:
+def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> str:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
@@ -152,7 +181,8 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", 
         f"- Được đổi câu chữ và thứ tự đoạn; KHÔNG thay đổi nghĩa của facts.\n"
         f"- Viết bằng Tiếng Việt tự nhiên, phù hợp đăng nhóm cộng đồng hoặc fanpage.\n"
         f"- KHÔNG thêm bất kỳ lời dẫn giải nào như 'Dưới đây là bài viết...'. Chỉ trả về duy nhất nội dung bài đăng.\n\n"
-        f"NỘI DUNG BÀI GỐC:\n{content}"
+        + (f"{truth_context}\n\nChỉ dùng FACT phù hợp với nội dung bài gốc; RULE luôn bắt buộc. Không tự thêm fact chỉ để làm bài dài hơn.\n\n" if truth_context else "")
+        + f"NỘI DUNG BÀI GỐC:\n{content}"
     )
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
@@ -203,7 +233,12 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
 
     if api_key and len(api_key.strip()) > 10:
         try:
-            spun = spin_content_gemini(source_content, api_key.strip(), brand_name=selected_brand_name)
+            spun = spin_content_gemini(
+                source_content,
+                api_key.strip(),
+                brand_name=selected_brand_name,
+                truth_context=content_reference_context(brand_key),
+            )
             return apply_brand_signature(spun, brand_key, include_signature)
         except Exception as e:
             print(f"⚠️ [AI Spinner] Gemini API gặp lỗi ({e}), chuyển sang chế độ Local Smart Spinner.")

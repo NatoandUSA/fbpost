@@ -15,6 +15,26 @@ from paths import DATA_DIR
 
 STATE_FILE = str(DATA_DIR / "state.json")
 
+
+def _browse_group_context(page, phase):
+    """Perform bounded, read-only group browsing before/after posting."""
+    try:
+        if not page:
+            return False
+        is_closed = getattr(page, "is_closed", None)
+        if callable(is_closed) and is_closed():
+            return False
+        print(f"👀 [Group Flow] phase={phase} action=browse")
+        safe_mouse_wheel(page, 0, random.randint(220, 460))
+        time.sleep(random.uniform(0.8, 1.5))
+        safe_mouse_wheel(page, 0, -random.randint(80, 180))
+        time.sleep(random.uniform(0.8, 1.5))
+        return True
+    except Exception as exc:
+        print(f"⚠️ [Group Flow] phase={phase} action=browse status=skipped reason={type(exc).__name__}")
+        return False
+
+
 def _ensure_group_membership(page, group_url):
     """Require confirmed membership before posting. Never treat pending/unverified as joined."""
     joined_markers = ("đã tham gia", "joined", "rời khỏi nhóm", "leave group")
@@ -151,6 +171,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                                     message="Facebook không tải được bề mặt mục tiêu sau các lần khôi phục read-only.",
                                     target_url=group_url)
             time.sleep(random.uniform(1.0, 2.0))
+            _browse_group_context(page, "arrival")
 
             membership_state = _ensure_group_membership(page, group_url)
             print(f"[Group Membership] state={membership_state}")
@@ -185,11 +206,8 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             except Exception:
                 pass
 
-            # Cuộn trang nhẹ nhàng (an toàn, không crash khi ngắt kết nối)
-            safe_mouse_wheel(page, 0, random.randint(200, 500))
-            time.sleep(random.uniform(1.0, 2.0))
-            safe_mouse_wheel(page, 0, -random.randint(100, 250))
-            time.sleep(random.uniform(1.0, 2.0))
+            # Confirmed members browse a little more before opening the composer.
+            _browse_group_context(page, "before-post")
             
             print("🔍 Đang tìm ô đăng bài trong Group...")
             # Danh sách các pattern tìm ô đăng bài Group cả tiếng Việt & tiếng Anh
@@ -404,6 +422,10 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 print("⏳ Bài viết đã gửi và đang chờ Quản trị viên duyệt.")
             else:
                 print(f"⚠️ Bài đã được gửi nhưng chưa xác minh được permalink ({action_res.code}). Không tự động đăng lại.")
+
+            # Keep the group open briefly and browse after submission before closing the profile.
+            _browse_group_context(page, "after-post")
+            print("✅ [Group Flow] phase=after-post action=settled-before-close")
             return action_res
             
     except Exception as e:

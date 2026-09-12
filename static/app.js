@@ -3066,6 +3066,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const skipDuplicateOpt = document.getElementById('skip-duplicate-24h-opt');
             payload.skipDuplicate24h = skipDuplicateOpt ? skipDuplicateOpt.checked : true;
+            const duplicateWindowSelect = document.getElementById('duplicate-window-hours');
+            const duplicateWindowHours = Number(duplicateWindowSelect ? duplicateWindowSelect.value : 24);
+            payload.skipDuplicateHours = [4, 8, 12, 16, 24].includes(duplicateWindowHours) ? duplicateWindowHours : 24;
 
             const cleanExifOpt = document.getElementById('clean-exif-opt');
             payload.cleanExif = cleanExifOpt ? cleanExifOpt.checked : true;

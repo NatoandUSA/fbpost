@@ -1,0 +1,67 @@
+{
+  "source": {
+    "name": "Content Hub index.html",
+    "title": "Homestay Content Hub — Lacasa & UMEE · Promax V4 Audited",
+    "sha256": "e0b200df3fad9df1e24ae5fa618b7b64f5b408ac9b54e2a84dd74a96f84f2a80",
+    "knowledge_updated": "2026-07-30",
+    "imported": "2026-09-12"
+  },
+  "global": {
+    "stable_facts": [
+      "Huế là kinh đô của Việt Nam thống nhất dưới triều Nguyễn từ năm 1802 đến 1945.",
+      "Quần thể Di tích Cố đô Huế được UNESCO ghi danh Di sản Thế giới năm 1993.",
+      "Đại Nội gồm khu Hoàng thành và Tử Cấm Thành; Ngọ Môn là cổng chính phía nam của Hoàng thành.",
+      "Nhã nhạc là âm nhạc cung đình Việt Nam, gắn với nghi lễ triều đình và được UNESCO ghi danh di sản văn hóa phi vật thể.",
+      "Các điểm di sản thường được quan tâm gồm Đại Nội, chùa Thiên Mụ và các lăng Tự Đức, Minh Mạng, Khải Định.",
+      "Ẩm thực Huế có cả dòng cung đình và dân gian; chủ đề an toàn gồm bún bò Huế, cơm hến, bánh bèo, bánh nậm, bánh lọc, bánh khoái, nem lụi, chè Huế và món chay.",
+      "Rú Chá là rừng ngập mặn trên vùng đầm phá Tam Giang.",
+      "Lăng Gia Long, còn gọi Thiên Thọ Lăng, là lăng của vua Gia Long — vị vua sáng lập triều Nguyễn.",
+      "Bún giấm nuốc là món địa phương theo mùa.",
+      "Cà phê cóc là trải nghiệm đời sống địa phương; không tự gắn một quán cụ thể nếu chưa xác minh."
+    ],
+    "dynamic_rules": [
+      "Không tự viết giá vé, giờ mở cửa, lịch biểu diễn, lịch sự kiện, khuyến mãi, giá phòng hoặc tình trạng còn phòng.",
+      "Không tự viết khoảng cách hay thời gian di chuyển nếu chưa kiểm tra bản đồ.",
+      "Nếu chưa có tên, ngày, giờ và địa điểm sự kiện đã xác minh thì không khẳng định có sự kiện.",
+      "Chỉ nói thời tiết hiện tại khi có dữ liệu live; nếu không, chỉ đưa lời khuyên theo điều kiện.",
+      "Không dùng claim đẹp nhất, hot nhất, rẻ nhất, gần nhất hoặc giục giả.",
+      "Với dữ liệu biến động, yêu cầu kiểm tra nguồn chính thức trước khi đăng.",
+      "Giữ nguyên số điện thoại, địa chỉ, link và dữ liệu người dùng cung cấp; không thay đổi facts."
+    ]
+  },
+  "lacasa": {
+    "facts": [
+      "Tên: Lacasa Homestay.",
+      "Địa chỉ: Số 3 kiệt 17 Trần Phú, TP. Huế.",
+      "Điện thoại/Zalo: 0905 555 317.",
+      "Phòng riêng có giường Queen; dorm 4 và 8 giường.",
+      "Mỗi giường dorm có rèm riêng tư, đèn ngủ riêng và tủ lớn có khóa; khu dorm có 3 WC.",
+      "Có sân vườn, khu BBQ chung miễn phí, bếp và khu sinh hoạt chung.",
+      "Tiện nghi được xác nhận: máy lạnh, nước nóng, tủ lạnh, bàn ủi, máy sấy tóc và máy lọc không khí.",
+      "Hỗ trợ check-in sớm tùy tình trạng phòng; không được hứa chắc."
+    ],
+    "rules": [
+      "Không gán tiện nghi dorm cho phòng riêng hoặc ngược lại.",
+      "Không nói đi bộ, vài phút hoặc gần một điểm cụ thể nếu chưa kiểm tra bản đồ.",
+      "Không tự bịa số giường trống, giá hoặc tình trạng còn phòng."
+    ]
+  },
+  "umee": {
+    "facts": [
+      "Tên: UMEE Homestay.",
+      "Địa chỉ: SH44 – Manor Crown, 62 Tố Hữu, TP. Huế.",
+      "Điện thoại/Zalo: 0905 555 317.",
+      "Phòng riêng có giường King và máy chiếu Netflix 100 inch.",
+      "Một số phòng có bồn tắm; một số phòng có ban công và bếp nhỏ.",
+      "Có bãi đỗ ô tô miễn phí trước cửa và self check-in/out 24/7.",
+      "Dịch vụ được xác nhận: thuê xe máy, đón/trả khách, giặt là và dọn phòng hằng ngày.",
+      "Bể bơi 4 mùa trong nhà ở tầng 6 của tòa nhà và có phụ phí.",
+      "Có hình thức nghỉ theo giờ và theo ngày."
+    ],
+    "rules": [
+      "Chỉ nói bồn tắm, ban công hoặc bếp nhỏ khi đúng loại phòng/mục người dùng đã chọn.",
+      "Bài dorm/nhóm không tự gắn giường King, bồn tắm hoặc tiện nghi phòng riêng.",
+      "Không tự bịa số phòng trống, giá hoặc tình trạng còn phòng."
+    ]
+  }
+}

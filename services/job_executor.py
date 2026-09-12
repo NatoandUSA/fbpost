@@ -27,6 +27,17 @@ from repositories.activity_repo import ActivityRepository
 from repositories.reconcile_repo import ReconcileRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
+DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
+
+
+def resolve_duplicate_window_hours(value) -> int:
+    try:
+        hours = int(value)
+    except (TypeError, ValueError):
+        return 24
+    return hours if hours in DUPLICATE_WINDOW_HOURS else 24
+
+
 def load_config():
     try:
         cfg = SettingsRepository().get_config()
@@ -103,7 +114,8 @@ def execute_automation_task(
     gemini_api_key = data.get("geminiApiKey") or cfg.get("gemini_api_key", "")
     photo_folder = data.get("photoFolder", "").strip()
     photo_count_mode = data.get("photoCountMode", "2-4")
-    skip_duplicate = data.get("skipDuplicate24h", True)
+    skip_duplicate = data.get("skipDuplicate24h", True)  # Legacy key retained for older clients.
+    skip_duplicate_hours = resolve_duplicate_window_hours(data.get("skipDuplicateHours", 24))
     clean_exif = data.get("cleanExif", True)
     anti_hash_text = data.get("antiHashText", False)
     brand_key = str(data.get("brandKey") or "").strip().lower()
@@ -745,7 +757,7 @@ def execute_automation_task(
             continue
 
         if skip_duplicate and cmd in ("group", "page"):
-            is_dup, hours_ago, posted_at = is_recently_posted(target, hours=24.0)
+            is_dup, hours_ago, posted_at = is_recently_posted(target, hours=float(skip_duplicate_hours))
             if is_dup:
                 skipped_duplicates += 1
                 recent_state="unknown"
@@ -756,7 +768,7 @@ def execute_automation_task(
                 except Exception: pass
                 labels={"published":"đã xuất bản","pending":"đang chờ Facebook duyệt","submitted_unverified":"có thể đã gửi nhưng chưa xác minh permalink"}
                 on_line(f"\n========== [Mục tiêu {i+1}/{total}] ==========\n")
-                on_line(f"⏭️ [Khóa retry 24h] {target}: {labels.get(recent_state,recent_state)} lúc {posted_at} ({hours_ago}h trước). Không gửi lại tự động.\n")
+                on_line(f"⏭️ [Khóa retry {skip_duplicate_hours}h] {target}: {labels.get(recent_state,recent_state)} lúc {posted_at} ({hours_ago}h trước). Không gửi lại tự động.\n")
                 continue
 
         task_content = content

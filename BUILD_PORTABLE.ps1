@@ -13,11 +13,14 @@ if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
 New-Item -ItemType Directory -Path $bundle -Force | Out-Null
 $dirs = @('api','migrations','repositories','services','static','seeds','modules')
 foreach ($d in $dirs) { Copy-Item (Join-Path $root $d) $bundle -Recurse -Force }
-$files = @('ai_spinner.py','brand_profiles.py','db.py','fb_auth.py','fb_comment.py','fb_create_page.py','fb_group.py','fb_interact.py','fb_join_group.py','fb_page.py','fb_reconcile.py','launcher_preflight.py','fb_page_api.py','fb_scraper.py','fb_thread.py','main.py','paths.py','scheduler.py','server.py','utils.py','README.md','HUONG_DAN_SU_DUNG.html','requirements.txt','RUN_FB_AUTOMATION.bat','START_LINUX.sh','START_MAC.command','start_portable.bat','VERSION')
+$files = @('ai_spinner.py','content_reference.json','brand_profiles.py','db.py','fb_auth.py','fb_comment.py','fb_create_page.py','fb_group.py','fb_interact.py','fb_join_group.py','fb_page.py','fb_reconcile.py','launcher_preflight.py','fb_page_api.py','fb_scraper.py','fb_thread.py','main.py','paths.py','scheduler.py','server.py','utils.py','README.md','HUONG_DAN_SU_DUNG.html','requirements.txt','RUN_FB_AUTOMATION.bat','START_LINUX.sh','START_MAC.command','start_portable.bat','VERSION')
 foreach ($f in $files) { if (Test-Path (Join-Path $root $f)) { Copy-Item (Join-Path $root $f) $bundle -Force } }
 $requiredEngineFiles = @('modules\human_engine\__init__.py','modules\human_engine\adapter.py','modules\human_engine\behavioral_profile.py','modules\human_engine\biometric_typing.py','modules\human_engine\engine.py','modules\human_engine\kinematic_mouse.py','modules\human_engine\kinetic_scroll.py')
 foreach ($f in $requiredEngineFiles) {
     if (-not (Test-Path (Join-Path $bundle $f))) { throw "Portable bundle is missing ADVANCED_HUMAN_ENGINE component: $f" }
+}
+if (-not (Test-Path (Join-Path $bundle "content_reference.json"))) {
+    throw "Portable bundle is missing the audited Content Hub reference."
 }
 # Runtime dependencies are copied, but never runtime state.
 if (Test-Path (Join-Path $root 'runtime')) { Copy-Item (Join-Path $root 'runtime') $bundle -Recurse -Force }
