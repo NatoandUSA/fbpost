@@ -844,7 +844,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.7")
+        self.assertEqual(get_version(), "6.1.8")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1912,8 +1912,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.7', html)
-        self.assertIn('app.js?v=6.1.7', html)
+        self.assertIn('styles.css?v=6.1.8', html)
+        self.assertIn('app.js?v=6.1.8', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
@@ -1927,6 +1927,22 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         self.assertTrue(verify_entered_content(Fake(expected), expected))
         broken = expected.replace("https://www.lacasahomestay.com/", "")
         self.assertFalse(verify_entered_content(Fake(broken), expected))
+
+class V618QueueVisibilityAndArchiveTests(unittest.TestCase):
+    def test_queue_loads_all_supported_rows_and_reports_visible_count(self):
+        js = (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("?active=1&limit=500", js)
+        self.assertIn("đang hiển thị ${visibleItems.length}", js)
+        self.assertIn("queueFilter.value = 'active'", js)
+        self.assertIn("await loadQueue();", js)
+
+    def test_duplicate_lock_archives_verified_publication(self):
+        executor = (Path(__file__).resolve().parents[1] / "services" / "job_executor.py").read_text(encoding="utf-8")
+        self.assertIn('queue_item_id = str(task.get("queueItemId")', executor)
+        self.assertIn('"published": "published", "pending": "pending", "submitted_unverified": "unverified"', executor)
+        self.assertIn('duplicate_lock_synced_{synced_state}', executor)
+        self.assertIn('loadQueue();', (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8"))
+
 
 class V609SecurityLinkageRegressionTests(unittest.TestCase):
     def test_frontend_never_reads_raw_proxy(self):

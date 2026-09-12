@@ -733,6 +733,7 @@ def execute_automation_task(
         target = task.get("target", "").strip()
         content = task.get("content", "").strip()
         image = task.get("image", None)
+        queue_item_id = str(task.get("queueItemId") or "").strip()
 
         task_feeling = task.get("feeling", feeling)
         task_checkin = task.get("checkin", checkin)
@@ -761,14 +762,35 @@ def execute_automation_task(
             if is_dup:
                 skipped_duplicates += 1
                 recent_state="unknown"
+                recent_row = {}
                 try:
                     for row in ActivityRepository().list_posted_links(limit=300):
                         if normalize_target_url(row.get("target") or "") == normalize_target_url(target):
+                            recent_row = row
                             recent_state=str(row.get("publish_state") or "unknown").lower(); break
                 except Exception: pass
                 labels={"published":"đã xuất bản","pending":"đang chờ Facebook duyệt","submitted_unverified":"có thể đã gửi nhưng chưa xác minh permalink"}
                 on_line(f"\n========== [Mục tiêu {i+1}/{total}] ==========\n")
                 on_line(f"⏭️ [Khóa retry {skip_duplicate_hours}h] {target}: {labels.get(recent_state,recent_state)} lúc {posted_at} ({hours_ago}h trước). Không gửi lại tự động.\n")
+                if queue_item_id and recent_state in ("published", "pending", "submitted_unverified"):
+                    synced_state = {"published": "published", "pending": "pending", "submitted_unverified": "unverified"}[recent_state]
+                    try:
+                        from repositories.campaign_repo import CampaignRepository
+                        synced = CampaignRepository().transition_queue_item(
+                            queue_item_id, ("approved",), synced_state,
+                            {
+                                "error": None,
+                                "result_url": recent_row.get("url") or recent_row.get("result_url") or "",
+                                "published_at": posted_at if synced_state == "published" else None,
+                            },
+                            f"duplicate_lock_synced_{synced_state}",
+                        )
+                        if synced:
+                            on_line(f"📦 [Queue Sync] {queue_item_id} → {synced_state}; đã rời hàng đợi hoạt động.\n")
+                    except Exception as sync_err:
+                        on_line(f"⚠️ [Queue Sync] Không thể đồng bộ {queue_item_id}: {sync_err}\n")
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
                 continue
 
         task_content = content
@@ -816,7 +838,6 @@ def execute_automation_task(
         on_line(f"\n========== [Target {i+1}/{total}] ==========\n")
         on_line(f"Posting to: {target}\n")
 
-        queue_item_id = str(task.get("queueItemId") or "").strip()
         if queue_item_id:
             try:
                 from repositories.campaign_repo import CampaignRepository

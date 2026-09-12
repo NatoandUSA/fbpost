@@ -558,13 +558,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadQueue() {
         try {
             const filter = document.getElementById('queue-filter')?.value || 'active';
-            const query = filter === 'active' ? '?active=1&limit=30' : (filter === 'all' ? '?limit=30' : `?state=${encodeURIComponent(filter)}&limit=30`);
+            const query = filter === 'active' ? '?active=1&limit=500' : (filter === 'all' ? '?limit=500' : `?state=${encodeURIComponent(filter)}&limit=500`);
             const [response, summaryRes] = await Promise.all([fetch('/api/queue' + query), fetch('/api/queue-summary')]);
-            renderQueue(await response.json());
+            const visibleItems = await response.json();
+            renderQueue(visibleItems);
             if (summaryRes.ok) {
                 const q = await summaryRes.json();
                 const el = document.getElementById('queue-summary-text');
-                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.unverified||0} cần đối soát · ${archived} lưu trữ)`; }
+                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.unverified||0} cần đối soát · ${archived} lưu trữ · đang hiển thị ${visibleItems.length})`; }
             }
         } catch (_) { approvalQueueList.textContent = 'Không thể tải hàng đợi.'; }
     }
@@ -648,9 +649,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (addedCount > 0) {
                 showToast(`Đã đưa ${addedCount} bài vào Hàng đợi! Vui lòng bấm '✅ Duyệt' để tiến hành đăng.`);
+                const queueFilter = document.getElementById('queue-filter');
+                if (queueFilter) queueFilter.value = 'active';
                 const queueTab = document.getElementById('tab-queue');
                 if (queueTab) queueTab.click();
-                loadQueue();
+                await loadQueue();
             } else {
                 showToast('Không thể thêm bài vào hàng đợi.', 'error');
             }
@@ -662,9 +665,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (approveAllQueueBtn) {
         approveAllQueueBtn.addEventListener('click', async () => {
             try {
-                const res = await fetch('/api/queue');
-                const items = await res.json();
-                const drafts = items.filter(i => i.state === 'draft');
+                const res = await fetch('/api/queue?state=draft&limit=500');
+                const drafts = await res.json();
                 if (!drafts.length) {
                     showToast('Không có bài nháp nào cần duyệt trong hàng đợi!', 'info');
                     return;
@@ -3292,6 +3294,7 @@ document.addEventListener('DOMContentLoaded', () => {
             checkStatus();
             loadPostedLinks();
             loadJoinedGroups();
+            loadQueue();
             setTimeout(() => {
                 progressContainer.classList.add('hidden');
             }, 1000);
