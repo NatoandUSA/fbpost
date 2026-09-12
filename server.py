@@ -85,7 +85,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-12 v6.1.8"
+BUILD_TIME = "2026-09-12 v6.1.9"
 
 
 def app_build_info():
@@ -677,7 +677,9 @@ def get_queue():
     except ValueError:
         return jsonify({"error": "limit/offset không hợp lệ"}), 400
     if active:
-        items = [i for i in items if i.get("state") in ("draft", "approved", "processing", "reconciling", "pending", "unverified")]
+        items = [i for i in items if i.get("state") in ("draft", "approved", "processing", "reconciling")]
+    elif state == "reconcile":
+        items = [i for i in items if str(i.get("state", "")).lower() in ("unverified", "manual_review")]
     elif state:
         items = [i for i in items if str(i.get("state", "")).lower() == state]
     items = sorted(items, key=lambda i: i.get("updated_at") or i.get("created_at") or "", reverse=True)
@@ -686,12 +688,13 @@ def get_queue():
 @app.route('/api/queue-summary', methods=['GET'])
 def queue_summary():
     items = load_queue()
-    counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "failed": 0, "cancelled": 0, "published": 0}
+    counts = {"total": len(items), "draft": 0, "approved": 0, "processing": 0, "reconciling": 0, "pending": 0, "unverified": 0, "manual_review": 0, "failed": 0, "cancelled": 0, "published": 0}
     for item in items:
         st = str(item.get("state") or "")
         if st in counts:
             counts[st] += 1
-    counts["active"] = counts["draft"] + counts["approved"] + counts["processing"] + counts["reconciling"] + counts["pending"] + counts["unverified"]
+    counts["active"] = counts["draft"] + counts["approved"] + counts["processing"] + counts["reconciling"]
+    counts["needs_reconcile"] = counts["unverified"] + counts["manual_review"]
     return jsonify(counts)
 
 @app.route('/api/queue', methods=['POST'])

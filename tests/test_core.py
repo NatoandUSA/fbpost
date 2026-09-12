@@ -844,7 +844,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.8")
+        self.assertEqual(get_version(), "6.1.9")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1912,8 +1912,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.8', html)
-        self.assertIn('app.js?v=6.1.8', html)
+        self.assertIn('styles.css?v=6.1.9', html)
+        self.assertIn('app.js?v=6.1.9', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
@@ -1942,6 +1942,26 @@ class V618QueueVisibilityAndArchiveTests(unittest.TestCase):
         self.assertIn('"published": "published", "pending": "pending", "submitted_unverified": "unverified"', executor)
         self.assertIn('duplicate_lock_synced_{synced_state}', executor)
         self.assertIn('loadQueue();', (Path(__file__).resolve().parents[1] / "static" / "app.js").read_text(encoding="utf-8"))
+
+
+class V619QueueStateSeparationTests(unittest.TestCase):
+    def test_active_queue_excludes_post_submit_states_and_counts_reconcile(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(server, "QUEUE_FILE", str(Path(directory) / "queue.json")):
+            items = [
+                {"id":"a","target":"a","content":"x","state":"approved"},
+                {"id":"p","target":"p","content":"x","state":"pending"},
+                {"id":"u","target":"u","content":"x","state":"unverified"},
+                {"id":"m","target":"m","content":"x","state":"manual_review"},
+                {"id":"d","target":"d","content":"x","state":"published"},
+            ]
+            Path(server.QUEUE_FILE).write_text(json.dumps(items), encoding="utf-8")
+            client = server.app.test_client()
+            self.assertEqual([x["id"] for x in client.get("/api/queue?active=1").get_json()], ["a"])
+            self.assertEqual({x["id"] for x in client.get("/api/queue?state=reconcile").get_json()}, {"u", "m"})
+            summary = client.get("/api/queue-summary").get_json()
+            self.assertEqual(summary["active"], 1)
+            self.assertEqual(summary["needs_reconcile"], 2)
+            self.assertEqual(summary["pending"], 1)
 
 
 class V609SecurityLinkageRegressionTests(unittest.TestCase):

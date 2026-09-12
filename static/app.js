@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 approved: ['✅','Đã duyệt','#DCFCE7','#166534'], draft: ['📝','Nháp','#FEF3C7','#92400E'],
                 processing: ['⚙️','Đang đăng','#DBEAFE','#1D4ED8'], reconciling: ['🔎','Đang đối soát','#E0E7FF','#3730A3'],
                 pending: ['⏳','Chờ duyệt FB','#FEF3C7','#92400E'],
-                unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], failed: ['❌','Lỗi trước submit','#FEE2E2','#991B1B'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#F1F5F9','#475569']
+                unverified: ['⚠️','Chưa xác minh','#FFEDD5','#9A3412'], manual_review: ['🧭','Cần đối soát thủ công','#FFEDD5','#9A3412'], failed: ['❌','Lỗi trước submit','#FEE2E2','#991B1B'], published: ['✅','Đã xuất bản','#DCFCE7','#166534'], cancelled: ['⏹','Đã hủy','#F1F5F9','#475569']
             };
             const qs = queueStatus[item.state] || ['•', item.state || 'Không rõ','#F1F5F9','#475569'];
             const statusBadge = `<span style="background:${qs[2]};color:${qs[3]};padding:2px 7px;border-radius:10px;font-size:10px;margin-right:4px;">${qs[0]} ${qs[1]}</span>`;
@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (summaryRes.ok) {
                 const q = await summaryRes.json();
                 const el = document.getElementById('queue-summary-text');
-                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.unverified||0} cần đối soát · ${archived} lưu trữ · đang hiển thị ${visibleItems.length})`; }
+                if (el) { const archived=(q.published||0)+(q.failed||0)+(q.cancelled||0); el.textContent = `(${q.active||0} hoạt động · ${q.needs_reconcile||0} cần đối soát · ${q.pending||0} chờ duyệt FB · ${archived} lưu trữ · đang hiển thị ${visibleItems.length})`; }
             }
         } catch (_) { approvalQueueList.textContent = 'Không thể tải hàng đợi.'; }
     }
