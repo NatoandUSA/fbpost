@@ -2039,7 +2039,11 @@ def _group_key_from_url(url: str) -> str:
 
 def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> str:
     target_group = _group_key_from_url(target)
-    selectors = "a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], a[href*='/videos/']"
+    selectors = (
+        "a[href*='/posts/'], a[href*='/permalink/'], a[href*='permalink.php'], "
+        "a[href*='story.php'], a[href*='/videos/'], a[href*='/share/p/'], "
+        "a[href*='/share/v/'], a[href*='/reel/']"
+    )
     try:
         for container in page.locator("div[role='alert'], div[role='status']").all():
             try:

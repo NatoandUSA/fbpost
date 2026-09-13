@@ -2,9 +2,8 @@
 """
 ai_spinner.py - Module Xào Bài Viết Tự Động (AI Content Spinner)
 Hỗ trợ:
-1. Gemini AI Online: Tận dụng Gemini Flash API (model cấu hình được, mặc định Gemini 3.8 Flash) để tạo bài viết độc nhất 100%.
-2. Local Smart Spinner Offline: Tự động phân tích và sinh biến thể thông minh chuyên ngành Homestay Huế / Du lịch
-   ngay cả khi không có mạng hoặc không có API Key.
+1. Gemini AI Online: dùng model được cấu hình để viết lại nội dung theo truth contract.
+2. Local fallback: chuẩn hóa an toàn và resolve spintax mà không tự thêm facts.
 """
 
 import os
@@ -143,7 +142,18 @@ def spin_content_local(content: str) -> str:
     """Truth-preserving offline fallback: never invent facts absent from source."""
     if not content or not content.strip():
         return content
-    lines=[line.rstrip() for line in content.strip().splitlines()]
+    # Resolve explicit {choice A|choice B} syntax without inventing facts.
+    resolved = content
+    choice_re = re.compile(r"\{([^{}]*\|[^{}]*)\}")
+    def choose_existing_option(match):
+        options = [part.strip() for part in match.group(1).split("|") if part.strip()]
+        return random.choice(options) if options else match.group(0)
+
+    for _ in range(8):
+        resolved, count = choice_re.subn(choose_existing_option, resolved)
+        if not count:
+            break
+    lines=[line.rstrip() for line in resolved.strip().splitlines()]
     out=[]; blank=False
     for line in lines:
         if not line.strip():
@@ -152,7 +162,7 @@ def spin_content_local(content: str) -> str:
         else:
             out.append(line.strip()); blank=False
     # Styling-only variation is allowed; hashtags below make no new factual claim.
-    lowered = (content or "").casefold()
+    lowered = (resolved or "").casefold()
     tags = []
     if "huế" in lowered: tags.append("#Hue")
     if "homestay" in lowered and "huế" in lowered: tags.append("#HomestayHue")
@@ -220,9 +230,8 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", 
 
 def generate_unique_variant(content: str, api_key: str = None, brand_key: str = None, include_signature: bool = False) -> str:
     """
-    Hàm giao tiếp tổng quát: Thử dùng Gemini API nếu có key hợp lệ,
-    nếu lỗi hoặc không có key sẽ tự động chuyển sang Local Smart Spinner.
-    Đảm bảo 100% luôn luôn có bài viết xào mới thành công!
+    API tương thích cũ: thử Gemini khi có key, nếu không thì dùng fallback
+    truth-safe. Hàm này không cam kết nội dung luôn thay đổi.
     """
     if not content or not content.strip():
         return content
@@ -245,6 +254,39 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
             
     spun = spin_content_local(source_content)
     return apply_brand_signature(spun, brand_key, include_signature)
+
+
+def generate_unique_variant_with_evidence(content: str, api_key: str = None, brand_key: str = None,
+                                          include_signature: bool = False) -> dict:
+    """Generate content and expose real provenance/change evidence for truthful logs."""
+    from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
+
+    if not content or not content.strip():
+        return {"content": content, "mode": "unchanged", "changed": False, "error": "empty_content"}
+
+    source = strip_known_signature(content)
+    spun = None
+    mode = "local_fallback"
+    error = ""
+    if api_key and len(api_key.strip()) > 10:
+        try:
+            spun = spin_content_gemini(
+                source, api_key.strip(), brand_name=brand_name(brand_key),
+                truth_context=content_reference_context(brand_key),
+            )
+            mode = "gemini"
+        except Exception as exc:
+            error = str(exc)
+    if spun is None:
+        spun = spin_content_local(source)
+
+    final = apply_brand_signature(spun, brand_key, include_signature)
+    comparable_source = re.sub(r"\s+", " ", source).strip()
+    comparable_spun = re.sub(r"\s+", " ", spun).strip()
+    changed = comparable_source != comparable_spun
+    if not changed:
+        mode = "unchanged"
+    return {"content": final, "mode": mode, "changed": changed, "error": error}
 
 
 COMMENT_HOOKS = [
@@ -447,5 +489,3 @@ def spin_two_tier(text: str, frequency: float = 0.35) -> str:
 
     # Lớp 2: Anti-Hash Zero-Width Characters
     return inject_zero_width_chars(current, frequency=frequency)
-
-

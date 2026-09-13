@@ -28,6 +28,24 @@ from repositories.reconcile_repo import ReconcileRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
 DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
+SUBMIT_UNCERTAIN_CODES = frozenset(("POST_SUBMITTED_UNVERIFIED", "SUBMIT_TRIGGERED_UNVERIFIED"))
+POST_PENDING_CODES = frozenset(("POST_PENDING", "RECONCILE_PENDING"))
+
+
+def is_submit_uncertain(result: Dict[str, Any]) -> bool:
+    """True only when Facebook submit was triggered but evidence is incomplete."""
+    return (
+        str((result or {}).get("state") or "") == "submitted_unverified"
+        or str((result or {}).get("code") or "") in SUBMIT_UNCERTAIN_CODES
+    )
+
+
+def is_post_pending(result: Dict[str, Any]) -> bool:
+    """Exclude group-membership pending from the post pending lifecycle."""
+    return (
+        str((result or {}).get("state") or "") == "pending"
+        and str((result or {}).get("code") or "") in POST_PENDING_CODES
+    )
 
 
 def resolve_duplicate_window_hours(value) -> int:
@@ -796,9 +814,19 @@ def execute_automation_task(
         task_content = content
         if auto_spin and cmd in ("group", "page"):
             try:
-                from ai_spinner import generate_unique_variant
-                task_content = generate_unique_variant(content, gemini_api_key, brand_key=brand_key, include_signature=include_signature)
-                on_line(f"🤖 [AI Content Spinner] Đã tạo biến thể bài viết mới cho mục tiêu {i+1}/{total}!\n")
+                from ai_spinner import generate_unique_variant_with_evidence
+                spin_result = generate_unique_variant_with_evidence(
+                    content, gemini_api_key, brand_key=brand_key, include_signature=include_signature
+                )
+                task_content = spin_result["content"]
+                if spin_result["mode"] == "gemini" and spin_result["changed"]:
+                    on_line(f"🤖 [AI Content Spinner] Gemini đã tạo biến thể mới cho mục tiêu {i+1}/{total}.\n")
+                elif spin_result["changed"]:
+                    detail = f"; Gemini lỗi: {spin_result['error']}" if spin_result["error"] else ""
+                    on_line(f"🔀 [Local Spinner] Đã tạo biến thể truth-safe cho mục tiêu {i+1}/{total}{detail}.\n")
+                else:
+                    detail = f" Gemini lỗi: {spin_result['error']}." if spin_result["error"] else ""
+                    on_line(f"ℹ️ [Content Spinner] Nội dung không đổi; không có biến thể hợp lệ.{detail}\n")
             except Exception as spin_err:
                 on_line(f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n")
                 from brand_profiles import apply_brand_signature
@@ -899,8 +927,8 @@ def execute_automation_task(
 
         # A submit can succeed before Facebook exposes a permalink. Reconcile read-only
         # before declaring the task unresolved; never resubmit the post here.
-        initial_state = str(structured_result.get("state") or "")
-        if cmd in ("group", "page") and initial_state in ("submitted_unverified", "unverified"):
+        submit_was_triggered = is_submit_uncertain(structured_result)
+        if cmd in ("group", "page") and submit_was_triggered:
             for reconcile_attempt, wait_seconds in enumerate((5, 15), 1):
                 on_line(f"🔎 [Auto Reconcile {reconcile_attempt}/2] Facebook đã nhận submit nhưng chưa có permalink; chờ {wait_seconds}s rồi đối soát read-only.\n")
                 if not sleep_with_cancel(wait_seconds):
@@ -924,13 +952,15 @@ def execute_automation_task(
                     break
 
         action_state = str(structured_result.get("state") or "")
+        action_code = str(structured_result.get("code") or "")
+        submit_was_triggered = is_submit_uncertain(structured_result)
         if action_state == "published":
             published_count += 1
             outcome = "published"
-        elif action_state == "pending":
+        elif is_post_pending(structured_result):
             pending_count += 1
             outcome = "pending"
-        elif action_state in ("submitted_unverified", "unverified"):
+        elif submit_was_triggered:
             unverified_count += 1
             outcome = "submitted_unverified"
         else:
@@ -939,7 +969,7 @@ def execute_automation_task(
             outcome = "failed_before_submit"
 
         # Durable reconciliation is created only after a real post submit becomes uncertain.
-        if cmd in ("group", "page") and action_state in ("submitted_unverified", "unverified"):
+        if cmd in ("group", "page") and submit_was_triggered:
             try:
                 rid = ReconcileRepository().enqueue(target, task_content, curr_acc_id, queue_item_id or None, delay_seconds=30)
                 on_line(f"🕒 [Durable Reconcile] Đã lên lịch 30s → 2m → 10m · id={rid[:10]}. Không repost.\n")
@@ -978,9 +1008,9 @@ def execute_automation_task(
 
         if action_state == "published" and ret == 0:
             workflow_finish_task(wf_task_id, state="published", submission_status="SUBMIT_CONFIRMED", verification_status="PERMALINK_FOUND", result_url=structured_result.get("result_url") or "")
-        elif action_state == "pending":
+        elif is_post_pending(structured_result):
             workflow_finish_task(wf_task_id, state="pending", submission_status="PENDING_APPROVAL", verification_status="PENDING_EVIDENCE", result_url=structured_result.get("result_url") or "")
-        elif action_state in ("submitted_unverified", "unverified"):
+        elif submit_was_triggered:
             workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="NO_PERMALINK", result_url=structured_result.get("result_url") or "", error_code=structured_result.get("code") or "SUBMITTED_NO_PERMALINK", error_message=structured_result.get("message") or "Submitted but permalink is not verified.")
         else:
             workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=structured_result.get("code") or "FAILED_BEFORE_SUBMIT", error_message=structured_result.get("message") or "Task failed before verified submission.")
@@ -991,10 +1021,10 @@ def execute_automation_task(
             if action_state == "published" and ret == 0:
                 final_queue_state = "published"
                 updates = {"published_at": now_iso(), "result_url": structured_result.get("result_url") or "", "error": None}
-            elif action_state == "pending" and ret == 0:
+            elif is_post_pending(structured_result) and ret == 0:
                 final_queue_state = "pending"
                 updates = {"result_url": structured_result.get("result_url") or "", "error": None}
-            elif action_state in ("submitted_unverified", "unverified") or cmd == "reconcile-post":
+            elif submit_was_triggered or cmd == "reconcile-post":
                 final_queue_state = "unverified"
                 updates = {"error": structured_result.get("message") or "Facebook có thể đã nhận bài nhưng chưa xác minh được permalink; chỉ đối soát, không tự động đăng lại."}
             else:

@@ -62,9 +62,12 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
             page.goto(target_url, wait_until="domcontentloaded")
             time.sleep(2.5)
 
-            for attempt in range(2):
-                permalink = _scan_post_permalink_once(page, target=target_url, content=content, max_articles=15)
-                if not permalink and attempt == 1:
+            # Facebook may rank the just-submitted post below pinned content and may
+            # expose only a share URL at first. Scan a larger window and try the
+            # native Share -> Copy link path on both later passes.
+            for attempt in range(3):
+                permalink = _scan_post_permalink_once(page, target=target_url, content=content, max_articles=30)
+                if not permalink and attempt >= 1:
                     permalink = _copy_post_permalink_via_share_sheet(page, target=target_url, content=content)
                 if permalink:
                     record_posted_link(
@@ -80,7 +83,7 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                         publish_state="pending"
                     )
                     return ActionResult(True, "RECONCILE_PENDING", "Bài đang chờ duyệt.", state="pending", target_url=target_url)
-                if attempt == 0:
+                if attempt < 2:
                     try:
                         page.reload(wait_until="domcontentloaded", timeout=20000)
                     except Exception as reload_err:
@@ -92,7 +95,7 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                         if "facebook.com" not in current or body_chars < 20:
                             raise
                         print(f"⚠️ Reload timeout nhưng Facebook DOM vẫn còn ({body_chars} chars); tiếp tục native permalink resolver: {reload_err}")
-                    time.sleep(2.5)
+                    time.sleep(2.5 + attempt * 2)
 
             return ActionResult(False, "RECONCILE_NOT_FOUND", "Chưa tìm thấy bài hoặc permalink; giữ trạng thái chưa xác minh.",
                                 state="unverified", target_url=target_url)

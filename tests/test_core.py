@@ -844,7 +844,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.10")
+        self.assertEqual(get_version(), "6.1.11")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1080,6 +1080,37 @@ class AuditV582RegressionTests(unittest.TestCase):
         self.assertFalse(res.success)
         self.assertEqual(res.code, "POST_SUBMITTED_UNVERIFIED")
         self.assertEqual(res.state, "submitted_unverified")
+
+    def test_membership_uncertainty_never_claims_post_submission(self):
+        from services.job_executor import is_post_pending, is_submit_uncertain
+
+        membership_unknown = {"state": "unverified", "code": "GROUP_MEMBERSHIP_UNVERIFIED"}
+        membership_pending = {"state": "pending", "code": "GROUP_MEMBERSHIP_PENDING"}
+        self.assertFalse(is_submit_uncertain(membership_unknown))
+        self.assertFalse(is_submit_uncertain(membership_pending))
+        self.assertFalse(is_post_pending(membership_pending))
+        self.assertTrue(is_submit_uncertain({
+            "state": "submitted_unverified", "code": "POST_SUBMITTED_UNVERIFIED"
+        }))
+        self.assertTrue(is_post_pending({"state": "pending", "code": "POST_PENDING"}))
+
+    def test_local_spinner_resolves_spintax_and_reports_provenance(self):
+        from ai_spinner import generate_unique_variant_with_evidence
+
+        result = generate_unique_variant_with_evidence(
+            "{Xin chào cả nhà|Chào mọi người}! Nội dung thật.", api_key=""
+        )
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["mode"], "local_fallback")
+        self.assertNotIn("{", result["content"])
+        self.assertNotIn("|", result["content"])
+
+    def test_spinner_does_not_claim_change_for_plain_content(self):
+        from ai_spinner import generate_unique_variant_with_evidence
+
+        result = generate_unique_variant_with_evidence("Nội dung giữ nguyên.", api_key="")
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["mode"], "unchanged")
 
     def test_click_post_publish_button_dialog_remains_open(self):
         from utils import click_post_publish_button
@@ -1912,8 +1943,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.10', html)
-        self.assertIn('app.js?v=6.1.10', html)
+        self.assertIn('styles.css?v=6.1.11', html)
+        self.assertIn('app.js?v=6.1.11', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
