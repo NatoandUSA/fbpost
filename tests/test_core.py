@@ -1543,6 +1543,52 @@ class V601RegressionTests(unittest.TestCase):
         self.assertEqual(captured["key"], "secret-api-key-123")
         self.assertIn("0905555317", out)
 
+    def test_spinner_accepts_phone_formatting_but_rejects_changed_digits(self):
+        import ai_spinner
+
+        original = "Hotline: 0905 555 317. Giá 350k/đêm."
+        self.assertEqual(ai_spinner.extract_core_info(original)["phones"], ["0905 555 317"])
+        self.assertTrue(ai_spinner._preserves_core_info(
+            original, "Giá 350k/đêm. Hotline: 0905.555.317."
+        ))
+        self.assertFalse(ai_spinner._preserves_core_info(
+            original, "Giá 350k/đêm. Hotline: 0905.555.318."
+        ))
+        self.assertFalse(ai_spinner._preserves_core_info(
+            original, "Giá 350k/đêm. Hotline: 0905.555.317, cách trung tâm 5 phút."
+        ))
+
+    def test_gemini_falls_back_only_when_model_is_unavailable(self):
+        import urllib.error
+        import ai_spinner
+
+        called = []
+        def fake(req, timeout=20, attempts=3):
+            called.append(req.full_url)
+            if len(called) == 1:
+                raise urllib.error.HTTPError(req.full_url, 404, "not found", {}, None)
+            return {"candidates":[{"content":{"parts":[{"text":"Hotline 0905-555-317"}]}}]}
+
+        with patch.object(ai_spinner, "GEMINI_MODEL", "missing-model"), \
+             patch.object(ai_spinner, "GEMINI_FALLBACK_MODELS", ("gemini-2.5-flash",)), \
+             patch("ai_spinner._urlopen_json", side_effect=fake):
+            text, model = ai_spinner.spin_content_gemini_with_model(
+                "Hotline 0905 555 317", "secret-api-key-123"
+            )
+        self.assertEqual(model, "gemini-2.5-flash")
+        self.assertIn("0905-555-317", text)
+        self.assertEqual(len(called), 2)
+
+    def test_local_comment_fallback_never_invents_promotional_facts(self):
+        import ai_spinner
+
+        original = "{Xin chào|Chào bạn}, mình cần hỏi phòng."
+        with patch("ai_spinner.random.choice", side_effect=lambda values: values[0]):
+            result = ai_spinner.spin_comment(original, api_key="")
+        self.assertEqual(result, "Xin chào, mình cần hỏi phòng.")
+        self.assertNotIn("Sông Hương", result)
+        self.assertNotIn("ưu đãi", result)
+
     def test_build_reads_version_dynamically(self):
         script = Path("BUILD_PORTABLE.ps1").read_text(encoding="utf-8")
         self.assertIn("Get-Content (Join-Path $root 'VERSION')", script)

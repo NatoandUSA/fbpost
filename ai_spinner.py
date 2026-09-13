@@ -15,7 +15,23 @@ import urllib.error
 import time as _time
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+GEMINI_FALLBACK_MODELS = tuple(
+    model.strip() for model in os.getenv(
+        "GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.0-flash"
+    ).split(",") if model.strip()
+)
 CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")
+
+PHONE_RE = re.compile(r"(?<!\d)(?:\+?84|0)(?:[ .-]*\d){9,10}(?!\d)")
+
+
+def _phone_digits(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    return "0" + digits[2:] if digits.startswith("84") else digits
+
+
+def _without_phone_spans(value: str) -> str:
+    return PHONE_RE.sub(" ", value or "")
 
 
 def load_content_reference() -> dict:
@@ -49,16 +65,19 @@ def _preserves_core_info(original: str, generated: str) -> bool:
     """Reject AI output that drops phone/price/link/address invariants from the source."""
     src = extract_core_info(original)
     dst = generated or ""
-    required = src["phones"] + src["prices"] + src["links"]
+    required = src["prices"] + src["links"]
     if any(value not in dst for value in required):
+        return False
+    dst_phones = {_phone_digits(value) for value in PHONE_RE.findall(dst)}
+    if any(_phone_digits(value) not in dst_phones for value in src["phones"]):
         return False
     for address in src["addresses"]:
         key = address.split(":", 1)[-1].strip()
         if key and key not in dst:
             return False
     # AI is allowed to rephrase, never to manufacture dynamic facts.
-    src_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", original or ""))
-    dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", dst))
+    src_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(original)))
+    dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(dst)))
     if not dst_numbers.issubset(src_numbers):
         return False
     risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "chỉ mất vài phút")
@@ -79,48 +98,18 @@ def _urlopen_json(req, timeout=20, attempts=3):
                 _time.sleep(1.5 * (attempt + 1))
     raise last or RuntimeError("Gemini request failed")
 
-# Kho ngữ liệu thông minh Local Spinner cho Homestay Huế & Du lịch
-HOOKS_HOMESTAY = [
-    "🌿 Tìm một chốn dừng chân bình yên ngay trung tâm Cố Đô Huế? Đừng bỏ lỡ căn homestay cực xinh này nhé!",
-    "✨ Trải nghiệm Huế thật dịu dàng và trọn vẹn cùng căn homestay không gian xanh mát, cực chill!",
-    "🌸 Đi Huế chơi mà chưa biết ở đâu vừa ấm cúng, view đẹp lại gần các điểm check-in? Ghé ngay homestay nhà mình nhé!",
-    "🏡 Góc nhỏ bình yên giữa lòng thành phố Huế mộng mơ — Nơi lý tưởng để nghỉ ngơi và nạp lại năng lượng!",
-    "☀️ Đón nắng sớm Cố Đô tại không gian homestay thoáng đãng, phong cách mộc mạc và siêu ấm cúng!",
-    "🍃 Du lịch Huế tự túc cùng gia đình hoặc nhóm bạn? Căn homestay siêu tiện nghi này sinh ra là dành cho bạn!",
-    "🌟 Review một homestay Huế xinh ngất ngây, giá cực hạt dẻ mà dịch vụ thì 10/10!",
-    "🛶 Sớm thức dậy bên tách trà nóng, nghe tiếng chim hót giữa không gian yên ả của xứ Huế...",
-]
-
-HIGHLIGHTS_HOMESTAY = [
-    "✅ Phòng ốc sạch sẽ tinh tươm, đón gió và ánh sáng tự nhiên.",
-    "✅ Vị trí đắc địa, chỉ mất vài phút di chuyển đến Đại Nội, Sông Hương, Cầu Tràng Tiền và phố đi bộ.",
-    "✅ Đầy đủ tiện nghi: Điều hòa mát lạnh, máy nước nóng, máy giặt, bếp nấu ăn tự do như ở nhà.",
-    "✅ Không gian sân vườn xanh mát, góc chill sống ảo lung linh từng centimet.",
-    "✅ Chủ nhà thân thiện, nhiệt tình hỗ trợ thuê xe máy, tư vấn địa điểm ăn uống ngon chuẩn vị Huế.",
-    "✅ Giá phòng hợp lý, hỗ trợ đặt phòng linh hoạt cho cả khách lẻ và gia đình.",
-]
-
-CALL_TO_ACTIONS = [
-    "📲 Nhắn tin ngay cho homestay hoặc liên hệ hotline để nhận ưu đãi phòng tốt nhất hôm nay nhé!",
-    "👉 Inbox trực tiếp cho page để được tư vấn phòng trống và nhận giá ưu đãi cho chuyến đi sắp tới!",
-    "💌 Số lượng phòng có hạn vào cuối tuần, bạn hãy nhắn trước để giữ phòng đẹp nhất nha!",
-    "📞 Liên hệ ngay hôm nay để nhận voucher giảm giá đặc biệt cho kỳ nghỉ tại Cố Đô Huế!",
-    "🛎️ Chúc bạn có một chuyến đi khám phá Huế thật nhiều kỷ niệm đáng nhớ cùng người thân yêu!",
-]
-
-HASHTAG_POOLS = [
-    "#homestayhue #dulichhue #huecity #checkinhue #khachsanhue #homestaygiarehue #phongchothuehue",
-    "#huehomestay #reviewhue #amthuchue #codohue #dulichtutuc #homestayviewdep",
-    "#homestay #hue #vietnamtravel #stayinhue #travelvietnam #huevietnam #visithue"
-]
-
-
 def extract_core_info(content: str) -> dict:
     """
     Trích xuất các thông tin cốt lõi quan trọng: SĐT, Zalo, Địa chỉ, Giá phòng, Link từ bài viết gốc
     để đảm bảo dù xào bài thế nào cũng không bị mất thông tin liên hệ.
     """
-    phones = re.findall(r'(?:0|\+84)[1-9][0-9]{8,9}', content)
+    phones = []
+    seen_phones = set()
+    for match in PHONE_RE.findall(content or ""):
+        normalized = _phone_digits(match)
+        if normalized not in seen_phones:
+            phones.append(match.strip())
+            seen_phones.add(normalized)
     prices = re.findall(r'\b\d+(?:[.,]\d+)?\s*(?:k|vnđ|vnd|đ|triệu|k/đêm|k/ngày)\b', content, re.IGNORECASE)
     links = re.findall(r'https?://[^\s]+', content)
     
@@ -131,7 +120,7 @@ def extract_core_info(content: str) -> dict:
             addresses.append(line.strip())
             
     return {
-        "phones": list(set(phones)),
+        "phones": phones,
         "prices": list(set(prices)),
         "links": list(set(links)),
         "addresses": addresses
@@ -171,7 +160,11 @@ def spin_content_local(content: str) -> str:
     return "\n".join(out).strip()
 
 
-def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> str:
+def _gemini_models():
+    return tuple(dict.fromkeys((GEMINI_MODEL,) + GEMINI_FALLBACK_MODELS))
+
+
+def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> tuple:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
@@ -195,7 +188,6 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", 
         + f"NỘI DUNG BÀI GỐC:\n{content}"
     )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
     payload = {
         "contents": [
             {
@@ -209,23 +201,31 @@ def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", 
         }
     }
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key.strip()}
-    )
+    for model in _gemini_models():
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key.strip()}
+        )
+        try:
+            res_data = _urlopen_json(req, timeout=20, attempts=3)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (400, 404):
+                continue
+            raise
+        candidates = res_data.get("candidates", [])
+        if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
+            spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
+            if spun_text and _preserves_core_info(content, spun_text):
+                return spun_text, model
+            if spun_text:
+                raise ValueError("Gemini output làm mất hoặc thêm dữ liệu ngoài bài gốc")
+    raise RuntimeError("Không có Gemini model được cấu hình nào trả về nội dung hợp lệ.")
 
-    res_data = _urlopen_json(req, timeout=20, attempts=3)
-        
-    candidates = res_data.get("candidates", [])
-    if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
-        spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
-        if spun_text and _preserves_core_info(content, spun_text):
-            return spun_text
-        if spun_text:
-            raise ValueError("Gemini output làm mất dữ liệu bắt buộc từ bài gốc")
-            
-    raise Exception("Gemini không trả về nội dung hợp lệ.")
+
+def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> str:
+    """Compatibility API returning only the generated text."""
+    return spin_content_gemini_with_model(content, api_key, style, brand_name, truth_context)[0]
 
 
 def generate_unique_variant(content: str, api_key: str = None, brand_key: str = None, include_signature: bool = False) -> str:
@@ -270,7 +270,7 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     error = ""
     if api_key and len(api_key.strip()) > 10:
         try:
-            spun = spin_content_gemini(
+            spun, used_model = spin_content_gemini_with_model(
                 source, api_key.strip(), brand_name=brand_name(brand_key),
                 truth_context=content_reference_context(brand_key),
             )
@@ -286,27 +286,11 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     changed = comparable_source != comparable_spun
     if not changed:
         mode = "unchanged"
-    return {"content": final, "mode": mode, "changed": changed, "error": error}
+    result = {"content": final, "mode": mode, "changed": changed, "error": error}
+    if mode == "gemini":
+        result["model"] = used_model
+    return result
 
-
-COMMENT_HOOKS = [
-    "Chào bạn nha! ", "Hello bạn! ", "Chào ad ạ! ", "Bài viết tuyệt vời quá! ",
-    "Cảm ơn bài chia sẻ rất hay của bạn! ", "Thích bài viết này quá nè! ", "Hello mọi người! "
-]
-
-COMMENT_BODIES = [
-    "Bên mình có căn homestay Huế ấm cúng, không gian xanh cực chill ngay trung tâm, giá rất ưu đãi cho bạn ghé thăm nè.",
-    "Bạn đi Huế cần tìm phòng homestay view đẹp, gần các điểm tham quan cứ nhắn tin cho mình tư vấn phòng đẹp nhé.",
-    "Không gian homestay xinh xắn tại Cố Đô Huế, đầy đủ tiện nghi như ở nhà, bạn cần phòng nhắn mình giữ phòng nhé.",
-    "Homestay nhà mình gần Sông Hương và Đại Nội, view thoáng mát, dịch vụ nhiệt tình chu đáo lắm nha."
-]
-
-COMMENT_CTAS = [
-    " Cần thông tin phòng bạn cứ inbox mình nhé!",
-    " Chúc bạn một ngày mới thật nhiều niềm vui!",
-    " Chúc bài viết của bạn nhận được thật nhiều tương tác nha!",
-    " Chúc bạn có kỳ nghỉ khám phá Huế thật tuyệt vời!"
-]
 
 def spin_comment(content: str, api_key: str = None) -> str:
     """
@@ -315,8 +299,6 @@ def spin_comment(content: str, api_key: str = None) -> str:
     """
     if not content or not content.strip():
         return content
-
-    core = extract_core_info(content)
 
     if api_key and len(api_key.strip()) > 10:
         try:
@@ -344,19 +326,9 @@ def spin_comment(content: str, api_key: str = None) -> str:
         except Exception as e:
             print(f"⚠️ [AI Comment Spinner] Gemini API gặp lỗi ({e}), chuyển sang Local Comment Spinner.")
 
-    # Local comment spinning
-    hook = random.choice(COMMENT_HOOKS)
-    body = random.choice(COMMENT_BODIES)
-    cta = random.choice(COMMENT_CTAS)
-    
-    # Nếu nội dung ban đầu có thông tin liên hệ, gắn vào
-    extra = ""
-    if core["phones"]:
-        extra += f" (Zalo/Hotline: {core['phones'][0]})"
-    if core["prices"]:
-        extra += f" - Giá từ {core['prices'][0]}"
-
-    return f"{hook}{body}{extra}{cta}".strip()
+    # Offline mode must fail closed: normalize/spintax only, never replace the
+    # user's comment with unaudited promotional claims.
+    return spin_content_local(content)
 
 
 def generate_interact_comments(base_comments: str = "", api_key: str = None) -> str:
