@@ -316,6 +316,7 @@ def serve_static(path):
     return send_from_directory('static', path)
 
 @app.route('/api/status', methods=['GET'])
+@app.route('/api/auth-status', methods=['GET'])
 def get_status():
     is_authenticated = os.path.exists(STATE_FILE) or os.path.exists(AUTH_STATUS_FILE)
     return jsonify({"authenticated": is_authenticated})
