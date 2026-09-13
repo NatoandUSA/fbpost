@@ -1756,28 +1756,55 @@ def add_checkin(page, brand_key=None):
             
             search_input = page.locator("div[role='dialog'] input[placeholder*='Where' i], div[role='dialog'] input[placeholder*='ở đâu' i], div[role='dialog'] input[placeholder*='Tìm kiếm' i], div[role='dialog'] input[type='text'], div[role='dialog'] input[type='search']").first
             if search_input.is_visible(timeout=2500):
-                search_input.fill(selected_location)
-                time.sleep(random.uniform(2.5, 4.0))
+                try:
+                    search_input.click(force=True)
+                    search_input.fill("")
+                    time.sleep(0.3)
+                    search_input.press_sequentially(selected_location, delay=45)
+                except Exception:
+                    page.keyboard.type(selected_location, delay=45)
+                time.sleep(random.uniform(2.5, 3.5))
                 
-                # Tìm kết quả địa điểm xuất hiện trong danh sách
+                # 1. Thử bấm kết quả địa điểm xuất hiện trong danh sách
+                checked_in = False
                 first_option = page.locator("div[role='dialog'] div[role='button']").filter(
                     has_text=re.compile(re.escape(selected_location) + r"|Huế|Hue", re.IGNORECASE)
                 ).first
                 
-                # Fallback: lấy kết quả đầu tiên bên dưới ô tìm kiếm (bỏ qua nút quay lại)
-                if not first_option.is_visible(timeout=1500):
+                if first_option.is_visible(timeout=1500):
+                    try:
+                        first_option.click(force=True, timeout=3000)
+                        checked_in = True
+                    except Exception:
+                        pass
+
+                # 2. Fallback: duyệt candidate button
+                if not checked_in:
                     candidates = page.locator("div[role='dialog'] div[role='button']")
-                    for i in range(candidates.count()):
+                    for i in range(min(candidates.count(), 8)):
                         c = candidates.nth(i)
                         c_text = (c.inner_text() or "").strip()
                         if "Quay lại" not in c_text and "Back" not in c_text and len(c_text) > 3:
-                            first_option = c
-                            break
+                            try:
+                                c.click(force=True, timeout=2500)
+                                checked_in = True
+                                break
+                            except Exception:
+                                pass
 
-                if first_option and first_option.is_visible(timeout=2000):
-                    first_option.click(force=True, timeout=5000)
+                # 3. Fallback: bấm ArrowDown và Enter
+                if not checked_in:
+                    try:
+                        page.keyboard.press("ArrowDown")
+                        time.sleep(0.4)
+                        page.keyboard.press("Enter")
+                        checked_in = True
+                    except Exception:
+                        pass
+
+                if checked_in:
                     print(f"✅ Đã check-in địa điểm: {selected_location}")
-                    time.sleep(1.5)
+                    time.sleep(1.2)
 
         # Đảm bảo nếu màn hình phụ vẫn còn, bấm nút Quay lại về khung soạn thảo chính
         back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first

@@ -194,6 +194,20 @@ def _resolve_gemini_api_key(api_key: str = None) -> str:
     return key
 
 
+def clean_ai_output(text: str) -> str:
+    """Lọc sạch lời mở đầu/suy nghĩ của Gemini và bỏ dấu markdown ** để hiển thị sạch trên Facebook."""
+    if not text:
+        return text
+    # 1. Bỏ toàn bộ dòng mở đầu/suy nghĩ/dẫn giải của Gemini (Refinement, Here is, Dưới đây là, v.v.)
+    cleaned = re.sub(
+        r'^(?:\*{0,2}(?:Refinement|Refined|Version|Phiên bản|Dưới đây là|Here is|Note)[^\n]*\n+)+',
+        '', text.strip(), flags=re.IGNORECASE
+    )
+    # 2. Xóa bỏ dấu sao kép markdown **bold** để không bị lộ dấu ** trên Facebook
+    cleaned = re.sub(r'\*\*([^*]+)\*\*', r'\1', cleaned)
+    return cleaned.strip()
+
+
 def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None) -> tuple:
     """
     Xào bài viết qua Google Gemini API (Online).
@@ -203,17 +217,18 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
     if not api_key:
         raise ValueError("Chưa cung cấp Gemini API Key.")
         
-    brand_tags = {
-        "lacasa": "@lacasahomestayinvietnam",
-        "umee": "@umeehomestay"
+    brand_fb_links = {
+        "lacasa": "fb.com/lacasahomestayinvietnam",
+        "umee": "fb.com/umeehomestay"
     }
-    tag_handle = brand_tags.get(str(brand_key or "").strip().lower(), "")
+    fb_link = brand_fb_links.get(str(brand_key or "").strip().lower(), "")
     tag_instruction = ""
     if brand_name:
-        tag_mention = f" và tag {tag_handle}" if tag_handle else ""
+        link_str = f" kèm link Page trực tiếp ({fb_link})" if fb_link else ""
         tag_instruction = (
             f"Thương hiệu/Project lưu trú là: {brand_name}. "
-            f"BẮT BUỘC phải nhắc đến tên {brand_name}{tag_mention} tự nhiên và nổi bật ngay trong lời mở đầu và lời kêu gọi đặt phòng ở thân bài.\n"
+            f"BẮT BUỘC phải nhắc đến tên {brand_name}{link_str} tự nhiên và nổi bật ngay trong lời mở đầu và lời kêu gọi đặt phòng ở thân bài.\n"
+            f"- KHÔNG dùng dấu sao đôi ** để in đậm (Facebook không hỗ trợ markdown **, sẽ bị lộ dấu ** trên bài). Hãy viết hoa hoặc dùng emoji tự nhiên.\n"
         )
 
     prompt = (
@@ -260,6 +275,7 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         candidates = res_data.get("candidates", [])
         if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
             spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
+            spun_text = clean_ai_output(spun_text)
             if spun_text and _preserves_core_info(content, spun_text, brand_key=brand_key):
                 return spun_text, model
             if spun_text:
@@ -327,6 +343,8 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
             error = str(exc)
     if spun is None:
         spun = spin_content_local(source)
+    else:
+        spun = clean_ai_output(spun)
 
     final = apply_brand_signature(spun, brand_key, include_signature)
     comparable_source = re.sub(r"\s+", " ", source).strip()
