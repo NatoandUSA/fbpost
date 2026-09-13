@@ -1173,14 +1173,18 @@ def attach_image_to_composer(page, dialog, image_path, clean_exif=True):
         except Exception as err:
             print(f"⚠️ Không thể gán file ảnh: {err}")
 
-    # 5. Chờ xem preview ảnh có xuất hiện trong dialog không
+    # 5. Chờ xem preview ảnh có xuất hiện trong dialog không (tránh match nhầm avatar cá nhân)
     if attached:
         print("⏳ Đang chờ ảnh tải lên hoàn tất...")
         try:
-            page.wait_for_selector("div[role='dialog'] img[src*='blob:'], div[role='dialog'] img[src*='data:'], div[role='dialog'] img", timeout=7000)
+            page.wait_for_selector(
+                "div[role='dialog'] img[src*='blob:'], div[role='dialog'] img[src*='data:'], "
+                "div[role='dialog'] div[aria-label*='Xóa ảnh' i], div[role='dialog'] div[aria-label*='Remove' i]",
+                timeout=7000
+            )
             print("✅ Đã xác nhận hình ảnh hiển thị trong khung bài viết!")
         except Exception:
-            time.sleep(4.0)
+            time.sleep(3.5)
     return attached
 
 
@@ -1671,14 +1675,15 @@ def add_feeling(page):
         except Exception:
             pass
 
-def add_checkin(page):
+def add_checkin(page, brand_key=None):
     """
-    Chọn vị trí check-in ngẫu nhiên tại Huế trong khung soạn thảo Facebook:
+    Chọn vị trí check-in tại Huế trong khung soạn thảo Facebook:
+    - Ưu tiên check-in ngay tại Homestay (Lacasa Homestay hoặc UMEE Homestay) theo brand_key.
+    - Đa dạng xoay tua các danh lam thắng cảnh nổi tiếng tại Huế.
     - Tìm icon Check-in qua aria-label (hỗ trợ cả khi bị ẩn trong nút 'Xem thêm').
-    - Nhập tìm kiếm địa danh Huế và chọn kết quả gợi ý.
     - Luôn đảm bảo thoát màn hình phụ và trở về khung soạn bài chính.
     """
-    print("📍 Đang check-in địa điểm ngẫu nhiên cho bài viết...")
+    print("📍 Đang check-in địa điểm cho bài viết...")
     try:
         # 1. Tìm nút Check-in trong dialog
         checkin_selectors = [
@@ -1721,7 +1726,14 @@ def add_checkin(page):
             checkin_btn.click(force=True, timeout=5000)
             time.sleep(random.uniform(1.5, 2.5))
             
-            locations_list = [
+            homestay_map = {
+                "lacasa": ["Lacasa Homestay", "Lacasa Homestay Huế"],
+                "umee": ["UMEE Homestay", "UMEE Homestay Huế"]
+            }
+            norm_key = str(brand_key or "").strip().lower()
+            priority_locs = homestay_map.get(norm_key, ["Lacasa Homestay", "UMEE Homestay"])
+            famous_hue_locs = [
+                "Thành phố Huế",
                 "Đại Nội Huế", 
                 "Chùa Thiên Mụ", 
                 "Cầu Trường Tiền", 
@@ -1731,9 +1743,16 @@ def add_checkin(page):
                 "Trường Quốc Học Huế", 
                 "Làng hương Thủy Xuân", 
                 "Đồi Vọng Cảnh", 
-                "Cung An Định"
+                "Cung An Định",
+                "Chợ Đông Ba",
+                "Phố Tây Huế",
+                "Sông Hương"
             ]
-            selected_location = random.choice(locations_list)
+            # 70% ưu tiên check-in ngay tại Homestay, 30% xoay tua danh lam Huế
+            if random.random() < 0.70:
+                selected_location = random.choice(priority_locs)
+            else:
+                selected_location = random.choice(famous_hue_locs)
             
             search_input = page.locator("div[role='dialog'] input[placeholder*='Where' i], div[role='dialog'] input[placeholder*='ở đâu' i], div[role='dialog'] input[placeholder*='Tìm kiếm' i], div[role='dialog'] input[type='text'], div[role='dialog'] input[type='search']").first
             if search_input.is_visible(timeout=2500):

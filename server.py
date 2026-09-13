@@ -1460,10 +1460,13 @@ def api_ai_spin():
     from ai_spinner import generate_unique_variant_with_evidence, spin_comment, generate_interact_comments
     from brand_profiles import BRAND_SIGNATURES
     data = json_body()
-    content = data.get("content", "").strip()
-    api_key = data.get("apiKey", "").strip()
+    content = (data.get("content") or data.get("text") or "").strip()
+    api_key = (
+        (data.get("apiKey") or data.get("api_key") or "").strip()
+        or load_config().get("gemini_api_key", "").strip()
+    )
     mode = data.get("mode", "post")
-    brand_key = data.get("brandKey", "")
+    brand_key = data.get("brandKey") or data.get("brand") or ""
     include_signature = bool(brand_key)  # Project selected => canonical signature required.
     if not content and mode != "interact":
         return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
@@ -1476,10 +1479,18 @@ def api_ai_spin():
             result = generate_unique_variant_with_evidence(
                 content, api_key, brand_key=brand_key, include_signature=include_signature
             )
-            return jsonify({"success": True, "spun_content": result["content"], **{
-                key: value for key, value in result.items() if key != "content"
-            }})
-        return jsonify({"success": True, "spun_content": spun, "changed": spun.strip() != content.strip()})
+            return jsonify({
+                "success": True,
+                "spun_content": result["content"],
+                "spinned": result["content"],
+                **{key: value for key, value in result.items() if key != "content"}
+            })
+        return jsonify({
+            "success": True,
+            "spun_content": spun,
+            "spinned": spun,
+            "changed": spun.strip() != content.strip()
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

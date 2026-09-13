@@ -120,7 +120,14 @@ def _ensure_group_membership(page, group_url):
 
 def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_url=None, feeling=False, checkin=False,
                   photos_folder=None, photo_count="2-4", auto_spin=False, gemini_key=None, skip_duplicate=False,
-                  anti_hash_text=False, clean_exif=True):
+                  anti_hash_text=False, clean_exif=True, brand_key=None):
+    if not brand_key:
+        c_low = (content or "").lower()
+        if "lacasa" in c_low:
+            brand_key = "lacasa"
+        elif "umee" in c_low:
+            brand_key = "umee"
+
     # 1. Kiểm tra lọc trùng lặp 24h nếu bật
     if skip_duplicate:
         is_dup, hours_ago, posted_at = is_recently_posted(group_url)
@@ -131,7 +138,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
     # 2. Xào bài viết qua AI Content Spinner nếu bật
     if auto_spin:
         print("🤖 [AI Spinner] Đang tạo biến thể bài viết mới lạ, chống trùng lặp spam...")
-        content = generate_unique_variant(content, gemini_key)
+        content = generate_unique_variant(content, gemini_key, brand_key=brand_key)
 
     # 3. Bốc ảnh ngẫu nhiên từ thư mục nếu có chỉ định
     if photos_folder and not image_path:
@@ -379,7 +386,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 
             # Thêm Check-in nếu được chọn
             if checkin:
-                add_checkin(page)
+                add_checkin(page, brand_key=brand_key)
             
             # Tạm dừng 5 - 10s mô phỏng người dùng đọc lại bài viết trước khi bấm đăng (Anti-bot)
             review_delay = random.uniform(5.0, 10.0)

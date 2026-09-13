@@ -1544,7 +1544,7 @@ class V601RegressionTests(unittest.TestCase):
 
     def test_gemini_default_model_and_api_key_header(self):
         import ai_spinner
-        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-2.5-flash")
+        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-3.5-flash")
         captured = {}
         def fake(req, timeout=20, attempts=3):
             captured["url"] = req.full_url
@@ -1553,7 +1553,7 @@ class V601RegressionTests(unittest.TestCase):
         original = "Homestay Huế. Hotline: 0905555317. Giá 350k/đêm. https://example.com"
         with patch("ai_spinner._urlopen_json", side_effect=fake):
             out = ai_spinner.spin_content_gemini(original, "secret-api-key-123")
-        self.assertIn("gemini-2.5-flash:generateContent", captured["url"])
+        self.assertIn("gemini-3.5-flash:generateContent", captured["url"])
         self.assertNotIn("secret-api-key-123", captured["url"])
         self.assertEqual(captured["key"], "secret-api-key-123")
         self.assertIn("0905555317", out)
@@ -1572,6 +1572,15 @@ class V601RegressionTests(unittest.TestCase):
         self.assertFalse(ai_spinner._preserves_core_info(
             original, "Giá 350k/đêm. Hotline: 0905.555.317, cách trung tâm 5 phút."
         ))
+
+    def test_spinner_accepts_verified_content_hub_facts(self):
+        import ai_spinner
+
+        original = "Bên mình còn phòng homestay xinh xắn tại TP Huế. Hotline: 0905 555 317."
+        gemini_umee = "Phòng SH44 Manor Crown 62 Tố Hữu Huế, máy chiếu 100 inch, 24/7. Hotline: 0905 555 317."
+        self.assertTrue(ai_spinner._preserves_core_info(original, gemini_umee, brand_key="umee"))
+        gemini_lacasa = "Homestay số 3 kiệt 17 Trần Phú TP Huế, dorm 4 giường. Hotline: 0905 555 317."
+        self.assertTrue(ai_spinner._preserves_core_info(original, gemini_lacasa, brand_key="lacasa"))
 
     def test_gemini_falls_back_only_when_model_is_unavailable(self):
         import urllib.error

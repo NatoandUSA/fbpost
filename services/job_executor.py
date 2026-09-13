@@ -911,6 +911,8 @@ def execute_automation_task(
                 full_cmd.append("--no-clean-exif")
             if not anti_hash_text:
                 full_cmd.append("--no-anti-hash-text")
+            if brand_key:
+                full_cmd.extend(["--brand-key", brand_key])
 
         structured_result = {}
         def _capture_post_line(line):

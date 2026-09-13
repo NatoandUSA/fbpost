@@ -45,6 +45,7 @@ def main():
     group_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     group_parser.add_argument("--clean-exif", action="store_true", default=True, help="Create a metadata-sanitized image copy")
     group_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
+    group_parser.add_argument("--brand-key", default=None, help="Brand key: umee or lacasa")
     
     # Page command
     page_parser = subparsers.add_parser("page", help="Post to a Facebook Page you manage")
@@ -63,6 +64,7 @@ def main():
     page_parser.add_argument("--no-anti-hash-text", dest="anti_hash_text", action="store_false")
     page_parser.add_argument("--clean-exif", action="store_true", default=True, help="Strip EXIF and randomize image pHash")
     page_parser.add_argument("--no-clean-exif", dest="clean_exif", action="store_false")
+    page_parser.add_argument("--brand-key", default=None, help="Brand key: umee or lacasa")
     
     # Thread command
     thread_parser = subparsers.add_parser("thread", help="Send a message to a Messenger Thread")
@@ -132,7 +134,8 @@ def main():
             auto_spin=args.auto_spin, gemini_key=args.gemini_key,
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
-            clean_exif=args.clean_exif
+            clean_exif=args.clean_exif,
+            brand_key=getattr(args, "brand_key", None)
         )
         if hasattr(result, "to_dict"):
             print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
@@ -147,7 +150,8 @@ def main():
             auto_spin=args.auto_spin, gemini_key=args.gemini_key,
             skip_duplicate=args.skip_duplicate,
             anti_hash_text=args.anti_hash_text,
-            clean_exif=args.clean_exif
+            clean_exif=args.clean_exif,
+            brand_key=getattr(args, "brand_key", None)
         )
         if hasattr(result, "to_dict"):
             print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))

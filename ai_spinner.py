@@ -14,10 +14,10 @@ import urllib.request
 import urllib.error
 import time as _time
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash").strip() or "gemini-3.5-flash"
 GEMINI_FALLBACK_MODELS = tuple(
     model.strip() for model in os.getenv(
-        "GEMINI_FALLBACK_MODELS", "gemini-2.0-flash"
+        "GEMINI_FALLBACK_MODELS", "gemini-3.1-flash-lite"
     ).split(",") if model.strip()
 )
 CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")
@@ -61,7 +61,21 @@ def content_reference_context(brand_key: str = "") -> str:
     )
 
 
-def _preserves_core_info(original: str, generated: str) -> bool:
+def _content_hub_numbers(brand_key: str = None) -> set:
+    reference = load_content_reference()
+    common = reference.get("global") or {}
+    facts = list(common.get("stable_facts") or [])
+    if brand_key:
+        brand = reference.get(str(brand_key).strip().lower()) or {}
+        facts.extend(brand.get("facts") or [])
+    else:
+        for key in ("lacasa", "umee"):
+            facts.extend(reference.get(key, {}).get("facts") or [])
+    text = " ".join(facts)
+    return set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(text)))
+
+
+def _preserves_core_info(original: str, generated: str, brand_key: str = None) -> bool:
     """Reject AI output that drops phone/price/link/address invariants from the source."""
     src = extract_core_info(original)
     dst = generated or ""
@@ -78,7 +92,8 @@ def _preserves_core_info(original: str, generated: str) -> bool:
     # AI is allowed to rephrase, never to manufacture dynamic facts.
     src_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(original)))
     dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(dst)))
-    if not dst_numbers.issubset(src_numbers):
+    allowed_numbers = src_numbers | _content_hub_numbers(brand_key)
+    if not dst_numbers.issubset(allowed_numbers):
         return False
     risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "chỉ mất vài phút")
     src_low, dst_low = (original or "").casefold(), dst.casefold()
@@ -164,7 +179,7 @@ def _gemini_models():
     return tuple(dict.fromkeys((GEMINI_MODEL,) + GEMINI_FALLBACK_MODELS))
 
 
-def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> tuple:
+def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None) -> tuple:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
@@ -172,9 +187,22 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
     if not api_key:
         raise ValueError("Chưa cung cấp Gemini API Key.")
         
+    brand_tags = {
+        "lacasa": "@lacasahomestayinvietnam",
+        "umee": "@umeehomestay"
+    }
+    tag_handle = brand_tags.get(str(brand_key or "").strip().lower(), "")
+    tag_instruction = ""
+    if brand_name:
+        tag_mention = f" và tag {tag_handle}" if tag_handle else ""
+        tag_instruction = (
+            f"Thương hiệu/Project lưu trú là: {brand_name}. "
+            f"BẮT BUỘC phải nhắc đến tên {brand_name}{tag_mention} tự nhiên và nổi bật ngay trong lời mở đầu và lời kêu gọi đặt phòng ở thân bài.\n"
+        )
+
     prompt = (
-        f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản.\n"
-        + (f"Thương hiệu/Project hiện tại là {brand_name}. Hãy dùng đúng tên thương hiệu này khi cần nhắc đến cơ sở lưu trú.\n" if brand_name else "")
+        f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản tại Huế.\n"
+        + tag_instruction
         + f"Hãy viết lại bài đăng Facebook sau đây với văn phong {style}, nhưng chỉ diễn đạt lại dữ liệu đã có, "
         f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
         f"YÊU CẦU BẮT BUỘC — CONTENT HUB TRUTH CONTRACT:\n"
@@ -216,16 +244,16 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         candidates = res_data.get("candidates", [])
         if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
             spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
-            if spun_text and _preserves_core_info(content, spun_text):
+            if spun_text and _preserves_core_info(content, spun_text, brand_key=brand_key):
                 return spun_text, model
             if spun_text:
                 raise ValueError("Gemini output làm mất hoặc thêm dữ liệu ngoài bài gốc")
     raise RuntimeError("Không có Gemini model được cấu hình nào trả về nội dung hợp lệ.")
 
 
-def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "") -> str:
+def spin_content_gemini(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None) -> str:
     """Compatibility API returning only the generated text."""
-    return spin_content_gemini_with_model(content, api_key, style, brand_name, truth_context)[0]
+    return spin_content_gemini_with_model(content, api_key, style, brand_name, truth_context, brand_key=brand_key)[0]
 
 
 def generate_unique_variant(content: str, api_key: str = None, brand_key: str = None, include_signature: bool = False) -> str:
@@ -247,6 +275,7 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
                 api_key.strip(),
                 brand_name=selected_brand_name,
                 truth_context=content_reference_context(brand_key),
+                brand_key=brand_key,
             )
             return apply_brand_signature(spun, brand_key, include_signature)
         except Exception as e:
@@ -273,6 +302,7 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
             spun, used_model = spin_content_gemini_with_model(
                 source, api_key.strip(), brand_name=brand_name(brand_key),
                 truth_context=content_reference_context(brand_key),
+                brand_key=brand_key,
             )
             mode = "gemini"
         except Exception as exc:
