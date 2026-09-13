@@ -36,6 +36,7 @@ class JobManager:
         self.job_repo = job_repo or JobRepository()
         self.process_runner = process_runner or ProcessRunner()
         self._job_queues: Dict[str, queue.Queue] = {}
+        self._raw_payloads: Dict[str, Dict[str, Any]] = {}
         self._active_job_id: Optional[str] = None
         self._lock = threading.Lock()
         self._work_queue: queue.Queue = queue.Queue()
@@ -81,6 +82,7 @@ class JobManager:
         job_id = self.create_job(command, payload, account_id)
         self.process_runner.prepare_job(job_id)
         with self._lock:
+            self._raw_payloads[job_id] = payload
             self._job_queues[job_id] = queue.Queue()
         self._work_queue.put(job_id)
         return job_id
@@ -93,6 +95,7 @@ class JobManager:
             return False
 
         with self._lock:
+            self._raw_payloads.pop(job_id, None)
             is_active = (self._active_job_id == job_id)
 
         self.process_runner.cancel(job_id)
@@ -147,6 +150,13 @@ class JobManager:
             q = self._job_queues.get(job_id)
         if q:
             q.put(line)
+        if line:
+            log_path = self.process_runner.get_log_path(job_id)
+            try:
+                with open(log_path, "a", encoding="utf-8", errors="replace") as f:
+                    f.write(line)
+            except OSError:
+                pass
 
     def subscribe_logs(self, job_id: str) -> Generator[str, None, None]:
         """Generator yielding lines in real-time as they arrive for job_id."""
@@ -235,7 +245,9 @@ class JobManager:
             return
 
         command = job.get("command", "")
-        payload = job.get("payload") or {}
+        with self._lock:
+            raw_payload = self._raw_payloads.pop(job_id, None)
+        payload = raw_payload if raw_payload is not None else (job.get("payload") or {})
         account_id = job.get("account_id")
 
         if not self.job_repo.mark_running(job_id):

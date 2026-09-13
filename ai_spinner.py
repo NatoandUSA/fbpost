@@ -179,11 +179,27 @@ def _gemini_models():
     return tuple(dict.fromkeys((GEMINI_MODEL,) + GEMINI_FALLBACK_MODELS))
 
 
+def _resolve_gemini_api_key(api_key: str = None) -> str:
+    key = (api_key or "").strip()
+    if not key or key.startswith("***REDACTED") or key.endswith("***"):
+        try:
+            from server import load_config
+            key = str(load_config().get("gemini_api_key") or "").strip()
+        except Exception:
+            try:
+                from repositories.settings_repo import SettingsRepository
+                key = str(SettingsRepository().get_config().get("gemini_api_key") or "").strip()
+            except Exception:
+                key = ""
+    return key
+
+
 def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None) -> tuple:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
     """
+    api_key = _resolve_gemini_api_key(api_key)
     if not api_key:
         raise ValueError("Chưa cung cấp Gemini API Key.")
         
@@ -266,6 +282,7 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
 
     from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
     source_content = strip_known_signature(content)
+    api_key = _resolve_gemini_api_key(api_key)
     selected_brand_name = brand_name(brand_key)
 
     if api_key and len(api_key.strip()) > 10:
@@ -293,6 +310,7 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     if not content or not content.strip():
         return {"content": content, "mode": "unchanged", "changed": False, "error": "empty_content"}
 
+    api_key = _resolve_gemini_api_key(api_key)
     source = strip_known_signature(content)
     spun = None
     mode = "local_fallback"
@@ -330,6 +348,7 @@ def spin_comment(content: str, api_key: str = None) -> str:
     if not content or not content.strip():
         return content
 
+    api_key = _resolve_gemini_api_key(api_key)
     if api_key and len(api_key.strip()) > 10:
         try:
             prompt = (

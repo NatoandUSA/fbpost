@@ -129,7 +129,11 @@ def execute_automation_task(
     feeling = data.get("feeling", False)
     checkin = data.get("checkin", False)
     auto_spin = data.get("autoSpin", False)
-    gemini_api_key = data.get("geminiApiKey") or cfg.get("gemini_api_key", "")
+    raw_gemini_key = str(data.get("geminiApiKey") or data.get("gemini_api_key") or "").strip()
+    if not raw_gemini_key or raw_gemini_key.startswith("***REDACTED") or raw_gemini_key.endswith("***"):
+        gemini_api_key = str(cfg.get("gemini_api_key") or "").strip()
+    else:
+        gemini_api_key = raw_gemini_key
     photo_folder = data.get("photoFolder", "").strip()
     photo_count_mode = data.get("photoCountMode", "2-4")
     skip_duplicate = data.get("skipDuplicate24h", True)  # Legacy key retained for older clients.
