@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-13 v6.1.13"
+BUILD_TIME = "2026-09-13 v6.1.14"
 
 
 def app_build_info():
@@ -1457,7 +1457,7 @@ def api_joined_groups():
 
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
-    from ai_spinner import generate_unique_variant, spin_comment, generate_interact_comments
+    from ai_spinner import generate_unique_variant_with_evidence, spin_comment, generate_interact_comments
     from brand_profiles import BRAND_SIGNATURES
     data = json_body()
     content = data.get("content", "").strip()
@@ -1473,8 +1473,13 @@ def api_ai_spin():
         elif mode == "interact":
             spun = generate_interact_comments(content, api_key)
         else:
-            spun = generate_unique_variant(content, api_key, brand_key=brand_key, include_signature=include_signature)
-        return jsonify({"success": True, "spun_content": spun})
+            result = generate_unique_variant_with_evidence(
+                content, api_key, brand_key=brand_key, include_signature=include_signature
+            )
+            return jsonify({"success": True, "spun_content": result["content"], **{
+                key: value for key, value in result.items() if key != "content"
+            }})
+        return jsonify({"success": True, "spun_content": spun, "changed": spun.strip() != content.strip()})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

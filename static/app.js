@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         const icon = document.createElement('span');
-        icon.textContent = type === 'success' ? '✅' : '❌';
+        icon.textContent = type === 'success' ? '✅' : (type === 'warning' ? 'ℹ️' : '❌');
         const text = document.createElement('span');
         text.textContent = message;
         toast.append(icon, text);
@@ -3663,7 +3663,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const profile = brandProfiles[key];
         const enabled = !!(brandSignatureOpt && brandSignatureOpt.checked && profile);
         brandSignaturePreview.style.display = enabled ? 'block' : 'none';
-        brandSignaturePreview.textContent = enabled ? `-------------------\n${profile.signatureText}` : '';
+        brandSignaturePreview.replaceChildren();
+        if (!enabled) return;
+        const fragment = document.createDocumentFragment();
+        const value = `-------------------\n${profile.signatureText}`;
+        const urlPattern = /(https?:\/\/[^\s·]+)/g;
+        value.split(urlPattern).forEach(part => {
+            if (/^https?:\/\//.test(part)) {
+                const link = document.createElement('a');
+                link.href = part;
+                link.textContent = part;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                fragment.appendChild(link);
+            } else {
+                fragment.appendChild(document.createTextNode(part));
+            }
+        });
+        brandSignaturePreview.appendChild(fragment);
     }
 
     brandProjectSelect?.addEventListener('change', refreshBrandPreview);
@@ -3702,10 +3719,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
                 const data = await res.json();
-                if (data.success && data.spun_content) {
+                if (data.success && data.spun_content && data.changed) {
                     postContent.value = data.spun_content;
-                    showToast('Đã xào mới nội dung bài viết thành công!', 'success');
-                    appendLog('🤖 [AI Content Spinner] Đã viết lại bài viết với biến thể mới lạ, chống trùng lặp!');
+                    const model = data.model ? ` (${data.model})` : '';
+                    showToast(`AI đã tạo biến thể mới${model}.`, 'success');
+                    appendLog(`🤖 [AI Content Spinner] Đã tạo biến thể thật${model}; dữ kiện gốc đã được kiểm tra.`);
+                } else if (data.success && data.spun_content) {
+                    postContent.value = data.spun_content;
+                    const detail = data.error ? ` Gemini lỗi: ${data.error}` : '';
+                    showToast('Nội dung không đổi; không có biến thể hợp lệ.', 'warning');
+                    appendLog(`ℹ️ [AI Content Spinner] Nội dung không đổi; không báo thành công giả.${detail}`);
                 } else {
                     showToast(data.error || 'Không thể xào bài!', 'error');
                 }

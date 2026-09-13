@@ -370,6 +370,16 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         self.assertTrue(data.get("success"))
         self.assertIn("0905123456", data.get("spun_content", ""))
 
+    def test_ai_spin_endpoint_reports_unchanged_truthfully(self):
+        response = self.client.post("/api/ai/spin", json={
+            "content": "Nội dung giữ nguyên."
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data.get("success"))
+        self.assertFalse(data.get("changed"))
+        self.assertEqual(data.get("mode"), "unchanged")
+
     def test_photos_list_endpoint(self):
         with tempfile.TemporaryDirectory() as directory:
             (Path(directory) / "test1.png").write_bytes(b"image")
@@ -849,7 +859,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.13")
+        self.assertEqual(get_version(), "6.1.14")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1994,8 +2004,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.13', html)
-        self.assertIn('app.js?v=6.1.13', html)
+        self.assertIn('styles.css?v=6.1.14', html)
+        self.assertIn('app.js?v=6.1.14', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
