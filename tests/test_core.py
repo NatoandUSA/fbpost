@@ -1529,7 +1529,7 @@ class V601RegressionTests(unittest.TestCase):
 
     def test_gemini_default_model_and_api_key_header(self):
         import ai_spinner
-        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-3.8-flash")
+        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-2.5-flash")
         captured = {}
         def fake(req, timeout=20, attempts=3):
             captured["url"] = req.full_url
@@ -1538,7 +1538,7 @@ class V601RegressionTests(unittest.TestCase):
         original = "Homestay Huế. Hotline: 0905555317. Giá 350k/đêm. https://example.com"
         with patch("ai_spinner._urlopen_json", side_effect=fake):
             out = ai_spinner.spin_content_gemini(original, "secret-api-key-123")
-        self.assertIn("gemini-3.8-flash:generateContent", captured["url"])
+        self.assertIn("gemini-2.5-flash:generateContent", captured["url"])
         self.assertNotIn("secret-api-key-123", captured["url"])
         self.assertEqual(captured["key"], "secret-api-key-123")
         self.assertIn("0905555317", out)
