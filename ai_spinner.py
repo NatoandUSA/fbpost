@@ -14,10 +14,10 @@ import urllib.request
 import urllib.error
 import time as _time
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 GEMINI_FALLBACK_MODELS = tuple(
     model.strip() for model in os.getenv(
-        "GEMINI_FALLBACK_MODELS", "gemini-2.0-flash"
+        "GEMINI_FALLBACK_MODELS", ""
     ).split(",") if model.strip()
 )
 CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")

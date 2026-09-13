@@ -859,7 +859,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.16")
+        self.assertEqual(get_version(), "6.1.17")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1544,7 +1544,7 @@ class V601RegressionTests(unittest.TestCase):
 
     def test_gemini_default_model_and_api_key_header(self):
         import ai_spinner
-        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-2.5-flash")
+        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-3.6-flash")
         captured = {}
         def fake(req, timeout=20, attempts=3):
             captured["url"] = req.full_url
@@ -1553,7 +1553,7 @@ class V601RegressionTests(unittest.TestCase):
         original = "Homestay Huế. Hotline: 0905555317. Giá 350k/đêm. https://example.com"
         with patch("ai_spinner._urlopen_json", side_effect=fake):
             out = ai_spinner.spin_content_gemini(original, "secret-api-key-123")
-        self.assertIn("gemini-2.5-flash:generateContent", captured["url"])
+        self.assertIn("gemini-3.6-flash:generateContent", captured["url"])
         self.assertNotIn("secret-api-key-123", captured["url"])
         self.assertEqual(captured["key"], "secret-api-key-123")
         self.assertIn("0905555317", out)
@@ -1594,12 +1594,12 @@ class V601RegressionTests(unittest.TestCase):
             return {"candidates":[{"content":{"parts":[{"text":"Hotline 0905-555-317"}]}}]}
 
         with patch.object(ai_spinner, "GEMINI_MODEL", "missing-model"), \
-             patch.object(ai_spinner, "GEMINI_FALLBACK_MODELS", ("gemini-2.5-flash",)), \
+             patch.object(ai_spinner, "GEMINI_FALLBACK_MODELS", ("gemini-3.6-flash",)), \
              patch("ai_spinner._urlopen_json", side_effect=fake):
             text, model = ai_spinner.spin_content_gemini_with_model(
                 "Hotline 0905 555 317", "secret-api-key-123"
             )
-        self.assertEqual(model, "gemini-2.5-flash")
+        self.assertEqual(model, "gemini-3.6-flash")
         self.assertIn("0905-555-317", text)
         self.assertEqual(len(called), 2)
 
@@ -2013,8 +2013,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.16', html)
-        self.assertIn('app.js?v=6.1.16', html)
+        self.assertIn('styles.css?v=6.1.17', html)
+        self.assertIn('app.js?v=6.1.17', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
