@@ -1778,13 +1778,14 @@ def add_checkin(page, brand_key=None):
                     except Exception:
                         pass
 
-                # 2. Fallback: duyệt candidate button
+                # 2. Fallback: chỉ chọn candidate có chữ khớp; không click mù kết quả đầu.
                 if not checked_in:
                     candidates = page.locator("div[role='dialog'] div[role='button']")
                     for i in range(min(candidates.count(), 8)):
                         c = candidates.nth(i)
                         c_text = (c.inner_text() or "").strip()
-                        if "Quay lại" not in c_text and "Back" not in c_text and len(c_text) > 3:
+                        expected = selected_location.casefold()
+                        if expected in c_text.casefold():
                             try:
                                 c.click(force=True, timeout=2500)
                                 checked_in = True
@@ -1792,19 +1793,11 @@ def add_checkin(page, brand_key=None):
                             except Exception:
                                 pass
 
-                # 3. Fallback: bấm ArrowDown và Enter
-                if not checked_in:
-                    try:
-                        page.keyboard.press("ArrowDown")
-                        time.sleep(0.4)
-                        page.keyboard.press("Enter")
-                        checked_in = True
-                    except Exception:
-                        pass
-
                 if checked_in:
                     print(f"✅ Đã check-in địa điểm: {selected_location}")
                     time.sleep(1.2)
+                else:
+                    print(f"⚠️ Không tìm thấy kết quả check-in khớp: {selected_location}; bỏ qua để tránh chọn sai địa điểm.")
 
         # Đảm bảo nếu màn hình phụ vẫn còn, bấm nút Quay lại về khung soạn thảo chính
         back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first

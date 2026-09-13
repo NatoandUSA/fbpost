@@ -150,13 +150,6 @@ class JobManager:
             q = self._job_queues.get(job_id)
         if q:
             q.put(line)
-        if line:
-            log_path = self.process_runner.get_log_path(job_id)
-            try:
-                with open(log_path, "a", encoding="utf-8", errors="replace") as f:
-                    f.write(line)
-            except OSError:
-                pass
 
     def subscribe_logs(self, job_id: str) -> Generator[str, None, None]:
         """Generator yielding lines in real-time as they arrive for job_id."""

@@ -3214,6 +3214,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const autoSpinOpt = document.getElementById('auto-spin-opt');
             payload.autoSpin = autoSpinOpt ? autoSpinOpt.checked : false;
+            const autoFirstCommentOpt = document.getElementById('auto-first-comment-opt');
+            payload.autoFirstComment = command === 'group' && !!(autoFirstCommentOpt && autoFirstCommentOpt.checked);
 
             const geminiKeyInput = document.getElementById('gemini-api-key-input');
             payload.geminiApiKey = geminiKeyInput ? geminiKeyInput.value.trim() : '';

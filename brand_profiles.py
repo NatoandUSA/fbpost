@@ -14,11 +14,11 @@ BRAND_SIGNATURES = {
 BRAND_SAFE_SIGNATURES = {
     "umee": {
         "brandName": "Umee Homestay",
-        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/umeehomestay\n👉 Thông tin chi tiết & liên kết đặt phòng xem dưới bình luận nhé!\n━━━━━━━━━━━━━━━━━━━━",
+        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/umeehomestay\n📩 Inbox Fanpage hoặc Zalo để nhận thông tin chi tiết.\n━━━━━━━━━━━━━━━━━━━━",
     },
     "lacasa": {
         "brandName": "Lacasa Homestay",
-        "signatureText": "🏡 LACASA HOMESTAY × UMEE HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/lacasahomestayinvietnam\n👉 Thông tin chi tiết & liên kết đặt phòng xem dưới bình luận nhé!\n━━━━━━━━━━━━━━━━━━━━",
+        "signatureText": "🏡 LACASA HOMESTAY × UMEE HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/lacasahomestayinvietnam\n📩 Inbox Fanpage hoặc Zalo để nhận thông tin chi tiết.\n━━━━━━━━━━━━━━━━━━━━",
     },
 }
 
@@ -31,7 +31,7 @@ BRAND_FIRST_COMMENTS = {
         "🎵 TikTok: https://www.tiktok.com/@umee.homestay\n"
         "📞 Hotline / Zalo: 0905 555 317 (https://zalo.me/0905555317)\n"
         "📍 Chỉ đường Maps: https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n"
-        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh phòng và ưu đãi tốt nhất nhé!"
+        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh và thông tin phòng."
     ),
     "lacasa": (
         "🌸 THÔNG TIN LIÊN HỆ & ĐẶT PHÒNG LACASA × UMEE HOMESTAY 🌸\n"
@@ -41,7 +41,7 @@ BRAND_FIRST_COMMENTS = {
         "🎵 TikTok: https://www.tiktok.com/@lacasahomestayhue\n"
         "📞 Hotline / Zalo: 0905 555 317 (https://zalo.me/0905555317)\n"
         "📍 Chỉ đường Maps: https://maps.app.goo.gl/yatorSbnQBytZCEk9\n"
-        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh phòng và ưu đãi tốt nhất nhé!"
+        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh và thông tin phòng."
     ),
 }
 

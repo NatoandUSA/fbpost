@@ -144,7 +144,7 @@ def execute_automation_task(
     # Final-content contract: selecting a Project always requires its canonical signature.
     include_signature = bool(brand_key)
     safe_signature = bool(data.get("safeSignature", cfg.get("safe_signature", True)))
-    auto_first_comment = bool(data.get("autoFirstComment", cfg.get("auto_first_comment", True)))
+    auto_first_comment = bool(data.get("autoFirstComment", cfg.get("auto_first_comment", False)))
 
     auto_join_groups = data.get("autoJoinGroups", cfg.get("auto_join_groups", False))
     group_keywords = str(data.get("groupKeywords") or cfg.get("group_keywords", "Homestay Huế, Du lịch Huế")).strip()
@@ -973,12 +973,29 @@ def execute_automation_task(
                 first_comment_text = get_first_comment_text(brand_key)
                 post_permalink = str(structured_result.get("result_url") or "").strip()
                 if first_comment_text and post_permalink and ("/posts/" in post_permalink or "/permalink/" in post_permalink or "/share/" in post_permalink):
-                    on_line(f"💬 [First Comment Anti-Spam] Tự động bình luận thông tin liên hệ đầy đủ (Maps, Zalo, Web) vào bài viết vừa đăng...\n")
+                    human_pause = random.randint(8, 15)
+                    on_line(f"⏳ [Human Pause] Chờ {human_pause}s trước bình luận liên kết đã được bật rõ ràng...\n")
+                    if not sleep_with_cancel(human_pause):
+                        return False
+                    on_line("💬 [First Comment] Đang nhập bình luận thông tin liên hệ bằng luồng human typing...\n")
                     try:
                         comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text]
                         if not anti_hash_text:
                             comment_cmd.append("--no-anti-hash-text")
-                        process_runner.run_command_sync(comment_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+                        comment_result = {}
+                        def _capture_comment_line(line):
+                            on_line(line)
+                            clean = line.strip()
+                            if clean.startswith("ACTION_RESULT:"):
+                                try:
+                                    comment_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                                except (ValueError, TypeError):
+                                    pass
+                        return_code = process_runner.run_command_sync(comment_cmd, job_id=job_id, on_line=_capture_comment_line, cwd=str(BASE_DIR))
+                        if return_code == 0 and comment_result.get("success"):
+                            on_line("✅ [First Comment] Facebook đã xác nhận bình luận thành công.\n")
+                        else:
+                            on_line("⚠️ [First Comment] Chưa có bằng chứng Facebook xác nhận bình luận; bài chính vẫn đã đăng.\n")
                     except Exception as first_comment_err:
                         on_line(f"⚠️ [First Comment] Không thể bình luận tự động: {first_comment_err}\n")
         elif is_post_pending(structured_result):

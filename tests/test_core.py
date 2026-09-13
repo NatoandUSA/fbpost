@@ -859,7 +859,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.14")
+        self.assertEqual(get_version(), "6.1.15")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -1544,7 +1544,7 @@ class V601RegressionTests(unittest.TestCase):
 
     def test_gemini_default_model_and_api_key_header(self):
         import ai_spinner
-        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-3.5-flash")
+        self.assertEqual(ai_spinner.GEMINI_MODEL, "gemini-2.5-flash")
         captured = {}
         def fake(req, timeout=20, attempts=3):
             captured["url"] = req.full_url
@@ -1553,7 +1553,7 @@ class V601RegressionTests(unittest.TestCase):
         original = "Homestay Huế. Hotline: 0905555317. Giá 350k/đêm. https://example.com"
         with patch("ai_spinner._urlopen_json", side_effect=fake):
             out = ai_spinner.spin_content_gemini(original, "secret-api-key-123")
-        self.assertIn("gemini-3.5-flash:generateContent", captured["url"])
+        self.assertIn("gemini-2.5-flash:generateContent", captured["url"])
         self.assertNotIn("secret-api-key-123", captured["url"])
         self.assertEqual(captured["key"], "secret-api-key-123")
         self.assertIn("0905555317", out)
@@ -1573,14 +1573,14 @@ class V601RegressionTests(unittest.TestCase):
             original, "Giá 350k/đêm. Hotline: 0905.555.317, cách trung tâm 5 phút."
         ))
 
-    def test_spinner_accepts_verified_content_hub_facts(self):
+    def test_spinner_rejects_numbers_not_present_in_source(self):
         import ai_spinner
 
         original = "Bên mình còn phòng homestay xinh xắn tại TP Huế. Hotline: 0905 555 317."
         gemini_umee = "Phòng SH44 Manor Crown 62 Tố Hữu Huế, máy chiếu 100 inch, 24/7. Hotline: 0905 555 317."
-        self.assertTrue(ai_spinner._preserves_core_info(original, gemini_umee, brand_key="umee"))
+        self.assertFalse(ai_spinner._preserves_core_info(original, gemini_umee, brand_key="umee"))
         gemini_lacasa = "Homestay số 3 kiệt 17 Trần Phú TP Huế, dorm 4 giường. Hotline: 0905 555 317."
-        self.assertTrue(ai_spinner._preserves_core_info(original, gemini_lacasa, brand_key="lacasa"))
+        self.assertFalse(ai_spinner._preserves_core_info(original, gemini_lacasa, brand_key="lacasa"))
 
     def test_gemini_falls_back_only_when_model_is_unavailable(self):
         import urllib.error
@@ -2013,8 +2013,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.14', html)
-        self.assertIn('app.js?v=6.1.14', html)
+        self.assertIn('styles.css?v=6.1.15', html)
+        self.assertIn('app.js?v=6.1.15', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
