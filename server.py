@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-13 v6.1.17"
+BUILD_TIME = "2026-09-13 v6.1.18"
 
 
 def app_build_info():
@@ -1459,7 +1459,6 @@ def api_joined_groups():
 @app.route('/api/ai/spin', methods=['POST'])
 def api_ai_spin():
     from ai_spinner import generate_unique_variant_with_evidence, spin_comment, generate_interact_comments
-    from brand_profiles import BRAND_SIGNATURES
     data = json_body()
     content = (data.get("content") or data.get("text") or "").strip()
     api_key = (
@@ -1468,7 +1467,7 @@ def api_ai_spin():
     )
     mode = data.get("mode", "post")
     brand_key = data.get("brandKey") or data.get("brand") or ""
-    include_signature = bool(brand_key)  # Project selected => canonical signature required.
+    include_signature = bool(brand_key)  # Project selected => linkless search signature required.
     if not content and mode != "interact":
         return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
     try:
@@ -1478,7 +1477,8 @@ def api_ai_spin():
             spun = generate_interact_comments(content, api_key)
         else:
             result = generate_unique_variant_with_evidence(
-                content, api_key, brand_key=brand_key, include_signature=include_signature
+                content, api_key, brand_key=brand_key, include_signature=include_signature,
+                signature_mode="linkless"
             )
             return jsonify({
                 "success": True,
@@ -1498,8 +1498,8 @@ def api_ai_spin():
 
 @app.route('/api/brands', methods=['GET'])
 def api_brands():
-    from brand_profiles import BRAND_SIGNATURES
-    return jsonify({"success": True, "brands": BRAND_SIGNATURES})
+    from brand_profiles import BRAND_LINKLESS_SIGNATURES
+    return jsonify({"success": True, "brands": BRAND_LINKLESS_SIGNATURES})
 
 @app.route('/api/photos/list', methods=['GET'])
 def api_photos_list():

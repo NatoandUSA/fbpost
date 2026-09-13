@@ -25,6 +25,7 @@ from repositories.job_repo import JobRepository
 from repositories.settings_repo import SettingsRepository
 from repositories.activity_repo import ActivityRepository
 from repositories.reconcile_repo import ReconcileRepository
+from repositories.moderation_repo import ModerationRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
 DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
@@ -818,7 +819,7 @@ def execute_automation_task(
                 continue
 
         task_content = content
-        sig_mode = "safe" if (cmd == "group" and safe_signature) else "canonical"
+        sig_mode = "linkless" if cmd in ("group", "page") else ("safe" if safe_signature else "canonical")
         if auto_spin and cmd in ("group", "page"):
             try:
                 from ai_spinner import generate_unique_variant_with_evidence
@@ -931,8 +932,17 @@ def execute_automation_task(
                 except Exception:
                     pass
 
+        known_moderated = cmd == "group" and ModerationRepository().requires_approval(target)
+        if known_moderated:
+            on_line("🧠 [Group Moderation] Nhóm đã được ghi nhớ là cần quản trị viên duyệt; sau submit sẽ kết luận chờ duyệt.\n")
         actual_runs += 1
         ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR))
+        if known_moderated and is_submit_uncertain(structured_result):
+            structured_result.update({
+                "success": True, "state": "pending", "code": "POST_PENDING",
+                "message": "Facebook đã nhận submit; Group được ghi nhớ là cần quản trị viên duyệt."
+            })
+            ret = 0
 
         # A submit can succeed before Facebook exposes a permalink. Reconcile read-only
         # before declaring the task unresolved; never resubmit the post here.
@@ -963,14 +973,28 @@ def execute_automation_task(
         action_state = str(structured_result.get("state") or "")
         action_code = str(structured_result.get("code") or "")
         submit_was_triggered = is_submit_uncertain(structured_result)
+        deferred_comment = None
+        if cmd == "reconcile-post" and action_state == "published":
+            try:
+                deferred_comment = ModerationRepository().get_deferred(target, task_content, curr_acc_id)
+            except Exception:
+                deferred_comment = None
+
         if action_state == "published":
             published_count += 1
             outcome = "published"
 
-            # Auto First Comment: Bình luận thông tin liên hệ đầy đủ vào bài viết để tránh bị Admin Assist gỡ
-            if cmd == "group" and auto_first_comment and brand_key:
+            # First comment runs immediately for published Group posts, or after moderation reconciliation.
+            should_first_comment = (
+                (cmd == "group" and auto_first_comment and brand_key)
+                or (cmd == "reconcile-post" and bool(deferred_comment))
+            )
+            if should_first_comment:
                 from brand_profiles import get_first_comment_text
-                first_comment_text = get_first_comment_text(brand_key)
+                first_comment_text = (
+                    deferred_comment.get("comment_text", "") if deferred_comment
+                    else get_first_comment_text(brand_key)
+                )
                 post_permalink = str(structured_result.get("result_url") or "").strip()
                 if first_comment_text and post_permalink and ("/posts/" in post_permalink or "/permalink/" in post_permalink or "/share/" in post_permalink):
                     human_pause = random.randint(8, 15)
@@ -992,15 +1016,39 @@ def execute_automation_task(
                                 except (ValueError, TypeError):
                                     pass
                         return_code = process_runner.run_command_sync(comment_cmd, job_id=job_id, on_line=_capture_comment_line, cwd=str(BASE_DIR))
-                        if return_code == 0 and comment_result.get("success"):
+                        comment_verified = return_code == 0 and bool(comment_result.get("success"))
+                        if comment_verified:
                             on_line("✅ [First Comment] Facebook đã xác nhận bình luận thành công.\n")
                         else:
                             on_line("⚠️ [First Comment] Chưa có bằng chứng Facebook xác nhận bình luận; bài chính vẫn đã đăng.\n")
+                        if deferred_comment:
+                            ModerationRepository().resolve_deferred(
+                                deferred_comment["id"], post_permalink, comment_verified
+                            )
                     except Exception as first_comment_err:
                         on_line(f"⚠️ [First Comment] Không thể bình luận tự động: {first_comment_err}\n")
         elif is_post_pending(structured_result):
             pending_count += 1
             outcome = "pending"
+            if cmd == "group":
+                try:
+                    ModerationRepository().mark_requires_approval(
+                        target, action_code or "facebook_pending_notice", curr_acc_id
+                    )
+                    on_line("💾 [Group Moderation] Đã lưu Group cần quản trị viên duyệt cho những lần đăng sau.\n")
+                    if auto_first_comment and brand_key:
+                        from brand_profiles import get_first_comment_text
+                        comment_text = get_first_comment_text(brand_key)
+                        ModerationRepository().defer_first_comment(
+                            target, task_content, curr_acc_id, brand_key, comment_text
+                        )
+                        ReconcileRepository().enqueue(
+                            target, task_content, curr_acc_id, queue_item_id or None,
+                            delay_seconds=600, reconcile_kind="moderation"
+                        )
+                        on_line("🕒 [First Comment] Đã lưu comment liên kết; sẽ đăng sau khi bài được duyệt và có permalink.\n")
+                except Exception as moderation_err:
+                    on_line(f"⚠️ [Group Moderation] Không thể lưu trạng thái chờ duyệt: {moderation_err}\n")
         elif submit_was_triggered:
             unverified_count += 1
             outcome = "submitted_unverified"

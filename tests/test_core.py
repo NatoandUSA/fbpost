@@ -859,7 +859,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.17")
+        self.assertEqual(get_version(), "6.1.18")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())
@@ -2013,8 +2013,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.17', html)
-        self.assertIn('app.js?v=6.1.17', html)
+        self.assertIn('styles.css?v=6.1.18', html)
+        self.assertIn('app.js?v=6.1.18', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):
@@ -2160,3 +2160,57 @@ class V617ConfigurablePostingFlowTests(unittest.TestCase):
         self.assertLess(before_post, publish)
         self.assertLess(publish, after_post)
         self.assertLess(after_post, close)
+
+
+class V6118SearchLinklessModerationTests(unittest.TestCase):
+    def test_linkless_signature_has_search_terms_and_no_urls(self):
+        from brand_profiles import apply_brand_signature, validate_brand_signature
+        original = "Xem phòng https://example.com và fb.com/test\nHomestay ở Huế"
+        result = apply_brand_signature(original, "lacasa", True, mode="linkless")
+        self.assertIn("LACASA HOMESTAY", result)
+        self.assertIn("Homestay tại Huế", result)
+        self.assertNotRegex(result, r"(?i)https?://|fb\.com/")
+        self.assertEqual(validate_brand_signature(result, "lacasa", mode="linkless"), (True, []))
+
+    def test_fixed_photo_folder_table_lists_all_six_paths(self):
+        html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
+        for brand in ("LACASA", "UMEE"):
+            for slot in ("1", "2", "3"):
+                self.assertIn(f"D:\\Claude\\Factcheck\\Photo\\{brand}\\{slot}", html)
+        self.assertIn('id="fixed-photo-folder-table"', html)
+
+    def test_v6118_migration_and_registry_are_durable(self):
+        from db import init_db
+        from repositories.moderation_repo import ModerationRepository
+        with tempfile.TemporaryDirectory() as directory:
+            db_file = Path(directory) / "v6118.db"
+            init_db(db_file)
+            repo = ModerationRepository(str(db_file))
+            url = "https://facebook.com/groups/123/?ref=share"
+            repo.mark_requires_approval(url, "POST_PENDING", "M6")
+            self.assertTrue(repo.requires_approval("https://www.facebook.com/groups/123"))
+            rid = repo.defer_first_comment(url, "Nội dung", "M6", "lacasa", "Link chi tiết")
+            item = repo.get_deferred(url, "Nội dung", "M6")
+            self.assertEqual(item["id"], rid)
+            self.assertEqual(item["status"], "pending")
+            repo.resolve_deferred(rid, "https://facebook.com/groups/123/posts/456", True)
+            self.assertIsNone(repo.get_deferred(url, "Nội dung", "M6"))
+
+    def test_spinner_prompt_is_linkless_and_uses_search_strategy(self):
+        source = Path(__file__).resolve().parents[1].joinpath("ai_spinner.py").read_text(encoding="utf-8")
+        self.assertIn("CHIẾN LƯỢC BIÊN TẬP", source)
+        self.assertIn("Bài chính tuyệt đối không chứa URL", source)
+        self.assertNotIn('brand_fb_links = {', source)
+
+    def test_executor_known_moderated_path_requires_submit_evidence(self):
+        source = Path(__file__).resolve().parents[1].joinpath("services", "job_executor.py").read_text(encoding="utf-8")
+        self.assertIn("known_moderated and is_submit_uncertain(structured_result)", source)
+        self.assertIn('reconcile_kind="moderation"', source)
+        self.assertIn("defer_first_comment", source)
+
+    def test_spinner_rejects_new_unverified_promotional_claims(self):
+        import ai_spinner
+        original = "Bạn đang tìm homestay tại Huế? Inbox để nhận thông tin."
+        for claim in ("điểm dừng chân lý tưởng", "hỗ trợ ngay lập tức", "giá cực ưu đãi"):
+            generated = f"Homestay tại Huế là {claim}. Inbox để nhận thông tin."
+            self.assertFalse(ai_spinner._preserves_core_info(original, generated), claim)

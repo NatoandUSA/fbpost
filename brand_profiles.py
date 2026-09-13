@@ -1,5 +1,7 @@
 """Deterministic brand/project signatures for generated Facebook posts."""
 
+import re
+
 BRAND_SIGNATURES = {
     "umee": {
         "brandName": "Umee Homestay",
@@ -21,6 +23,19 @@ BRAND_SAFE_SIGNATURES = {
         "signatureText": "🏡 LACASA HOMESTAY × UMEE HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/lacasahomestayinvietnam\n📩 Inbox Fanpage hoặc Zalo để nhận thông tin chi tiết.\n━━━━━━━━━━━━━━━━━━━━",
     },
 }
+
+BRAND_LINKLESS_SIGNATURES = {
+    "umee": {
+        "brandName": "Umee Homestay",
+        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📍 Homestay tại Huế\n📩 Tìm Umee Homestay trên Facebook hoặc inbox để nhận thông tin."
+    },
+    "lacasa": {
+        "brandName": "Lacasa Homestay",
+        "signatureText": "🏡 LACASA HOMESTAY × UMEE HOMESTAY\n📍 Homestay tại Huế\n📩 Tìm Lacasa Homestay trên Facebook hoặc inbox để nhận thông tin."
+    },
+}
+
+URL_RE = re.compile(r"(?i)\b(?:https?://|www\.|fb\.com/|zalo\.me/|maps\.app\.goo\.gl/)[^\s]+")
 
 BRAND_FIRST_COMMENTS = {
     "umee": (
@@ -84,6 +99,7 @@ def strip_known_signature(content):
     all_signatures = (
         [p["signatureText"] for p in BRAND_SIGNATURES.values()]
         + [p["signatureText"] for p in BRAND_SAFE_SIGNATURES.values()]
+        + [p["signatureText"] for p in BRAND_LINKLESS_SIGNATURES.values()]
         + list(LEGACY_SIGNATURE_TEXTS)
     )
     all_separators = list(LEGACY_SIGNATURE_SEPARATORS)
@@ -112,12 +128,24 @@ def strip_known_signature(content):
     return text
 
 
+def prepare_linkless_post(content):
+    clean = URL_RE.sub("", strip_known_signature(content or ""))
+    clean = re.sub(r"[ \t]+\n", "\n", clean)
+    clean = re.sub(r"\n{3,}", "\n\n", clean)
+    return clean.strip()
+
+
 def apply_brand_signature(content, brand_key, include_signature=True, mode="canonical"):
-    clean = ensure_global_brand_hashtags(strip_known_signature(content))
+    clean = prepare_linkless_post(content) if mode == "linkless" else strip_known_signature(content)
+    clean = ensure_global_brand_hashtags(clean)
     key = normalize_brand_key(brand_key)
     if not include_signature or not key:
         return clean
-    signatures_dict = BRAND_SAFE_SIGNATURES if mode == "safe" else BRAND_SIGNATURES
+    signatures_dict = (
+        BRAND_LINKLESS_SIGNATURES if mode == "linkless"
+        else BRAND_SAFE_SIGNATURES if mode == "safe"
+        else BRAND_SIGNATURES
+    )
     sig_text = signatures_dict[key]["signatureText"]
     return f"{clean}\n\n{SIGNATURE_SEPARATOR}\n{sig_text}".strip()
 
@@ -130,7 +158,15 @@ def validate_brand_signature(content, brand_key, mode="auto"):
     if not key:
         return True, []
     text = (content or "")
-    
+    if mode == "linkless":
+        if URL_RE.search(text):
+            return False, ["URL_NOT_ALLOWED_IN_MAIN_POST"]
+        required = [SIGNATURE_SEPARATOR] + [
+            line.strip() for line in BRAND_LINKLESS_SIGNATURES[key]["signatureText"].splitlines() if line.strip()
+        ]
+        missing = [part for part in required if part.casefold() not in text.casefold()]
+        return (not missing), missing
+
     # 1. Kiểm tra canonical signature
     req_canonical = [SIGNATURE_SEPARATOR] + [line.strip() for line in BRAND_SIGNATURES[key]["signatureText"].splitlines() if line.strip()]
     missing_canonical = [part for part in req_canonical if part.casefold() not in text.casefold()]

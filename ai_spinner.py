@@ -94,7 +94,7 @@ def _preserves_core_info(original: str, generated: str, brand_key: str = None) -
     dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(dst)))
     if not dst_numbers.issubset(src_numbers):
         return False
-    risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "chỉ mất vài phút")
+    risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "giá cực ưu đãi", "ưu đãi", "chỉ mất vài phút", "điểm dừng chân lý tưởng", "hỗ trợ ngay lập tức")
     src_low, dst_low = (original or "").casefold(), dst.casefold()
     if any(term in dst_low and term not in src_low for term in risky):
         return False
@@ -207,29 +207,34 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
     if not api_key:
         raise ValueError("Chưa cung cấp Gemini API Key.")
         
-    brand_fb_links = {
-        "lacasa": "fb.com/lacasahomestayinvietnam",
-        "umee": "fb.com/umeehomestay"
-    }
-    fb_link = brand_fb_links.get(str(brand_key or "").strip().lower(), "")
+    strategies = (
+        "SEARCH-FIRST: mở tự nhiên bằng nhu cầu tìm homestay Huế",
+        "QUESTION-FIRST: mở bằng một câu hỏi ngắn đúng nhu cầu người đọc",
+        "CONCISE: bài ngắn, rõ, ưu tiên thông tin có thật",
+        "EXPERIENCE-FIRST: diễn đạt cảm xúc nhưng không thêm tiện nghi hay lời hứa",
+        "LOCAL-INTENT: kết nối nhu cầu lưu trú và du lịch Huế, không bịa địa điểm",
+    )
+    strategy = strategies[abs(hash(content)) % len(strategies)]
     tag_instruction = ""
     if brand_name:
-        link_str = f" kèm link Page trực tiếp ({fb_link})" if fb_link else ""
         tag_instruction = (
-            f"Thương hiệu/Project lưu trú là: {brand_name}. "
-            f"BẮT BUỘC phải nhắc đến tên {brand_name}{link_str} tự nhiên và nổi bật ngay trong lời mở đầu và lời kêu gọi đặt phòng ở thân bài.\n"
-            f"- KHÔNG dùng dấu sao đôi ** để in đậm (Facebook không hỗ trợ markdown **, sẽ bị lộ dấu ** trên bài). Hãy viết hoa hoặc dùng emoji tự nhiên.\n"
+            f"Thương hiệu là {brand_name}. Nhắc chính xác tên {brand_name} 1-2 lần và cụm 'homestay Huế' tự nhiên.\n"
+            "- KHÔNG chèn URL, tên miền, link Page, link Zalo, website hoặc Maps vào bài chính.\n"
+            "- Không dùng markdown **. Không nhồi từ khóa hoặc lặp hashtag.\n"
         )
 
     prompt = (
         f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản tại Huế.\n"
         + tag_instruction
+        + f"CHIẾN LƯỢC BIÊN TẬP: {strategy}.\n"
         + f"Hãy viết lại bài đăng Facebook sau đây với văn phong {style}, nhưng chỉ diễn đạt lại dữ liệu đã có, "
         f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
         f"YÊU CẦU BẮT BUỘC — CONTENT HUB TRUTH CONTRACT:\n"
         f"- KHÔNG thêm tiện nghi, khoảng cách, thời gian di chuyển, giá, số phòng trống, khuyến mãi, voucher, sự kiện hoặc lời hứa không có trong bài gốc.\n"
         f"- Giữ nguyên toàn bộ số điện thoại, Zalo, địa chỉ, giá phòng hoặc link nếu có trong bài gốc.\n"
         f"- Không dùng claim rẻ nhất/tốt nhất hôm nay/phòng có hạn/chỉ vài phút nếu bài gốc không có dữ liệu đó.\n"
+        f"- Không thêm các lời hứa như 'lý tưởng', 'hỗ trợ ngay lập tức', 'ưu đãi' nếu bài gốc không nêu.\n"
+        f"- Bài chính tuyệt đối không chứa URL hoặc tên miền; thông tin liên kết sẽ được đưa vào first comment.\n"
         f"- Được đổi câu chữ và thứ tự đoạn; KHÔNG thay đổi nghĩa của facts.\n"
         f"- Viết bằng Tiếng Việt tự nhiên, phù hợp đăng nhóm cộng đồng hoặc fanpage.\n"
         f"- KHÔNG thêm bất kỳ lời dẫn giải nào như 'Dưới đây là bài viết...'. Chỉ trả về duy nhất nội dung bài đăng.\n\n"
@@ -246,7 +251,9 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
             }
         ],
         "generationConfig": {
-            "maxOutputTokens": 2048
+            "maxOutputTokens": 2048,
+            "temperature": 0.85,
+            "topP": 0.9
         }
     }
 
@@ -286,8 +293,8 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
     if not content or not content.strip():
         return content
 
-    from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
-    source_content = strip_known_signature(content)
+    from brand_profiles import apply_brand_signature, brand_name, prepare_linkless_post
+    source_content = prepare_linkless_post(content)
     api_key = (api_key or "").strip()
     selected_brand_name = brand_name(brand_key)
 
@@ -311,13 +318,13 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
 def generate_unique_variant_with_evidence(content: str, api_key: str = None, brand_key: str = None,
                                           include_signature: bool = False, signature_mode: str = "canonical") -> dict:
     """Generate content and expose real provenance/change evidence for truthful logs."""
-    from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
+    from brand_profiles import apply_brand_signature, brand_name, prepare_linkless_post
 
     if not content or not content.strip():
         return {"content": content, "mode": "unchanged", "changed": False, "error": "empty_content"}
 
     api_key = (api_key or "").strip()
-    source = strip_known_signature(content)
+    source = prepare_linkless_post(content)
     spun = None
     mode = "local_fallback"
     error = ""

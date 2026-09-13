@@ -3685,9 +3685,34 @@ document.addEventListener('DOMContentLoaded', () => {
         brandSignaturePreview.appendChild(fragment);
     }
 
-    brandProjectSelect?.addEventListener('change', refreshBrandPreview);
+    const fixedPhotoFolderOptions = Array.from(document.querySelectorAll('input[name="fixed-photo-folder"]'));
+    const photoFolderInputFixed = document.getElementById('photo-folder-input');
+
+    function restoreProjectPhotoFolder() {
+        const brand = brandProjectSelect?.value || '';
+        const saved = brand ? localStorage.getItem(`fb_photo_folder_${brand}`) : '';
+        fixedPhotoFolderOptions.forEach(option => {
+            const visible = !brand || option.dataset.brand === brand;
+            option.closest('tr').style.display = visible ? '' : 'none';
+            option.checked = !!saved && option.value === saved;
+        });
+        if (saved && photoFolderInputFixed) photoFolderInputFixed.value = saved;
+    }
+
+    fixedPhotoFolderOptions.forEach(option => option.addEventListener('change', () => {
+        if (!option.checked) return;
+        if (photoFolderInputFixed) photoFolderInputFixed.value = option.value;
+        localStorage.setItem(`fb_photo_folder_${option.dataset.brand}`, option.value);
+        showToast(`Đã chọn bộ ảnh ${option.dataset.brand.toUpperCase()}: ${option.value}`);
+    }));
+
+    brandProjectSelect?.addEventListener('change', () => {
+        refreshBrandPreview();
+        restoreProjectPhotoFolder();
+    });
     brandSignatureOpt?.addEventListener('change', refreshBrandPreview);
     loadBrandProfiles();
+    restoreProjectPhotoFolder();
 
     if (toggleGeminiKeyBtn && geminiKeyContainer) {
         toggleGeminiKeyBtn.addEventListener('click', () => {
