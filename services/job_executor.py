@@ -143,6 +143,8 @@ def execute_automation_task(
     brand_key = str(data.get("brandKey") or "").strip().lower()
     # Final-content contract: selecting a Project always requires its canonical signature.
     include_signature = bool(brand_key)
+    safe_signature = bool(data.get("safeSignature", cfg.get("safe_signature", True)))
+    auto_first_comment = bool(data.get("autoFirstComment", cfg.get("auto_first_comment", True)))
 
     auto_join_groups = data.get("autoJoinGroups", cfg.get("auto_join_groups", False))
     group_keywords = str(data.get("groupKeywords") or cfg.get("group_keywords", "Homestay Huế, Du lịch Huế")).strip()
@@ -816,11 +818,12 @@ def execute_automation_task(
                 continue
 
         task_content = content
+        sig_mode = "safe" if (cmd == "group" and safe_signature) else "canonical"
         if auto_spin and cmd in ("group", "page"):
             try:
                 from ai_spinner import generate_unique_variant_with_evidence
                 spin_result = generate_unique_variant_with_evidence(
-                    content, gemini_api_key, brand_key=brand_key, include_signature=include_signature
+                    content, gemini_api_key, brand_key=brand_key, include_signature=include_signature, signature_mode=sig_mode
                 )
                 task_content = spin_result["content"]
                 if spin_result["mode"] == "gemini" and spin_result["changed"]:
@@ -834,14 +837,14 @@ def execute_automation_task(
             except Exception as spin_err:
                 on_line(f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n")
                 from brand_profiles import apply_brand_signature
-                task_content = apply_brand_signature(content, brand_key, include_signature)
+                task_content = apply_brand_signature(content, brand_key, include_signature, mode=sig_mode)
         elif cmd in ("group", "page"):
             from brand_profiles import apply_brand_signature
-            task_content = apply_brand_signature(content, brand_key, include_signature)
+            task_content = apply_brand_signature(content, brand_key, include_signature, mode=sig_mode)
 
         if cmd in ("group", "page"):
             from brand_profiles import validate_brand_signature
-            sig_ok, sig_missing = validate_brand_signature(task_content, brand_key)
+            sig_ok, sig_missing = validate_brand_signature(task_content, brand_key, mode=sig_mode)
             if brand_key and not sig_ok:
                 batch_failed = True
                 on_line(f"❌ [FINAL_CONTENT_SIGNATURE_MISSING] Project={brand_key}; thiếu: {', '.join(sig_missing)}. Dừng trước khi mở Facebook.\n")
@@ -851,7 +854,7 @@ def execute_automation_task(
             has_sig="yes" if ("━━━━━━━━━━━━━━━━━━━━" in task_content or "-------------------" in task_content) else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
-            on_line(f"🧾 [Spin Evidence] original={len(content)} chars → final={len(task_content)} chars · project={brand_key or 'none'} · signature={has_sig} · global_tags={has_tags}\n")
+            on_line(f"🧾 [Spin Evidence] original={len(content)} chars → final={len(task_content)} chars · project={brand_key or 'none'} · signature={has_sig} ({sig_mode}) · global_tags={has_tags}\n")
             on_line(f"📝 [Final Content Preview] {preview}...\n")
 
         task_images = []
@@ -963,6 +966,21 @@ def execute_automation_task(
         if action_state == "published":
             published_count += 1
             outcome = "published"
+
+            # Auto First Comment: Bình luận thông tin liên hệ đầy đủ vào bài viết để tránh bị Admin Assist gỡ
+            if cmd == "group" and auto_first_comment and brand_key:
+                from brand_profiles import get_first_comment_text
+                first_comment_text = get_first_comment_text(brand_key)
+                post_permalink = str(structured_result.get("result_url") or "").strip()
+                if first_comment_text and post_permalink and ("/posts/" in post_permalink or "/permalink/" in post_permalink or "/share/" in post_permalink):
+                    on_line(f"💬 [First Comment Anti-Spam] Tự động bình luận thông tin liên hệ đầy đủ (Maps, Zalo, Web) vào bài viết vừa đăng...\n")
+                    try:
+                        comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text]
+                        if not anti_hash_text:
+                            comment_cmd.append("--no-anti-hash-text")
+                        process_runner.run_command_sync(comment_cmd, job_id=job_id, on_line=on_line, cwd=str(BASE_DIR))
+                    except Exception as first_comment_err:
+                        on_line(f"⚠️ [First Comment] Không thể bình luận tự động: {first_comment_err}\n")
         elif is_post_pending(structured_result):
             pending_count += 1
             outcome = "pending"

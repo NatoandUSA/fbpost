@@ -319,7 +319,7 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
 
 
 def generate_unique_variant_with_evidence(content: str, api_key: str = None, brand_key: str = None,
-                                          include_signature: bool = False) -> dict:
+                                          include_signature: bool = False, signature_mode: str = "canonical") -> dict:
     """Generate content and expose real provenance/change evidence for truthful logs."""
     from brand_profiles import apply_brand_signature, brand_name, strip_known_signature
 
@@ -346,7 +346,7 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     else:
         spun = clean_ai_output(spun)
 
-    final = apply_brand_signature(spun, brand_key, include_signature)
+    final = apply_brand_signature(spun, brand_key, include_signature, mode=signature_mode)
     comparable_source = re.sub(r"\s+", " ", source).strip()
     comparable_spun = re.sub(r"\s+", " ", spun).strip()
     changed = comparable_source != comparable_spun
