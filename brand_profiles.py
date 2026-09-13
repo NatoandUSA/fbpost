@@ -3,11 +3,11 @@
 BRAND_SIGNATURES = {
     "umee": {
         "brandName": "Umee Homestay",
-        "signatureText": "🏡 UMEE HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📍 Chỉ đường (Maps): https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n🌐 Website: https://www.umeehomestay.com/Home\n📘 Fanpage: https://www.facebook.com/umeehomestay\n🎵 TikTok: https://www.tiktok.com/@umee.homestay\n━━━━━━━━━━━━━━━━━━━━",
+        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📘 Page: https://www.facebook.com/umeehomestay · https://www.facebook.com/lacasahomestayinvietnam\n🌐 Web: https://www.umeehomestay.com/Home\n🎵 TikTok: https://www.tiktok.com/@umee.homestay\n💬 Zalo: https://zalo.me/0905555317\n📍 Maps: https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n━━━━━━━━━━━━━━━━━━━━",
     },
     "lacasa": {
         "brandName": "Lacasa Homestay",
-        "signatureText": "🏡 LACASA HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📍 Chỉ đường (Maps): https://maps.app.goo.gl/yatorSbnQBytZCEk9\n🌐 Website: https://www.lacasahomestay.com/\n📘 Fanpage: https://www.facebook.com/lacasahomestayinvietnam\n🎵 TikTok: https://www.tiktok.com/@lacasahomestayhue\n━━━━━━━━━━━━━━━━━━━━",
+        "signatureText": "🏡 LACASA HOMESTAY × UMEE HOMESTAY\n📘 Page: https://www.facebook.com/lacasahomestayinvietnam · https://www.facebook.com/umeehomestay\n🌐 Web: https://www.lacasahomestay.com/\n🎵 TikTok: https://www.tiktok.com/@lacasahomestayhue\n💬 Zalo: https://zalo.me/0905555317\n📍 Maps: https://maps.app.goo.gl/yatorSbnQBytZCEk9\n━━━━━━━━━━━━━━━━━━━━",
     },
 }
 

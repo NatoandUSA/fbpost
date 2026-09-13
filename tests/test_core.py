@@ -467,7 +467,8 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         twice = apply_brand_signature(once, "umee", True)
         self.assertEqual(once, twice)
         self.assertTrue(once.endswith(BRAND_SIGNATURES["umee"]["signatureText"]))
-        self.assertIn("Hotline / Zalo: 0905 555 317", once)
+        self.assertIn("Zalo: https://zalo.me/0905555317", once)
+        self.assertIn("facebook.com/lacasahomestayinvietnam", once)
 
     def test_brand_signature_switches_projects(self):
         from brand_profiles import apply_brand_signature
@@ -475,7 +476,11 @@ class NclProInspiredFeatureTests(unittest.TestCase):
         umee = apply_brand_signature(base, "umee", True)
         lacasa = apply_brand_signature(umee, "lacasa", True)
         self.assertIn("lacasahomestayinvietnam", lacasa)
-        self.assertNotIn("facebook.com/umeehomestay", lacasa)
+        self.assertIn("facebook.com/umeehomestay", lacasa)
+        self.assertLess(
+            lacasa.index("facebook.com/lacasahomestayinvietnam"),
+            lacasa.index("facebook.com/umeehomestay"),
+        )
 
     def test_fetch_gpm_profiles_offline(self):
         from utils import fetch_gpm_profiles
