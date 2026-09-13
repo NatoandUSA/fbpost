@@ -297,7 +297,7 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
                 source_content,
                 api_key.strip(),
                 brand_name=selected_brand_name,
-                truth_context=content_reference_context(brand_key),
+                truth_context="",
                 brand_key=brand_key,
             )
             return apply_brand_signature(spun, brand_key, include_signature)
@@ -325,7 +325,7 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
         try:
             spun, used_model = spin_content_gemini_with_model(
                 source, api_key.strip(), brand_name=brand_name(brand_key),
-                truth_context=content_reference_context(brand_key),
+                truth_context="",
                 brand_key=brand_key,
             )
             mode = "gemini"
