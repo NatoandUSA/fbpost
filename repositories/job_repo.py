@@ -20,7 +20,7 @@ class JobRepository(BaseRepository):
             # groupKeywords and keywords must survive persistence because the
             # executor reads the persisted payload, not the original request.
             secret_exact = {
-                "geminiapikey", "apikey", "api_key", "pageaccesstoken",
+                "geminiapikey", "geminiapikeys", "gemini_api_keys", "apikey", "api_key", "pageaccesstoken",
                 "accesstoken", "access_token", "token", "password",
                 "secret", "clientsecret", "client_secret", "cookie", "cookies",
             }

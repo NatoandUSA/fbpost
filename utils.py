@@ -176,23 +176,49 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
         page.keyboard.insert_text("@")
         page.keyboard.type(name, delay=65)
         time.sleep(2.0)
-        candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] a")
-        chosen = None
-        for idx in range(min(candidates.count(), 30)):
-            candidate = candidates.nth(idx)
-            label = (candidate.inner_text(timeout=500) or "").strip().casefold()
-            href = (candidate.get_attribute("href") or "").casefold()
-            if name.casefold() in label and (handle in href or "homestay" in label):
-                chosen = candidate
-                break
-        if chosen is None:
-            raise RuntimeError("page autocomplete did not return the configured Page")
-        chosen.click(force=True, timeout=3000)
+        # Facebook's 2026 mention popup often exposes no role=option. The first
+        # matching result is keyboard-highlighted (blue), so Enter is the most
+        # stable commit path and avoids clicking a nested avatar/text node.
+        popup_match = page.get_by_text(name, exact=True)
+        popup_visible = any(popup_match.nth(i).is_visible(timeout=300) for i in range(min(popup_match.count(), 12)))
+        if popup_visible:
+            page.keyboard.press("Enter")
+            time.sleep(0.8)
+        else:
+            raise RuntimeError("page autocomplete was not visible")
+
+        current = (locator.inner_text() or "").strip()
+        committed = f"@{name}".casefold() not in current.casefold()
+        if not committed:
+            # DOM fallback: click the outermost visible result row, then Enter.
+            candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] [tabindex='0']")
+            chosen = None
+            for idx in range(min(candidates.count(), 40)):
+                candidate = candidates.nth(idx)
+                label = (candidate.inner_text(timeout=500) or "").strip().casefold()
+                if name.casefold() in label and candidate.is_visible(timeout=300):
+                    chosen = candidate
+                    break
+            if chosen is None:
+                raise RuntimeError("page autocomplete result row was not found")
+            chosen.click(force=True, timeout=2500)
+            time.sleep(0.5)
+            current = (locator.inner_text() or "").strip()
+            committed = f"@{name}".casefold() not in current.casefold()
+        if not committed:
+            raise RuntimeError("page autocomplete result was not committed")
         page.keyboard.insert_text(suffix)
         time.sleep(0.8)
         entity = locator.locator(f"a[href*='{handle}' i]")
         if entity.count() and entity.first.is_visible(timeout=1000):
             print(f"✅ [Page Mention] Đã xác minh entity Page: {name} (@{handle}).")
+            return True
+        # Lexical may retain mention semantics as a non-editable span instead of
+        # an anchor. Popup-visible -> Enter -> popup-closed -> @ removed is also
+        # durable selection evidence; never infer success from text alone.
+        semantic = locator.locator("[contenteditable='false']").filter(has_text=re.compile(re.escape(name), re.I))
+        if semantic.count() or committed:
+            print(f"✅ [Page Mention] Đã commit autocomplete Page: {name} (@{handle}).")
             return True
         raise RuntimeError("selected candidate was not retained as a Page entity")
     except Exception as exc:

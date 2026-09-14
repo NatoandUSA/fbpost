@@ -84,3 +84,36 @@ class WorkflowRepository(BaseRepository):
             return [dict(r) for r in rows]
         finally:
             conn.close()
+
+    def profile_posting_performance(self, limit=200):
+        """Evidence-based posting totals; pending is reported separately from success."""
+        conn = self.get_conn()
+        try:
+            rows = conn.execute(
+                """
+                SELECT profile_id,
+                       COUNT(*) AS total,
+                       SUM(CASE WHEN state='published' THEN 1 ELSE 0 END) AS published,
+                       SUM(CASE WHEN state='pending' THEN 1 ELSE 0 END) AS pending,
+                       SUM(CASE WHEN state='unverified' THEN 1 ELSE 0 END) AS unverified,
+                       SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END) AS failed,
+                       SUM(CASE WHEN state IN ('running','queued') THEN 1 ELSE 0 END) AS active,
+                       ROUND(AVG(CASE WHEN finished_at IS NOT NULL AND started_at IS NOT NULL
+                           THEN (julianday(finished_at)-julianday(started_at))*86400 END), 1) AS avg_seconds,
+                       MAX(updated_at) AS last_activity
+                FROM workflow_tasks
+                WHERE action IN ('group','page') AND profile_id IS NOT NULL AND profile_id != ''
+                GROUP BY profile_id
+                ORDER BY published DESC, total DESC
+                LIMIT ?
+                """, (int(limit),)
+            ).fetchall()
+            result = []
+            for row in rows:
+                item = dict(row)
+                terminal = item['published'] + item['pending'] + item['unverified'] + item['failed']
+                item['published_rate'] = round((item['published'] * 100.0 / terminal), 1) if terminal else 0.0
+                result.append(item)
+            return result
+        finally:
+            conn.close()

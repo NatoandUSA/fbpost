@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Workspace v6.1.19 [Build: 2026-09-14]</title>
-    <link rel="stylesheet" href="styles.css?v=6.1.19">
+    <title>FB Automation Workspace v6.1.20 [Branch Preview]</title>
+    <link rel="stylesheet" href="styles.css?v=6.1.20">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.1.19</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.1.20</span>
                     </div>
                     <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-13</span>
                 </div>
@@ -108,7 +108,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="build-info" id="build-info">UI v6.1.19 · Build 2026-09-14</div>
+                <div class="build-info" id="build-info">UI v6.1.20 · Branch Preview</div>
             </div>
         </aside>
 
@@ -124,7 +124,7 @@
                 <div class="header-right">
                     <div id="header-build-badge" style="display:flex; align-items:center; gap:8px; background:#EFF6FF; border:1px solid #BFDBFE; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; color:#1E40AF; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                         <span style="display:inline-block; width:8px; height:8px; background:#10B981; border-radius:50%; box-shadow:0 0 6px #10B981;"></span>
-                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.1.19</span>
+                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.1.20</span>
                         <span style="color:#93C5FD;">|</span>
                         <span id="header-build-time-text" style="color:#3B82F6; font-weight:600;">Build: 2026-09-13</span>
                     </div>
@@ -870,6 +870,14 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <div class="workflow-table-wrap"><table class="workflow-table"><thead><tr><th>Profile</th><th>Target</th><th>Action</th><th>Phase</th><th>State</th><th>Evidence</th><th>Tiến trình</th><th>Kết quả</th></tr></thead><tbody id="workflow-task-body"><tr><td colspan="8" class="empty">Chưa có task.</td></tr></tbody></table></div>
     <div id="workflow-event-panel" class="workflow-event-panel hidden"><div class="workflow-event-title">Timeline evidence</div><div id="workflow-event-list"></div></div>
   </div>
+  <div class="card" id="profile-performance-card" style="margin-top:14px;">
+    <div class="card-header">
+      <div class="card-title-group"><span>📊</span><h3>Đánh giá hiệu suất đăng bài theo Profile</h3><span id="profile-performance-summary" class="workflow-summary"></span></div>
+      <button id="refresh-profile-performance-btn" class="btn btn-secondary btn-xs" type="button">↻ Làm mới</button>
+    </div>
+    <div class="workflow-table-wrap"><table class="workflow-table"><thead><tr><th>Tên Profile</th><th>Tổng lượt</th><th>Đã đăng</th><th>Chờ duyệt</th><th>Chưa xác minh</th><th>Lỗi</th><th>Tỷ lệ đăng xác minh</th><th>TB thời gian</th></tr></thead><tbody id="profile-performance-body"><tr><td colspan="8" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
+    <p class="field-hint" style="padding:0 14px 12px;">Tỷ lệ chỉ tính bài có permalink đã xác minh; bài chờ quản trị viên duyệt được tách riêng, không tính thành công giả.</p>
+  </div>
 </section>
 
                         <section id="settings-section" class="settings-section hidden" aria-labelledby="settings-title">
@@ -1449,6 +1457,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <div id="toast-container" class="toast-container"></div>
 
     <script type="module" src="js/main.js"></script>
-    <script src="app.js?v=6.1.19"></script>
+    <script src="app.js?v=6.1.20"></script>
 </body>
 </html>

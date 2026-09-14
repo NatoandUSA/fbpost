@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-14 v6.1.19"
+BUILD_TIME = "2026-09-14 v6.1.20-branch"
 
 
 def app_build_info():
@@ -1728,7 +1728,30 @@ def api_workflow_tasks():
     from repositories.workflow_repo import WorkflowRepository
     states = [x for x in request.args.get('states', '').split(',') if x]
     rows = WorkflowRepository().list_tasks(job_id=request.args.get('job_id') or None, states=states or None, limit=500)
+    accounts = load_accounts()
+    names = {}
+    for account in accounts:
+        display = str(account.get('name') or '').strip()
+        for key in (account.get('id'), account.get('profile_path_or_id')):
+            if key and display:
+                names[str(key)] = display
+    for row in rows:
+        row['profile_name'] = names.get(str(row.get('profile_id') or ''), str(row.get('profile_id') or ''))
     return jsonify({'count': len(rows), 'tasks': rows})
+
+@app.route('/api/workflows/profile-performance', methods=['GET'])
+def api_workflow_profile_performance():
+    from repositories.workflow_repo import WorkflowRepository
+    rows = WorkflowRepository().profile_posting_performance(limit=200)
+    names = {}
+    for account in load_accounts():
+        display = str(account.get('name') or '').strip()
+        for key in (account.get('id'), account.get('profile_path_or_id')):
+            if key and display:
+                names[str(key)] = display
+    for row in rows:
+        row['profile_name'] = names.get(str(row.get('profile_id') or ''), str(row.get('profile_id') or ''))
+    return jsonify({'count': len(rows), 'profiles': rows})
 
 @app.route('/api/workflows/tasks/<task_id>/events', methods=['GET'])
 def api_workflow_events(task_id):

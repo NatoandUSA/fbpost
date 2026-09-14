@@ -163,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshWorkflowsBtn = document.getElementById('refresh-workflows-btn');
     const workflowEventPanel = document.getElementById('workflow-event-panel');
     const workflowEventList = document.getElementById('workflow-event-list');
+    const profilePerformanceBody = document.getElementById('profile-performance-body');
+    const profilePerformanceSummary = document.getElementById('profile-performance-summary');
+    const refreshProfilePerformanceBtn = document.getElementById('refresh-profile-performance-btn');
     const interactSubmitBtn = document.getElementById('interact-submit-btn');
     const scrapeSubmitBtn = document.getElementById('scrape-submit-btn');
     const commentSubmitBtn = document.getElementById('comment-submit-btn');
@@ -560,10 +563,30 @@ document.addEventListener('DOMContentLoaded', () => {
             workflowTaskBody.innerHTML = tasks.length ? tasks.map(t => {
                 const target = String(t.target_url || '');
                 const result = t.result_url ? 'M\u1edf k\u1ebft qu\u1ea3' : (t.error_code || t.error_message || '?');
-                return `<tr class="workflow-task-row" data-task-id="${escapeHtml(t.id)}"><td>${escapeHtml(t.profile_id || '?')}</td><td title="${escapeHtml(target)}">${escapeHtml(target.slice(0,55) || '?')}</td><td>${escapeHtml(t.action || '')}</td><td>${escapeHtml(t.phase || '')}</td><td><span class="workflow-state workflow-state-${escapeHtml(t.state || 'unknown')}">${escapeHtml(t.state || 'unknown')}</span></td><td>${escapeHtml(t.verification_status || '')}</td><td>${Number(t.progress || 0)}%</td><td>${t.result_url ? `<a href="${escapeHtml(t.result_url)}" target="_blank" rel="noopener">${result}</a>` : escapeHtml(result)}</td></tr>`;
+                const profileLabel = t.profile_name || t.profile_id || '?';
+                return `<tr class="workflow-task-row" data-task-id="${escapeHtml(t.id)}"><td title="${escapeHtml(t.profile_id || '')}"><strong>${escapeHtml(profileLabel)}</strong></td><td title="${escapeHtml(target)}">${escapeHtml(target.slice(0,55) || '?')}</td><td>${escapeHtml(t.action || '')}</td><td>${escapeHtml(t.phase || '')}</td><td><span class="workflow-state workflow-state-${escapeHtml(t.state || 'unknown')}">${escapeHtml(t.state || 'unknown')}</span></td><td>${escapeHtml(t.verification_status || '')}</td><td>${Number(t.progress || 0)}%</td><td>${t.result_url ? `<a href="${escapeHtml(t.result_url)}" target="_blank" rel="noopener">${result}</a>` : escapeHtml(result)}</td></tr>`;
             }).join('') : '<tr><td colspan="8" class="empty">Ch\u01b0a c\u00f3 workflow task theo b\u1ed9 l\u1ecdc n\u00e0y.</td></tr>';
         } catch (err) {
             workflowTaskBody.innerHTML = `<tr><td colspan="8" class="empty">Kh\u00f4ng t\u1ea3i \u0111\u01b0\u1ee3c ti\u1ebfn tr\u00ecnh: ${escapeHtml(err.message || err)}</td></tr>`;
+        }
+    }
+
+    async function loadProfilePerformance() {
+        if (!profilePerformanceBody) return;
+        try {
+            const res = await fetch('/api/workflows/profile-performance');
+            const data = await res.json();
+            const rows = Array.isArray(data.profiles) ? data.profiles : [];
+            if (profilePerformanceSummary) profilePerformanceSummary.textContent = `${rows.length} profile`;
+            profilePerformanceBody.innerHTML = rows.length ? rows.map(p => `<tr>
+                <td title="${escapeHtml(p.profile_id || '')}"><strong>${escapeHtml(p.profile_name || p.profile_id || '?')}</strong></td>
+                <td>${Number(p.total || 0)}</td><td>${Number(p.published || 0)}</td><td>${Number(p.pending || 0)}</td>
+                <td>${Number(p.unverified || 0)}</td><td>${Number(p.failed || 0)}</td>
+                <td><strong>${Number(p.published_rate || 0).toFixed(1)}%</strong></td>
+                <td>${p.avg_seconds == null ? '—' : `${Number(p.avg_seconds).toFixed(1)}s`}</td>
+            </tr>`).join('') : '<tr><td colspan="8" class="empty">Chưa có dữ liệu đăng bài theo profile.</td></tr>';
+        } catch (err) {
+            profilePerformanceBody.innerHTML = `<tr><td colspan="8" class="empty">Không tải được hiệu suất: ${escapeHtml(err.message || err)}</td></tr>`;
         }
     }
 
@@ -637,6 +660,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     refreshQueueBtn.addEventListener('click', loadQueue);
     if (refreshWorkflowsBtn) refreshWorkflowsBtn.addEventListener('click', loadWorkflowTasks);
+    if (refreshProfilePerformanceBtn) refreshProfilePerformanceBtn.addEventListener('click', loadProfilePerformance);
     if (workflowFilter) workflowFilter.addEventListener('change', loadWorkflowTasks);
     if (workflowTaskBody) workflowTaskBody.addEventListener('click', (event) => {
         const row = event.target.closest('tr[data-task-id]');
@@ -2828,6 +2852,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (logCard) logCard.classList.remove('hidden');
                 loadQueue();
                 loadWorkflowTasks();
+                loadProfilePerformance();
             } else if (currentMode === 'history') {
                 if (composerBodyCard) composerBodyCard.classList.add('hidden');
                 if (accountsCard) accountsCard.classList.add('hidden');
@@ -5443,6 +5468,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncActiveJobState();
     window.setInterval(() => syncActiveJobState(), 3000);
     window.setInterval(() => { if (currentMode === 'queue') loadWorkflowTasks(); }, 3000);
+    window.setInterval(() => { if (currentMode === 'queue') loadProfilePerformance(); }, 15000);
 
     // In phiên bản hệ thống vào nhật ký hoạt động
     setTimeout(async () => {

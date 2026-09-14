@@ -369,6 +369,25 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 return ActionResult(success=False, code="CONTENT_ENTRY_INCOMPLETE", message="Nội dung composer không khớp nội dung chuẩn bị đăng.", target_url=group_url)
             print(f"✅ Đã xác minh nội dung composer: {len(content)} ký tự · chữ ký/hashtag đầy đủ.")
 
+            def composer_checkpoint(label, allow_restore=True):
+                """Bounded checkpoint: detect Facebook composer loss before waiting for Publish."""
+                try:
+                    live_dialog = page.locator("div[role='dialog']").last
+                    live_box = find_post_composer_textbox(page, live_dialog)
+                    if live_box and live_box.is_visible(timeout=1200):
+                        if verify_entered_content(live_box, content):
+                            print(f"✅ [Composer Checkpoint] {label}: nội dung còn nguyên.")
+                            return live_dialog, live_box
+                        if allow_restore:
+                            print(f"⚠️ [Composer Recovery] {label}: nội dung bị mất; khôi phục một lần trước khi đăng.")
+                            human_type_with_page_mention(page, live_box, content, brand_key=brand_key)
+                            if verify_entered_content(live_box, content):
+                                return live_dialog, live_box
+                except Exception:
+                    pass
+                print(f"❌ [COMPOSER_LOST_BEFORE_SUBMIT] {label}: composer đóng hoặc không giữ nội dung; dừng ngay, không chờ/không submit.")
+                return None, None
+
             # 2. Đính kèm ảnh nếu có (sau khi đã có nội dung văn bản)
             if image_path:
                 img_ok = attach_image_to_composer(page, dialog, image_path, clean_exif=clean_exif)
@@ -380,19 +399,31 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                         message=f"Không thể đính kèm ảnh vào bài viết: {image_path}",
                         target_url=group_url
                     )
+                dialog, textbox = composer_checkpoint("sau khi tải ảnh")
+                if textbox is None:
+                    return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất sau khi tải ảnh.", target_url=group_url)
             
             # Thêm Feeling nếu được chọn
             if feeling:
                 add_feeling(page)
+                dialog, textbox = composer_checkpoint("sau cảm xúc")
+                if textbox is None:
+                    return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất sau khi thêm cảm xúc.", target_url=group_url)
                 
             # Thêm Check-in nếu được chọn
             if checkin:
                 add_checkin(page, brand_key=brand_key)
+                dialog, textbox = composer_checkpoint("sau check-in")
+                if textbox is None:
+                    return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất sau check-in.", target_url=group_url)
             
             # Tạm dừng 5 - 10s mô phỏng người dùng đọc lại bài viết trước khi bấm đăng (Anti-bot)
             review_delay = random.uniform(5.0, 10.0)
             print(f"👀 Tạm dừng {review_delay:.1f}s kiểm tra lại bài viết trước khi đăng...")
             time.sleep(review_delay)
+            dialog, textbox = composer_checkpoint("trước nút Đăng", allow_restore=False)
+            if textbox is None:
+                return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất trước khi bấm Đăng.", target_url=group_url)
 
             # 3. Tìm và bấm chính xác nút 'Đăng' (loại bỏ 'Đăng ẩn danh' và xác nhận dialog đóng)
             print("🚀 Đang bấm nút 'Đăng' bài viết...")
