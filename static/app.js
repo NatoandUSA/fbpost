@@ -582,11 +582,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td title="${escapeHtml(p.profile_id || '')}"><strong>${escapeHtml(p.profile_name || p.profile_id || '?')}</strong></td>
                 <td>${Number(p.total || 0)}</td><td>${Number(p.published || 0)}</td><td>${Number(p.pending || 0)}</td>
                 <td>${Number(p.unverified || 0)}</td><td>${Number(p.failed || 0)}</td>
+                <td>${Number(p.comment_rejected || 0)}</td>
                 <td><strong>${Number(p.published_rate || 0).toFixed(1)}%</strong></td>
                 <td>${p.avg_seconds == null ? '—' : `${Number(p.avg_seconds).toFixed(1)}s`}</td>
-            </tr>`).join('') : '<tr><td colspan="8" class="empty">Chưa có dữ liệu đăng bài theo profile.</td></tr>';
+            </tr>`).join('') : '<tr><td colspan="9" class="empty">Chưa có dữ liệu đăng bài theo profile.</td></tr>';
         } catch (err) {
-            profilePerformanceBody.innerHTML = `<tr><td colspan="8" class="empty">Không tải được hiệu suất: ${escapeHtml(err.message || err)}</td></tr>`;
+            profilePerformanceBody.innerHTML = `<tr><td colspan="9" class="empty">Không tải được hiệu suất: ${escapeHtml(err.message || err)}</td></tr>`;
         }
     }
 

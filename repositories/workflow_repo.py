@@ -108,9 +108,17 @@ class WorkflowRepository(BaseRepository):
                 LIMIT ?
                 """, (int(limit),)
             ).fetchall()
+            rejected_rows = conn.execute(
+                """SELECT profile_id, COUNT(*) AS rejected_comments
+                   FROM comment_delivery_events
+                   WHERE status='rejected' AND profile_id IS NOT NULL AND profile_id != ''
+                   GROUP BY profile_id"""
+            ).fetchall()
+            rejected_by_profile = {row["profile_id"]: row["rejected_comments"] for row in rejected_rows}
             result = []
             for row in rows:
                 item = dict(row)
+                item['comment_rejected'] = int(rejected_by_profile.get(item['profile_id'], 0))
                 terminal = item['published'] + item['pending'] + item['unverified'] + item['failed']
                 item['published_rate'] = round((item['published'] * 100.0 / terminal), 1) if terminal else 0.0
                 result.append(item)

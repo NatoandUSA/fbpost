@@ -11,6 +11,32 @@ from utils import process_spintax, human_type, load_accounts, resolve_account, l
 from paths import DATA_DIR
 
 STATE_FILE = str(DATA_DIR / "state.json")
+COMMENT_REJECTION_RE = re.compile(
+    r"Bị từ chối|Declined|Rejected|Xem ý kiến đóng góp|See feedback",
+    re.IGNORECASE,
+)
+
+
+def _rejected_comment_visible(scope, marker):
+    """Detect Facebook moderation feedback on the matching comment only."""
+    if scope is None or not marker:
+        return False
+    try:
+        candidates = scope.locator("div[role='article']").filter(has_text=marker)
+        for idx in range(min(candidates.count(), 12)):
+            article = candidates.nth(idx)
+            try:
+                if not article.is_visible(timeout=400):
+                    continue
+                labels = article.get_by_text(COMMENT_REJECTION_RE)
+                for label_idx in range(min(labels.count(), 8)):
+                    if labels.nth(label_idx).is_visible(timeout=300):
+                        return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
 
 def _canonicalize_comment_url(url):
     """Return a canonical Facebook post URL, or empty when the input is not a post identity."""
@@ -470,12 +496,14 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             normalized_comment = re.sub(r'[\s\u200b\u200c\u200d]+', ' ', parsed_comment).strip()
             durable_markers = re.findall(r'(?:lacasahomestayinvietnam|umeehomestay|0905\s*555\s*317|maps\.app\.goo\.gl/[A-Za-z0-9]+)', normalized_comment, re.I)
             check_snippet = durable_markers[0] if durable_markers else normalized_comment[:30]
+            immediate_verify_scope = None
             if check_snippet:
                 deadline = time.time() + 10.0
                 while time.time() < deadline and not comment_verified:
                     try:
                         verify_roots = _comment_search_roots(page, post_scope, canonical_url)
                         verify_scope = verify_roots[-1]
+                        immediate_verify_scope = verify_scope
                         matches = verify_scope.locator("div[role='article']").filter(has_text=check_snippet)
                         for idx in range(min(matches.count(), 12)):
                             if matches.nth(idx).is_visible(timeout=500):
@@ -486,6 +514,16 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                     if not comment_verified:
                         time.sleep(1.0)
                 print(f"[Comment Resolver] verify_in_target_post={'1' if comment_verified else '0'} post_id={_post_identity(canonical_url).get('post_id')}")
+
+            if comment_verified and _rejected_comment_visible(immediate_verify_scope, check_snippet):
+                evidence = _save_comment_evidence(page, "COMMENT_REJECTED")
+                print("❌ COMMENT_REJECTED: Facebook hiển thị trạng thái bình luận bị từ chối.")
+                return ActionResult(
+                    success=False, code="COMMENT_REJECTED", state="rejected",
+                    message="Facebook/nhóm đã từ chối bình luận; không được tính là COMMENT_VERIFIED.",
+                    target_url=post_url,
+                    metadata={"evidence_path": evidence, "verification_status": "COMMENT_REJECTED"},
+                )
 
             # Immediate DOM appearance is not enough: Facebook may echo editor text
             # before the comment is durably persisted. Reopen the permalink and require
@@ -504,6 +542,15 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                             if persisted_matches.nth(idx).is_visible(timeout=500):
                                 persisted_verified = True
                                 break
+                        if persisted_verified and _rejected_comment_visible(persisted_verify_scope, check_snippet):
+                            evidence = _save_comment_evidence(page, "COMMENT_REJECTED")
+                            print("❌ COMMENT_REJECTED: trạng thái từ chối vẫn hiện sau khi mở lại permalink.")
+                            return ActionResult(
+                                success=False, code="COMMENT_REJECTED", state="rejected",
+                                message="Facebook/nhóm đã từ chối bình luận sau khi gửi.",
+                                target_url=post_url,
+                                metadata={"evidence_path": evidence, "verification_status": "COMMENT_REJECTED"},
+                            )
                 except Exception:
                     persisted_verified = False
                 print(f"[Comment Resolver] verify_after_reopen={'1' if persisted_verified else '0'} post_id={_post_identity(canonical_url).get('post_id')}")

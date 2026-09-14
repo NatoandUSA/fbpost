@@ -1,6 +1,6 @@
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from repositories.base import BaseRepository
 
 def _now():
@@ -12,6 +12,40 @@ def canonical_group_url(value):
     return f"https://www.facebook.com/groups/{match.group(1)}" if match else text.rstrip("/")
 
 class ModerationRepository(BaseRepository):
+    def comment_cooldown(self, group_url):
+        conn = self.get_conn()
+        try:
+            row = conn.execute("SELECT * FROM group_comment_policy WHERE group_url=?", (canonical_group_url(group_url),)).fetchone()
+            if not row or not row["cooldown_until"]:
+                return None
+            return dict(row) if row["cooldown_until"] > _now() else None
+        finally:
+            conn.close()
+
+    def record_comment_delivery(self, group_url, post_url, profile_id, brand_key, status, comment_text="", evidence=""):
+        now = _now()
+        event_id = uuid.uuid4().hex
+        url_count = len(re.findall(r"https?://[^\s]+", comment_text or "", re.I))
+        target = canonical_group_url(group_url)
+        with self.transaction() as conn:
+            conn.execute("""
+                INSERT INTO comment_delivery_events
+                (id,group_url,post_url,profile_id,brand_key,status,url_count,evidence,created_at)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            """, (event_id, target, post_url or "", profile_id, brand_key or "", status, url_count, evidence or "", now))
+            if status == "rejected":
+                cooldown = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat(timespec="seconds")
+                conn.execute("""
+                    INSERT INTO group_comment_policy
+                    (group_url,rejected_count,cooldown_until,last_status,last_profile_id,updated_at)
+                    VALUES (?,1,?,'rejected',?,?)
+                    ON CONFLICT(group_url) DO UPDATE SET
+                        rejected_count=rejected_count+1,
+                        cooldown_until=excluded.cooldown_until,
+                        last_status='rejected', last_profile_id=excluded.last_profile_id,
+                        updated_at=excluded.updated_at
+                """, (target, cooldown, profile_id, now))
+        return event_id
     def mark_requires_approval(self, group_url, evidence, profile_id=None):
         target = canonical_group_url(group_url)
         now = _now()

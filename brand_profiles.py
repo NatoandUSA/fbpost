@@ -1,6 +1,7 @@
 """Deterministic brand/project signatures for generated Facebook posts."""
 
 import re
+import hashlib
 
 BRAND_SIGNATURES = {
     "umee": {
@@ -39,24 +40,14 @@ URL_RE = re.compile(r"(?i)\b(?:https?://|www\.|fb\.com/|zalo\.me/|maps\.app\.goo
 
 BRAND_FIRST_COMMENTS = {
     "umee": (
-        "🌸 THÔNG TIN LIÊN HỆ & ĐẶT PHÒNG UMEE × LACASA HOMESTAY 🌸\n"
-        "📘 Fanpage Umee: https://www.facebook.com/umeehomestay\n"
-        "📘 Fanpage Lacasa: https://www.facebook.com/lacasahomestayinvietnam\n"
-        "🌐 Website: https://www.umeehomestay.com/Home\n"
-        "🎵 TikTok: https://www.tiktok.com/@umee.homestay\n"
-        "📞 Hotline / Zalo: 0905 555 317 (https://zalo.me/0905555317)\n"
-        "📍 Chỉ đường Maps: https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n"
-        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh và thông tin phòng."
+        "🌿 Xem thông tin và hình ảnh UMEE Homestay tại: https://www.facebook.com/umeehomestay\n📞 Hotline/Zalo: 0905 555 317 · Bạn có thể inbox Page để hỏi loại phòng phù hợp.",
+        "🏡 Tham khảo UMEE Homestay Huế: https://www.facebook.com/umeehomestay\n☎️ Liên hệ/Zalo 0905 555 317 để nhận thông tin phòng.",
+        "📍 Cần xem phòng UMEE? Ghé Page chính thức: https://www.facebook.com/umeehomestay\nHotline/Zalo: 0905 555 317.",
     ),
     "lacasa": (
-        "🌸 THÔNG TIN LIÊN HỆ & ĐẶT PHÒNG LACASA × UMEE HOMESTAY 🌸\n"
-        "📘 Fanpage Lacasa: https://www.facebook.com/lacasahomestayinvietnam\n"
-        "📘 Fanpage Umee: https://www.facebook.com/umeehomestay\n"
-        "🌐 Website: https://www.lacasahomestay.com/\n"
-        "🎵 TikTok: https://www.tiktok.com/@lacasahomestayhue\n"
-        "📞 Hotline / Zalo: 0905 555 317 (https://zalo.me/0905555317)\n"
-        "📍 Chỉ đường Maps: https://maps.app.goo.gl/yatorSbnQBytZCEk9\n"
-        "👉 Quý khách inbox trực tiếp Fanpage hoặc kết bạn Zalo để nhận hình ảnh và thông tin phòng."
+        "🌿 Xem thông tin và hình ảnh Lacasa Homestay tại: https://www.facebook.com/lacasahomestayinvietnam\n📞 Hotline/Zalo: 0905 555 317 · Bạn có thể inbox Page để hỏi loại phòng phù hợp.",
+        "🏡 Tham khảo Lacasa Homestay Huế: https://www.facebook.com/lacasahomestayinvietnam\n☎️ Liên hệ/Zalo 0905 555 317 để nhận thông tin phòng.",
+        "📍 Cần xem phòng Lacasa? Ghé Page chính thức: https://www.facebook.com/lacasahomestayinvietnam\nHotline/Zalo: 0905 555 317.",
     ),
 }
 
@@ -89,9 +80,14 @@ def brand_name(value):
     return BRAND_SIGNATURES[key]["brandName"] if key else ""
 
 
-def get_first_comment_text(brand_key: str) -> str:
+def get_first_comment_text(brand_key: str, variant_seed="") -> str:
     key = normalize_brand_key(brand_key)
-    return BRAND_FIRST_COMMENTS.get(key, "")
+    variants = BRAND_FIRST_COMMENTS.get(key, ())
+    if not variants:
+        return ""
+    digest = hashlib.sha256(f"{key}:{variant_seed}".encode("utf-8")).digest()
+    index = int.from_bytes(digest[:4], "big") % len(variants)
+    return variants[index]
 
 
 def strip_known_signature(content):

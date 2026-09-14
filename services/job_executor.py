@@ -1001,42 +1001,66 @@ def execute_automation_task(
             )
             if should_first_comment:
                 from brand_profiles import get_first_comment_text
-                first_comment_text = (
-                    deferred_comment.get("comment_text", "") if deferred_comment
-                    else get_first_comment_text(brand_key)
-                )
                 post_permalink = str(structured_result.get("result_url") or "").strip()
+                comment_brand_key = str((deferred_comment or {}).get("brand_key") or brand_key).strip().lower()
+                # Always regenerate from the current safe templates. This also prevents
+                # old deferred rows containing a multi-link comment from being posted.
+                first_comment_text = get_first_comment_text(comment_brand_key, variant_seed=target)
                 if first_comment_text and post_permalink and ("/posts/" in post_permalink or "/permalink/" in post_permalink or "/share/" in post_permalink):
-                    human_pause = random.randint(8, 15)
-                    on_line(f"⏳ [Human Pause] Chờ {human_pause}s trước bình luận liên kết đã được bật rõ ràng...\n")
-                    if not sleep_with_cancel(human_pause):
-                        return False
-                    on_line("💬 [First Comment] Đang nhập bình luận thông tin liên hệ bằng luồng human typing...\n")
-                    try:
-                        comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text]
-                        if not anti_hash_text:
-                            comment_cmd.append("--no-anti-hash-text")
-                        comment_result = {}
-                        def _capture_comment_line(line):
-                            on_line(line)
-                            clean = line.strip()
-                            if clean.startswith("ACTION_RESULT:"):
-                                try:
-                                    comment_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
-                                except (ValueError, TypeError):
-                                    pass
-                        return_code = process_runner.run_command_sync(comment_cmd, job_id=job_id, on_line=_capture_comment_line, cwd=str(BASE_DIR))
-                        comment_verified = return_code == 0 and bool(comment_result.get("success"))
-                        if comment_verified:
-                            on_line("✅ [First Comment] Facebook đã xác nhận bình luận thành công.\n")
-                        else:
-                            on_line("⚠️ [First Comment] Chưa có bằng chứng Facebook xác nhận bình luận; bài chính vẫn đã đăng.\n")
+                    cooldown = ModerationRepository().comment_cooldown(target)
+                    if cooldown:
+                        on_line(f"🛑 [First Comment] Group đang cooldown đến {cooldown.get('cooldown_until')}; không gửi lại bình luận đã từng bị từ chối.\n")
                         if deferred_comment:
-                            ModerationRepository().resolve_deferred(
-                                deferred_comment["id"], post_permalink, comment_verified
+                            ModerationRepository().resolve_deferred(deferred_comment["id"], post_permalink, False)
+                    else:
+                        human_pause = random.randint(8, 15)
+                        on_line(f"⏳ [Human Pause] Chờ {human_pause}s trước bình luận liên kết đã được bật rõ ràng...\n")
+                        if not sleep_with_cancel(human_pause):
+                            return False
+                        on_line("💬 [First Comment] Đang nhập bình luận thông tin liên hệ bằng luồng human typing...\n")
+                        try:
+                            comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text]
+                            if not anti_hash_text:
+                                comment_cmd.append("--no-anti-hash-text")
+                            comment_result = {}
+                            def _capture_comment_line(line):
+                                on_line(line)
+                                clean = line.strip()
+                                if clean.startswith("ACTION_RESULT:"):
+                                    try:
+                                        comment_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
+                                    except (ValueError, TypeError):
+                                        pass
+                            return_code = process_runner.run_command_sync(
+                                comment_cmd, job_id=job_id, on_line=_capture_comment_line,
+                                cwd=str(BASE_DIR), timeout_seconds=120,
                             )
-                    except Exception as first_comment_err:
-                        on_line(f"⚠️ [First Comment] Không thể bình luận tự động: {first_comment_err}\n")
+                            comment_verified = return_code == 0 and bool(comment_result.get("success"))
+                            comment_code = str(comment_result.get("code") or "")
+                            comment_state = str(comment_result.get("state") or "")
+                            evidence_path = str((comment_result.get("metadata") or {}).get("evidence_path") or "")
+                            comment_rejected = comment_code == "COMMENT_REJECTED" or comment_state == "rejected"
+                            delivery_status = "rejected" if comment_rejected else ("verified" if comment_verified else "unverified")
+                            ModerationRepository().record_comment_delivery(
+                                target, post_permalink, curr_acc_id, comment_brand_key,
+                                delivery_status, first_comment_text, evidence_path,
+                            )
+                            record_profile_activity(
+                                curr_acc_id, "first-comment", target=target,
+                                content=first_comment_text, outcome=delivery_status,
+                            )
+                            if comment_rejected:
+                                on_line("❌ [First Comment] Facebook/Group đã từ chối bình luận. Đã lưu cooldown 24 giờ; không retry cùng nội dung.\n")
+                            elif comment_verified:
+                                on_line("✅ [First Comment] Facebook đã xác nhận bình luận thành công.\n")
+                            else:
+                                on_line("⚠️ [First Comment] Chưa có bằng chứng Facebook xác nhận bình luận; bài chính vẫn đã đăng.\n")
+                            if deferred_comment:
+                                ModerationRepository().resolve_deferred(
+                                    deferred_comment["id"], post_permalink, comment_verified
+                                )
+                        except Exception as first_comment_err:
+                            on_line(f"⚠️ [First Comment] Không thể bình luận tự động: {first_comment_err}\n")
         elif is_post_pending(structured_result):
             pending_count += 1
             outcome = "pending"
@@ -1048,7 +1072,7 @@ def execute_automation_task(
                     on_line("💾 [Group Moderation] Đã lưu Group cần quản trị viên duyệt cho những lần đăng sau.\n")
                     if auto_first_comment and brand_key:
                         from brand_profiles import get_first_comment_text
-                        comment_text = get_first_comment_text(brand_key)
+                        comment_text = get_first_comment_text(brand_key, variant_seed=target)
                         ModerationRepository().defer_first_comment(
                             target, task_content, curr_acc_id, brand_key, comment_text
                         )
