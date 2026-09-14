@@ -802,12 +802,24 @@ def launch_browser(account, p, api_url=None):
 
         if sys.platform == "win32":
             roots = []
-            for _ in range(6):
+            for _ in range(12):
                 roots = _gpm_root_processes(profile_id)
                 if len(roots) == 1:
                     break
                 time.sleep(0.5)
-            if len(roots) != 1:
+            if len(roots) == 0:
+                # GPM may expose a usable CDP endpoint before Win32_Process has
+                # indexed its root command line. Accept only a live single-page
+                # CDP session; the page invariant below remains fail-closed.
+                try:
+                    live_pages = [pg for ctx in browser.contexts for pg in ctx.pages if not pg.is_closed()]
+                except Exception:
+                    live_pages = []
+                if len(live_pages) == 1:
+                    print(f"⚠️ [Profile Process] Root chưa hiện trong CIM nhưng CDP single-page còn sống: {account.get('name', profile_id)}; tiếp tục có giám sát.")
+                else:
+                    raise RuntimeError("GPM_PROCESS_NOT_READY: root chưa xuất hiện và CDP không có đúng 1 trang sống")
+            elif len(roots) != 1:
                 print(f"[Profile Process] INVALID root process count for {account.get('name', profile_id)}: {len(roots)}")
                 try:
                     requests.get(f"{api_base}/api/v3/profiles/close/{profile_id}", timeout=5)
@@ -817,7 +829,8 @@ def launch_browser(account, p, api_url=None):
                 _kill_gpm_root_processes(profile_id)
                 release_profile(profile_id)
                 raise RuntimeError(f"GPM_PROCESS_SINGLETON_FAILED: expected 1 root Chrome, found {len(roots)}")
-            print(f"[Profile Process] Singleton verified: {account.get('name', profile_id)} · root_pid={roots[0].get('ProcessId')}")
+            if roots:
+                print(f"[Profile Process] Singleton verified: {account.get('name', profile_id)} · root_pid={roots[0].get('ProcessId')}")
 
         context = browser.contexts[0]
         page = _normalize_single_interactive_page(context)

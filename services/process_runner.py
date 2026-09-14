@@ -74,6 +74,7 @@ class ProcessRunner:
         on_line: Optional[Callable[[str], None]] = None,
         cwd: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
+        timeout_seconds: Optional[float] = None,
     ) -> int:
         """Run a command synchronously in the calling thread, streaming output line by line."""
         if self.is_cancelled(job_id):
@@ -93,6 +94,8 @@ class ProcessRunner:
 
         log_file = open(log_path, "a", encoding="utf-8", errors="replace")
         proc = None
+        timeout_hit = threading.Event()
+        process_done = threading.Event()
         try:
             proc = subprocess.Popen(
                 cmd_args,
@@ -115,6 +118,23 @@ class ProcessRunner:
                     return -1
                 if job_id not in self._cancellation_requested:
                     self._cancellation_requested[job_id] = False
+
+            if timeout_seconds:
+                def _watchdog():
+                    if process_done.wait(max(1.0, float(timeout_seconds))):
+                        return
+                    timeout_hit.set()
+                    if sys.platform == "win32" and proc and proc.pid:
+                        try:
+                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=5)
+                        except Exception:
+                            pass
+                    try:
+                        if proc and proc.poll() is None:
+                            proc.kill()
+                    except Exception:
+                        pass
+                threading.Thread(target=_watchdog, daemon=True).start()
 
             if proc.stdout:
                 for raw_line in iter(proc.stdout.readline, ""):
@@ -139,6 +159,13 @@ class ProcessRunner:
                             pass
 
             returncode = proc.wait()
+            process_done.set()
+            if timeout_hit.is_set():
+                msg = f"❌ [TARGET_TIMEOUT] Tiến trình vượt quá {int(float(timeout_seconds))}s; đã dừng process tree để chuyển target tiếp theo.\n"
+                log_file.write(msg); log_file.flush()
+                if on_line:
+                    on_line(msg)
+                return -2
             return returncode
 
         except Exception as err:
@@ -149,6 +176,7 @@ class ProcessRunner:
                 on_line(err_msg)
             return -1
         finally:
+            process_done.set()
             log_file.close()
             with self._lock:
                 self._active_processes.pop(job_id, None)

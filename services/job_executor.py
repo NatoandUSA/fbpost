@@ -943,7 +943,10 @@ def execute_automation_task(
         if known_moderated:
             on_line("🧠 [Group Moderation] Nhóm đã được ghi nhớ là cần quản trị viên duyệt; sau submit sẽ kết luận chờ duyệt.\n")
         actual_runs += 1
-        ret = process_runner.run_command_sync(full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR))
+        ret = process_runner.run_command_sync(
+            full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR),
+            timeout_seconds=180 if cmd in ("group", "page") else 120,
+        )
         if known_moderated and is_submit_uncertain(structured_result):
             structured_result.update({
                 "success": True, "state": "pending", "code": "POST_PENDING",
