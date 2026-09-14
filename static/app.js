@@ -2117,7 +2117,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const geminiMaskedText = document.getElementById('settings-gemini-masked-text');
             const geminiStatusBadge = document.getElementById('settings-gemini-status-badge');
             if (data.gemini_api_key_configured) {
-                if (geminiMaskedText) geminiMaskedText.textContent = `Đã cấu hình: ${data.gemini_api_key_masked}`;
+                if (geminiMaskedText) geminiMaskedText.textContent = `Đã cấu hình ${data.gemini_api_key_count || 1} key (key đầu: ${data.gemini_api_key_masked})`;
                 if (geminiStatusBadge) {
                     geminiStatusBadge.textContent = '✅ Đã kết nối';
                     geminiStatusBadge.style.background = '#DCFCE7';
@@ -2262,7 +2262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsGeminiSaveBtn.addEventListener('click', async () => {
             const key = document.getElementById('settings-gemini-input')?.value.trim();
             if (!key) return showToast('Vui lòng nhập API Key Google Gemini!', 'error');
-            const ok = await saveSettings({ gemini_api_key: key });
+            const keys = key.split(/[\r\n,;]+/).map(v => v.trim()).filter(Boolean);
+            const ok = await saveSettings({ gemini_api_keys: keys });
             if (ok) {
                 const input = document.getElementById('settings-gemini-input');
                 if (input) input.value = '';
@@ -3218,7 +3219,7 @@ document.addEventListener('DOMContentLoaded', () => {
             payload.autoFirstComment = command === 'group' && !!(autoFirstCommentOpt && autoFirstCommentOpt.checked);
 
             const geminiKeyInput = document.getElementById('gemini-api-key-input');
-            payload.geminiApiKey = geminiKeyInput ? geminiKeyInput.value.trim() : '';
+            payload.geminiApiKeys = geminiKeyInput ? geminiKeyInput.value.split(/[\r\n,;]+/).map(v => v.trim()).filter(Boolean) : [];
             const brandProjectSelectRun = document.getElementById('brand-project-select');
             const brandSignatureOptRun = document.getElementById('brand-signature-opt');
             payload.brandKey = brandProjectSelectRun ? brandProjectSelectRun.value : '';
@@ -3226,6 +3227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const photoFolderInput = document.getElementById('photo-folder-input');
             payload.photoFolder = photoFolderInput ? photoFolderInput.value.trim() : '';
+            payload.photoFolders = Array.from(document.querySelectorAll(`input[name="fixed-photo-folder"][data-brand="${payload.brandKey}"]`)).map(el => el.value);
 
             const photoCountMode = document.getElementById('photo-count-mode');
             payload.photoCountMode = photoCountMode ? photoCountMode.value : '2-4';

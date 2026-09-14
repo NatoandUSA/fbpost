@@ -13,6 +13,7 @@ import json
 import urllib.request
 import urllib.error
 import time as _time
+import threading
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 GEMINI_FALLBACK_MODELS = tuple(
@@ -23,6 +24,37 @@ GEMINI_FALLBACK_MODELS = tuple(
 CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")
 
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?84|0)(?:[ .-]*\d){9,10}(?!\d)")
+_KEY_POOL_LOCK = threading.Lock()
+_KEY_POOL_CURSOR = 0
+_KEY_COOLDOWNS = {}
+
+
+def parse_gemini_keys(value) -> list:
+    """Return a de-duplicated key pool without ever logging key material."""
+    if isinstance(value, (list, tuple)):
+        raw = value
+    else:
+        raw = re.split(r"[\r\n,;]+", str(value or ""))
+    return list(dict.fromkeys(str(item).strip() for item in raw if len(str(item).strip()) > 10))
+
+
+def _ordered_available_keys(value):
+    global _KEY_POOL_CURSOR
+    keys = parse_gemini_keys(value)
+    if not keys:
+        return []
+    now = _time.time()
+    with _KEY_POOL_LOCK:
+        start = _KEY_POOL_CURSOR % len(keys)
+        _KEY_POOL_CURSOR = (_KEY_POOL_CURSOR + 1) % len(keys)
+        ordered = keys[start:] + keys[:start]
+        available = [key for key in ordered if _KEY_COOLDOWNS.get(key, 0) <= now]
+    return available or ordered
+
+
+def _cooldown_key(key, seconds=90):
+    with _KEY_POOL_LOCK:
+        _KEY_COOLDOWNS[key] = _time.time() + seconds
 
 
 def _phone_digits(value: str) -> str:
@@ -315,7 +347,7 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
     return apply_brand_signature(spun, brand_key, include_signature)
 
 
-def generate_unique_variant_with_evidence(content: str, api_key: str = None, brand_key: str = None,
+def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key: str = None,
                                           include_signature: bool = False, signature_mode: str = "canonical") -> dict:
     """Generate content and expose real provenance/change evidence for truthful logs."""
     from brand_profiles import apply_brand_signature, brand_name, prepare_linkless_post
@@ -323,21 +355,30 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     if not content or not content.strip():
         return {"content": content, "mode": "unchanged", "changed": False, "error": "empty_content"}
 
-    api_key = (api_key or "").strip()
+    api_keys = _ordered_available_keys(api_key)
     source = prepare_linkless_post(content)
     spun = None
     mode = "local_fallback"
     error = ""
-    if api_key and len(api_key.strip()) > 10:
-        try:
+    if api_keys:
+        errors = []
+        for slot, selected_key in enumerate(api_keys, start=1):
+          try:
             spun, used_model = spin_content_gemini_with_model(
-                source, api_key.strip(), brand_name=brand_name(brand_key),
+                source, selected_key, brand_name=brand_name(brand_key),
                 truth_context="",
                 brand_key=brand_key,
             )
             mode = "gemini"
-        except Exception as exc:
-            error = str(exc)
+            used_key_slot = slot
+            break
+          except urllib.error.HTTPError as exc:
+            errors.append(f"key#{slot}: HTTP {exc.code}")
+            if exc.code in (429, 403):
+                _cooldown_key(selected_key, 120 if exc.code == 429 else 300)
+          except Exception as exc:
+            errors.append(f"key#{slot}: {exc}")
+        error = "; ".join(errors)
     if spun is None:
         spun = spin_content_local(source)
     else:
@@ -352,6 +393,8 @@ def generate_unique_variant_with_evidence(content: str, api_key: str = None, bra
     result = {"content": final, "mode": mode, "changed": changed, "error": error}
     if mode == "gemini":
         result["model"] = used_model
+        result["key_slot"] = used_key_slot
+        result["key_pool_size"] = len(api_keys)
     return result
 
 

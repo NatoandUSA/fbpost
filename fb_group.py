@@ -361,7 +361,8 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             if not textbox or not textbox.is_visible():
                 print("❌ Không tìm thấy textbox soạn bài đáng tin cậy; dừng trước khi submit.")
                 return ActionResult(success=False, code="COMPOSER_TEXTBOX_NOT_FOUND", message="Không tìm thấy ô soạn bài.", target_url=group_url)
-            human_type(page, textbox, content)
+            from utils import human_type_with_page_mention
+            human_type_with_page_mention(page, textbox, content, brand_key=brand_key)
             time.sleep(0.6)
             if not verify_entered_content(textbox, content):
                 print("❌ Nội dung composer thiếu chữ ký/hashtag bắt buộc; dừng trước khi submit.")

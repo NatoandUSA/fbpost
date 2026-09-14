@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-13 v6.1.18"
+BUILD_TIME = "2026-09-14 v6.1.19"
 
 
 def app_build_info():
@@ -338,6 +338,12 @@ def api_settings():
             new_key = str(data["gemini_api_key"]).strip()
             if new_key:  # only update if non-empty
                 config["gemini_api_key"] = new_key
+        if "gemini_api_keys" in data:
+            from ai_spinner import parse_gemini_keys
+            keys = parse_gemini_keys(data.get("gemini_api_keys"))
+            if keys:
+                config["gemini_api_keys"] = keys
+                config["gemini_api_key"] = keys[0]
         if "delay_preset" in data:
             config["delay_preset"] = str(data["delay_preset"]).strip()
         if "delay_min" in data:
@@ -362,13 +368,16 @@ def api_settings():
             }
         })
 
-    key = config.get("gemini_api_key", "")
+    from ai_spinner import parse_gemini_keys
+    keys = parse_gemini_keys(config.get("gemini_api_keys") or config.get("gemini_api_key", ""))
+    key = keys[0] if keys else ""
     masked_key = f"...{key[-6:]}" if len(key) > 6 else ("" if not key else key)
     return jsonify({
         "gpm_api_url": config.get("gpm_api_url", "http://127.0.0.1:19995"),
         "gemini_api_key_masked": masked_key,
         "has_gemini_key": bool(key),
         "gemini_api_key_configured": bool(key),
+        "gemini_api_key_count": len(keys),
         "delay_preset": config.get("delay_preset", "safe"),
         "delay_min": config.get("delay_min", 300),
         "delay_max": config.get("delay_max", 600),
@@ -1461,10 +1470,9 @@ def api_ai_spin():
     from ai_spinner import generate_unique_variant_with_evidence, spin_comment, generate_interact_comments
     data = json_body()
     content = (data.get("content") or data.get("text") or "").strip()
-    api_key = (
-        (data.get("apiKey") or data.get("api_key") or "").strip()
-        or load_config().get("gemini_api_key", "").strip()
-    )
+    supplied_keys = data.get("apiKeys") or data.get("api_keys") or data.get("apiKey") or data.get("api_key") or ""
+    cfg = load_config()
+    api_key = supplied_keys or cfg.get("gemini_api_keys") or cfg.get("gemini_api_key", "")
     mode = data.get("mode", "post")
     brand_key = data.get("brandKey") or data.get("brand") or ""
     include_signature = bool(brand_key)  # Project selected => linkless search signature required.

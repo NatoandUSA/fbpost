@@ -156,6 +156,55 @@ def human_type(page, locator, text, multiline_key="Enter"):
             time.sleep(0.12)
 
 
+def human_type_with_page_mention(page, locator, text, brand_key=None):
+    """Type one verified Facebook Page entity; fall back to unchanged plain text."""
+    profiles = {
+        "lacasa": ("Lacasa Homestay", "lacasahomestayinvietnam"),
+        "umee": ("Umee Homestay", "umeehomestay"),
+    }
+    name, handle = profiles.get(str(brand_key or "").casefold(), ("", ""))
+    value = str(text or "")
+    match = re.search(re.escape(name), value, re.IGNORECASE) if name else None
+    if not match:
+        human_type(page, locator, value)
+        return False
+    try:
+        locator.fill("")
+        _ensure_focus(locator)
+        prefix, suffix = value[:match.start()], value[match.end():]
+        page.keyboard.insert_text(prefix)
+        page.keyboard.insert_text("@")
+        page.keyboard.type(name, delay=65)
+        time.sleep(2.0)
+        candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] a")
+        chosen = None
+        for idx in range(min(candidates.count(), 30)):
+            candidate = candidates.nth(idx)
+            label = (candidate.inner_text(timeout=500) or "").strip().casefold()
+            href = (candidate.get_attribute("href") or "").casefold()
+            if name.casefold() in label and (handle in href or "homestay" in label):
+                chosen = candidate
+                break
+        if chosen is None:
+            raise RuntimeError("page autocomplete did not return the configured Page")
+        chosen.click(force=True, timeout=3000)
+        page.keyboard.insert_text(suffix)
+        time.sleep(0.8)
+        entity = locator.locator(f"a[href*='{handle}' i]")
+        if entity.count() and entity.first.is_visible(timeout=1000):
+            print(f"✅ [Page Mention] Đã xác minh entity Page: {name} (@{handle}).")
+            return True
+        raise RuntimeError("selected candidate was not retained as a Page entity")
+    except Exception as exc:
+        print(f"⚠️ [Page Mention] Không xác minh được entity {name}; dùng tên chữ thường ({type(exc).__name__}).")
+        try:
+            locator.fill("")
+        except Exception:
+            pass
+        human_type(page, locator, value)
+        return False
+
+
 def verify_entered_content(locator, expected):
     try:
         actual = (locator.inner_text() or locator.text_content() or "").strip()
@@ -1767,8 +1816,13 @@ def add_checkin(page, brand_key=None):
                 
                 # 1. Thử bấm kết quả địa điểm xuất hiện trong danh sách
                 checked_in = False
-                first_option = page.locator("div[role='dialog'] div[role='button']").filter(
-                    has_text=re.compile(re.escape(selected_location) + r"|Huế|Hue", re.IGNORECASE)
+                def norm_place(value):
+                    import unicodedata
+                    value = unicodedata.normalize("NFD", str(value or "").casefold())
+                    return re.sub(r"[^a-z0-9]+", " ", "".join(ch for ch in value if unicodedata.category(ch) != "Mn")).strip()
+
+                first_option = page.locator("div[role='dialog'] [role='option'], div[role='dialog'] [role='menuitem'], div[role='dialog'] div[role='button']").filter(
+                    has_text=re.compile(re.escape(selected_location), re.IGNORECASE)
                 ).first
                 
                 if first_option.is_visible(timeout=1500):
@@ -1780,12 +1834,13 @@ def add_checkin(page, brand_key=None):
 
                 # 2. Fallback: chỉ chọn candidate có chữ khớp; không click mù kết quả đầu.
                 if not checked_in:
-                    candidates = page.locator("div[role='dialog'] div[role='button']")
-                    for i in range(min(candidates.count(), 8)):
+                    candidates = page.locator("div[role='dialog'] [role='option'], div[role='dialog'] [role='menuitem'], div[role='dialog'] div[role='button']")
+                    expected = norm_place(selected_location)
+                    for i in range(min(candidates.count(), 30)):
                         c = candidates.nth(i)
                         c_text = (c.inner_text() or "").strip()
-                        expected = selected_location.casefold()
-                        if expected in c_text.casefold():
+                        candidate_name = norm_place(c_text.split("\n", 1)[0])
+                        if expected and (candidate_name == expected or candidate_name.startswith(expected + " ")):
                             try:
                                 c.click(force=True, timeout=2500)
                                 checked_in = True
@@ -1794,8 +1849,17 @@ def add_checkin(page, brand_key=None):
                                 pass
 
                 if checked_in:
-                    print(f"✅ Đã check-in địa điểm: {selected_location}")
-                    time.sleep(1.2)
+                    time.sleep(1.5)
+                    # A click is not success: require the search surface to close and
+                    # the chosen place to be retained in the composer dialog.
+                    search_closed = not search_input.is_visible(timeout=800)
+                    composer_text = (page.locator("div[role='dialog']").last.inner_text(timeout=1500) or "")
+                    retained = norm_place(selected_location) in norm_place(composer_text)
+                    if search_closed and retained:
+                        print(f"✅ [Check-in Verified] Đã gắn địa điểm: {selected_location}")
+                    else:
+                        checked_in = False
+                        print(f"⚠️ [Check-in Unverified] Facebook chưa giữ địa điểm {selected_location}; không báo thành công.")
                 else:
                     print(f"⚠️ Không tìm thấy kết quả check-in khớp: {selected_location}; bỏ qua để tránh chọn sai địa điểm.")
 

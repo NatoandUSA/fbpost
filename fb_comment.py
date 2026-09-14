@@ -437,7 +437,13 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                     continue
             if not submitted_by_button:
                 print("🚀 Không thấy nút Gửi rõ ràng; dùng Enter fallback.")
-                page.keyboard.press("Enter")
+                # Dispatch Enter to the exact Lexical editor. A page-level Enter can
+                # be swallowed by the permalink dialog or another focused control.
+                try:
+                    comment_input.press("Enter", timeout=2500)
+                except Exception:
+                    comment_input.focus(timeout=1500)
+                    page.keyboard.press("Enter")
             time.sleep(random.uniform(3.0, 5.0))
 
             # Kiểm tra nhanh lỗi spam cảnh báo từ Facebook
@@ -461,7 +467,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
 
             # Chỉ xác thực comment bên trong đúng post_scope; không quét Messenger/chat/toàn page.
             comment_verified = False
-            check_snippet = re.sub(r'[\s\u200b\u200c\u200d]+', ' ', parsed_comment).strip()[:30]
+            normalized_comment = re.sub(r'[\s\u200b\u200c\u200d]+', ' ', parsed_comment).strip()
+            durable_markers = re.findall(r'(?:lacasahomestayinvietnam|umeehomestay|0905\s*555\s*317|maps\.app\.goo\.gl/[A-Za-z0-9]+)', normalized_comment, re.I)
+            check_snippet = durable_markers[0] if durable_markers else normalized_comment[:30]
             if check_snippet:
                 deadline = time.time() + 10.0
                 while time.time() < deadline and not comment_verified:

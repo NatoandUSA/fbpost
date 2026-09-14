@@ -130,12 +130,18 @@ def execute_automation_task(
     feeling = data.get("feeling", False)
     checkin = data.get("checkin", False)
     auto_spin = data.get("autoSpin", False)
-    raw_gemini_key = str(data.get("geminiApiKey") or data.get("gemini_api_key") or "").strip()
+    raw_gemini_key = data.get("geminiApiKeys") or data.get("geminiApiKey") or data.get("gemini_api_key") or ""
+    if isinstance(raw_gemini_key, list):
+        raw_gemini_key = "\n".join(str(item) for item in raw_gemini_key)
+    raw_gemini_key = str(raw_gemini_key).strip()
     if not raw_gemini_key or raw_gemini_key.startswith("***REDACTED") or raw_gemini_key.endswith("***"):
-        gemini_api_key = str(cfg.get("gemini_api_key") or "").strip()
+        gemini_api_key = cfg.get("gemini_api_keys") or cfg.get("gemini_api_key") or ""
     else:
         gemini_api_key = raw_gemini_key
     photo_folder = data.get("photoFolder", "").strip()
+    photo_folders = [str(p).strip() for p in (data.get("photoFolders") or []) if str(p).strip()]
+    if not photo_folders and photo_folder:
+        photo_folders = [photo_folder]
     photo_count_mode = data.get("photoCountMode", "2-4")
     skip_duplicate = data.get("skipDuplicate24h", True)  # Legacy key retained for older clients.
     skip_duplicate_hours = resolve_duplicate_window_hours(data.get("skipDuplicateHours", 24))
@@ -859,10 +865,11 @@ def execute_automation_task(
             on_line(f"📝 [Final Content Preview] {preview}...\n")
 
         task_images = []
-        if photo_folder and not image:
-            task_images = pick_random_photos(photo_folder, photo_count_mode, clean_exif=clean_exif)
+        if photo_folders and not image:
+            selected_photo_folder = photo_folders[i % len(photo_folders)]
+            task_images = pick_random_photos(selected_photo_folder, photo_count_mode, clean_exif=clean_exif)
             if task_images:
-                on_line(f"📁 [Thư mục ảnh] Đã bốc ngẫu nhiên {len(task_images)} ảnh cho mục tiêu {i+1}/{total}.\n")
+                on_line(f"📁 [Luân phiên ảnh] Folder {(i % len(photo_folders))+1}/{len(photo_folders)}: {selected_photo_folder} · đã chọn {len(task_images)} ảnh.\n")
 
         if rotate_accounts and accounts_pool:
             curr_acc = accounts_pool[i % len(accounts_pool)]
