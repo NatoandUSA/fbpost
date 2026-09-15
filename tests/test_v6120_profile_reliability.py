@@ -106,6 +106,7 @@ class ProfileReliabilityTests(unittest.TestCase):
         self.assertIn("SH44", captured["truth_context"])
         self.assertIn("bãi đỗ ô tô miễn phí", captured["truth_context"])
         self.assertEqual(result["key_pool_size"], 1)
+        self.assertEqual(result["keys_attempted"], 1)
         self.assertEqual(result["mode"], "gemini")
 
     def test_hub_numbers_are_allowed_only_when_context_is_supplied(self):

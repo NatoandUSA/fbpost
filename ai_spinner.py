@@ -402,9 +402,11 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
     spun = None
     mode = "local_fallback"
     error = ""
+    attempted_count = 0
     if api_keys:
         errors = []
         for slot, selected_key in enumerate(api_keys, start=1):
+          attempted_count += 1
           try:
             spun, used_model = spin_content_gemini_with_model(
                 source, selected_key, brand_name=brand_name(brand_key),
@@ -439,7 +441,7 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
         mode = "unchanged"
     result = {
         "content": final, "mode": mode, "changed": changed, "error": error,
-        "key_pool_size": len(all_api_keys), "keys_attempted": len(api_keys),
+        "key_pool_size": len(all_api_keys), "keys_attempted": attempted_count,
     }
     if mode == "gemini":
         result["model"] = used_model
