@@ -391,15 +391,22 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 print("❌ Không tìm thấy textbox soạn bài đáng tin cậy; dừng trước khi submit.")
                 return ActionResult(success=False, code="COMPOSER_TEXTBOX_NOT_FOUND", message="Không tìm thấy ô soạn bài.", target_url=group_url)
             from utils import human_type_with_page_mention
-            human_type_with_page_mention(page, textbox, content, brand_key=brand_key)
+            from composer_guard import audit_final_content, mention_entity_committed
+            final_audit = audit_final_content(content, brand_key, linkless=True)
+            if not final_audit["pass"]:
+                print(f"[Final Content Audit] BLOCKED issues={final_audit['issues']}")
+                return ActionResult(success=False, code="FINAL_CONTENT_AUDIT_FAILED", message=",".join(final_audit["issues"]), target_url=group_url)
+            mention_verified = human_type_with_page_mention(page, textbox, content, brand_key=brand_key)
             time.sleep(0.6)
             if not verify_entered_content(textbox, content):
                 print("❌ Nội dung composer thiếu chữ ký/hashtag bắt buộc; dừng trước khi submit.")
                 return ActionResult(success=False, code="CONTENT_ENTRY_INCOMPLETE", message="Nội dung composer không khớp nội dung chuẩn bị đăng.", target_url=group_url)
             print(f"✅ Đã xác minh nội dung composer: {len(content)} ký tự · chữ ký/hashtag đầy đủ.")
 
+            recovery_used = False
             def composer_checkpoint(label, allow_restore=True):
-                """Bounded checkpoint: detect Facebook composer loss before waiting for Publish."""
+                """Transactional checkpoint: at most one clean rebuild, never refill partial rich text."""
+                nonlocal recovery_used, mention_verified
                 try:
                     live_dialog = page.locator("div[role='dialog']").last
                     live_box = find_post_composer_textbox(page, live_dialog)
@@ -407,9 +414,11 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                         if verify_entered_content(live_box, content):
                             print(f"✅ [Composer Checkpoint] {label}: nội dung còn nguyên.")
                             return live_dialog, live_box
-                        if allow_restore:
-                            print(f"⚠️ [Composer Recovery] {label}: nội dung bị mất; khôi phục một lần trước khi đăng.")
-                            human_type_with_page_mention(page, live_box, content, brand_key=brand_key)
+                        if allow_restore and not recovery_used:
+                            recovery_used = True
+                            print(f"[Composer Recovery] {label}: clean rebuild transaction once.")
+                            live_box.fill("")
+                            mention_verified = human_type_with_page_mention(page, live_box, content, brand_key=brand_key)
                             if verify_entered_content(live_box, content):
                                 return live_dialog, live_box
                 except Exception:
@@ -455,6 +464,14 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất trước khi bấm Đăng.", target_url=group_url)
 
             # 3. Tìm và bấm chính xác nút 'Đăng' (loại bỏ 'Đăng ẩn danh' và xác nhận dialog đóng)
+            from composer_guard import audit_final_content, mention_entity_committed
+            pre_submit = audit_final_content(content, brand_key, linkless=True)
+            if not pre_submit["pass"]:
+                return ActionResult(success=False, code="FINAL_CONTENT_AUDIT_FAILED", message=",".join(pre_submit["issues"]), target_url=group_url)
+            if mention_verified and not mention_entity_committed(textbox, brand_key):
+                print("[Pre-submit Audit] Page mention entity was lost; fail-closed.")
+                return ActionResult(success=False, code="MENTION_ENTITY_LOST", message="Page mention entity was lost before submit.", target_url=group_url)
+            print(f"[Pre-submit Audit] PASS mention={'VERIFIED_ENTITY' if mention_verified else 'PLAIN_TEXT_FALLBACK'} cta={pre_submit['cta_count']}")
             print("🚀 Đang bấm nút 'Đăng' bài viết...")
             published = click_post_publish_button(page, dialog)
             if not published and getattr(published, "state", "") != "submitted_unverified":

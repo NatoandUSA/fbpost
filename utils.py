@@ -157,85 +157,51 @@ def human_type(page, locator, text, multiline_key="Enter"):
 
 
 def human_type_with_page_mention(page, locator, text, brand_key=None):
-    """Type one verified Facebook Page entity; fall back to unchanged plain text."""
-    profiles = {
-        "lacasa": ("Lacasa Homestay", "lacasahomestayinvietnam"),
-        "umee": ("UMEE Homestay", "umeehomestay"),
-    }
-    name, handle = profiles.get(str(brand_key or "").casefold(), ("", ""))
-    value = str(text or "")
-    match = re.search(re.escape(name), value, re.IGNORECASE) if name else None
+    """Resolve Page mention by canonical handle evidence; otherwise explicit plain text."""
+    from composer_guard import page_entity, mention_entity_committed
+    entity = page_entity(brand_key); value = str(text or "")
+    if not entity:
+        human_type(page, locator, value); return False
+    name, handle = entity["name"], entity["handle"]
+    match = re.search(re.escape(name), value, re.I)
     if not match:
-        human_type(page, locator, value)
-        return False
+        human_type(page, locator, value); return False
     try:
-        locator.fill("")
-        _ensure_focus(locator)
+        locator.fill(""); _ensure_focus(locator)
         prefix, suffix = value[:match.start()], value[match.end():]
-        page.keyboard.insert_text(prefix)
-        page.keyboard.insert_text("@")
-        page.keyboard.type(name, delay=65)
-        time.sleep(2.0)
-        # Facebook's 2026 mention popup often exposes no role=option. The first
-        # matching result is keyboard-highlighted (blue), so Enter is the most
-        # stable commit path and avoids clicking a nested avatar/text node.
-        popup_match = page.get_by_text(re.compile(rf"^\s*{re.escape(name)}\s*$", re.IGNORECASE))
-        popup_visible = any(popup_match.nth(i).is_visible(timeout=300) for i in range(min(popup_match.count(), 12)))
-        if popup_visible:
-            page.keyboard.press("Enter")
-            time.sleep(0.8)
-        else:
-            raise RuntimeError("page autocomplete was not visible")
-
-        def _entity_committed():
-            entity = locator.locator(f"a[href*='{handle}' i]")
-            semantic = locator.locator("[contenteditable='false']").filter(
-                has_text=re.compile(re.escape(name), re.IGNORECASE)
-            )
-            return bool(entity.count() or semantic.count())
-
-        committed = _entity_committed()
-        if not committed:
-            # DOM fallback: click the outermost visible result row, then Enter.
-            candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] [tabindex='0']")
-            chosen = None
-            for idx in range(min(candidates.count(), 40)):
-                candidate = candidates.nth(idx)
-                label = (candidate.inner_text(timeout=500) or "").strip().casefold()
-                hrefs = candidate.locator(f"a[href*='{handle}' i]")
-                if (name.casefold() in label or hrefs.count()) and candidate.is_visible(timeout=300):
-                    chosen = candidate
-                    break
-            if chosen is None:
-                raise RuntimeError("page autocomplete result row was not found")
-            chosen.click(force=True, timeout=2500)
-            time.sleep(0.5)
-            committed = _entity_committed()
-        if not committed:
-            raise RuntimeError("page autocomplete result was not committed")
-        page.keyboard.insert_text(suffix)
-        time.sleep(0.8)
-        entity = locator.locator(f"a[href*='{handle}' i]")
-        if entity.count() and entity.first.is_visible(timeout=1000):
-            print(f"✅ [Page Mention] Đã xác minh entity Page: {name} (@{handle}).")
-            return True
-        # Lexical may retain mention semantics as a non-editable span instead of
-        # an anchor. Popup-visible -> Enter -> popup-closed -> @ removed is also
-        # durable selection evidence; never infer success from text alone.
-        semantic = locator.locator("[contenteditable='false']").filter(has_text=re.compile(re.escape(name), re.I))
-        if semantic.count():
-            print(f"✅ [Page Mention] Đã commit autocomplete Page: {name} (@{handle}).")
-            return True
-        raise RuntimeError("selected candidate was not retained as a Page entity")
+        page.keyboard.insert_text(prefix); page.keyboard.insert_text("@")
+        page.keyboard.type(name, delay=65); time.sleep(2.0)
+        candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] [tabindex='0']")
+        ranked=[]
+        for idx in range(min(candidates.count(),60)):
+            row=candidates.nth(idx)
+            try:
+                if not row.is_visible(timeout=250): continue
+                label=(row.inner_text(timeout=500) or "").strip(); links=row.locator("a[href]")
+                href=" ".join((links.nth(j).get_attribute("href") or "") for j in range(min(links.count(),8)))
+                score=(100 if handle.casefold() in href.casefold() else 0)+(40 if label.casefold()==name.casefold() else 0)+(15 if name.casefold() in label.casefold() else 0)
+                if score: ranked.append((score,idx,label,href))
+            except Exception: continue
+        ranked.sort(reverse=True,key=lambda x:x[0])
+        print(f"[Page Mention Resolver] brand={brand_key} query={name!r} candidates={len(ranked)}")
+        for score, row_idx, label, href in ranked[:8]:
+            print(f"[Page Mention Candidate] idx={row_idx} score={score} text={label[:100]!r} href={href[:180]!r}")
+        if not ranked or ranked[0][0] < 100:
+            raise RuntimeError("canonical handle candidate not found")
+        if len(ranked) > 1 and ranked[1][0] == ranked[0][0]:
+            raise RuntimeError("ambiguous canonical Page candidates")
+        print(f"[Page Mention Resolver] selected idx={ranked[0][1]} score={ranked[0][0]}")
+        candidates.nth(ranked[0][1]).click(force=True,timeout=2500); time.sleep(0.7)
+        if not mention_entity_committed(locator,brand_key): raise RuntimeError("selected Page entity not committed")
+        page.keyboard.insert_text(suffix); time.sleep(0.5)
+        if not mention_entity_committed(locator,brand_key): raise RuntimeError("Page entity lost after suffix")
+        print(f"[Page Mention] VERIFIED_ENTITY {name} (@{handle})")
+        return True
     except Exception as exc:
-        print(f"⚠️ [Page Mention] Không xác minh được entity {name}; dùng tên chữ thường ({type(exc).__name__}).")
-        try:
-            locator.fill("")
-        except Exception:
-            pass
-        human_type(page, locator, value)
-        return False
-
+        print(f"[Page Mention] PLAIN_TEXT_FALLBACK {name} (@{handle}) reason={type(exc).__name__}: {exc}")
+        try: locator.fill("")
+        except Exception: pass
+        human_type(page,locator,value); return False
 
 def verify_entered_content(locator, expected):
     try:

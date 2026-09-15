@@ -873,6 +873,15 @@ def execute_automation_task(
             task_content = apply_brand_signature(content, brand_key, include_signature, mode=sig_mode)
 
         if cmd in ("group", "page"):
+            from composer_guard import dedupe_content_blocks, audit_final_content
+            task_content = dedupe_content_blocks(task_content)
+            content_audit = audit_final_content(task_content, brand_key, linkless=(sig_mode == "linkless"))
+            if not content_audit["pass"]:
+                batch_failed = True
+                on_line(f"[FINAL_CONTENT_AUDIT_FAILED] Project={brand_key}; issues={','.join(content_audit['issues'])}. Stop before Facebook.\n")
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
             from brand_profiles import validate_brand_signature
             sig_ok, sig_missing = validate_brand_signature(task_content, brand_key, mode=sig_mode)
             if brand_key and not sig_ok:
