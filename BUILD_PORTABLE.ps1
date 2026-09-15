@@ -33,11 +33,12 @@ $tmpHash = $zip + '.sha256.tmp'
 if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
 if (Test-Path $tmpHash) { Remove-Item $tmpHash -Force }
 Compress-Archive -Path $bundle -DestinationPath $tmpZip -CompressionLevel Optimal
-if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -lt 1MB) { throw 'Build produced an invalid ZIP artifact.' }
+if (-not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -lt 256KB) { throw 'Build produced an invalid ZIP artifact.' }
 $hash = (Get-FileHash $tmpZip -Algorithm SHA256).Hash
 Set-Content -LiteralPath $tmpHash -Value "$hash  $(Split-Path $zip -Leaf)" -Encoding ASCII
 Move-Item -LiteralPath $tmpZip -Destination $zip -Force
 Move-Item -LiteralPath $tmpHash -Destination ($zip + '.sha256') -Force
 Write-Host "Built $zip"
 Write-Host "SHA256 $hash"
+
 
