@@ -96,7 +96,12 @@ class ProfileReliabilityTests(unittest.TestCase):
         captured = {}
         def fake_spin(content, key, **kwargs):
             captured.update(kwargs)
-            return "Bạn cần tìm homestay Huế?\n\nUMEE Homestay có bãi đỗ ô tô miễn phí trước cửa.\n\nInbox để hỏi phòng nhé 🌿", "model-test"
+            return (
+                "Bạn cần tìm homestay Huế cho lịch trình sắp tới? 🌿\n\n"
+                "UMEE Homestay có bãi đỗ ô tô miễn phí ngay trước cửa, thuận tiện khi bạn chủ động phương tiện.\n\n"
+                "Không gian nghỉ riêng tư cùng hình thức self check-in/out 24/7 giúp kế hoạch nhận phòng linh hoạt hơn.\n\n"
+                "Bạn muốn xem loại phòng phù hợp? Hãy inbox để nhận thông tin chi tiết nhé!"
+            ), "model-test"
         with patch("ai_spinner.spin_content_gemini_with_model", side_effect=fake_spin):
             result = ai_spinner.generate_unique_variant_with_evidence(
                 "Đang tìm homestay Huế, nhắn mình để hỏi phòng.",
@@ -108,6 +113,16 @@ class ProfileReliabilityTests(unittest.TestCase):
         self.assertEqual(result["key_pool_size"], 1)
         self.assertEqual(result["keys_attempted"], 1)
         self.assertEqual(result["mode"], "gemini")
+        self.assertTrue(ai_spinner._campaign_quality_accepts(
+            result["content"].split("#UMEEHomestay", 1)[0].strip(), "UMEE Homestay"
+        ))
+
+    def test_campaign_quality_rejects_truncated_copy(self):
+        truncated = (
+            "Bạn đang tìm homestay Huế?\n\nUMEE Homestay có không gian riêng tư.\n\n"
+            "Nội dung đang được giới thiệu nhưng câu cuối bị"
+        )
+        self.assertFalse(ai_spinner._campaign_quality_accepts(truncated, "UMEE Homestay"))
 
     def test_hub_numbers_are_allowed_only_when_context_is_supplied(self):
         original = "UMEE Homestay tại Huế. Inbox để hỏi phòng."

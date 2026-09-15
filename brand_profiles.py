@@ -5,7 +5,7 @@ import hashlib
 
 BRAND_SIGNATURES = {
     "umee": {
-        "brandName": "Umee Homestay",
+        "brandName": "UMEE Homestay",
         "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📘 Page: https://www.facebook.com/umeehomestay · https://www.facebook.com/lacasahomestayinvietnam\n🌐 Web: https://www.umeehomestay.com/Home\n🎵 TikTok: https://www.tiktok.com/@umee.homestay\n📞 Hotline: 0905 555 317 · Zalo: https://zalo.me/0905555317\n📍 Maps: https://maps.app.goo.gl/YvhzxAjYBoJ2QqUX6\n━━━━━━━━━━━━━━━━━━━━",
     },
     "lacasa": {
@@ -16,7 +16,7 @@ BRAND_SIGNATURES = {
 
 BRAND_SAFE_SIGNATURES = {
     "umee": {
-        "brandName": "Umee Homestay",
+        "brandName": "UMEE Homestay",
         "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📞 Hotline / Zalo: 0905 555 317\n📘 Fanpage: fb.com/umeehomestay\n📩 Inbox Fanpage hoặc Zalo để nhận thông tin chi tiết.\n━━━━━━━━━━━━━━━━━━━━",
     },
     "lacasa": {
@@ -27,8 +27,8 @@ BRAND_SAFE_SIGNATURES = {
 
 BRAND_LINKLESS_SIGNATURES = {
     "umee": {
-        "brandName": "Umee Homestay",
-        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📍 Homestay tại Huế\n📩 Tìm Umee Homestay trên Facebook hoặc inbox để nhận thông tin."
+        "brandName": "UMEE Homestay",
+        "signatureText": "🏡 UMEE HOMESTAY × LACASA HOMESTAY\n📍 Homestay tại Huế\n📩 Tìm UMEE Homestay trên Facebook hoặc inbox để nhận thông tin."
     },
     "lacasa": {
         "brandName": "Lacasa Homestay",

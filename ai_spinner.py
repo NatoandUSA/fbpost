@@ -240,6 +240,22 @@ def _content_quality_score(text: str, brand_name: str = "") -> int:
     return score
 
 
+def _campaign_quality_accepts(text: str, brand_name: str = "") -> bool:
+    """Reject bland, truncated, or non-actionable campaign copy."""
+    value = (text or "").strip()
+    low = value.casefold()
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", value) if p.strip()]
+    return (
+        240 <= len(value) <= 900
+        and 4 <= len(paragraphs) <= 8
+        and (not brand_name or brand_name.casefold() in low)
+        and "homestay huế" in low
+        and any(token in low for token in ("inbox", "nhắn", "liên hệ", "xem phòng", "hỏi phòng"))
+        and value[-1] in ".!?…🌿✨🏡📩📥"
+        and _content_quality_score(value, brand_name) >= 9
+    )
+
+
 def clean_ai_output(text: str) -> str:
     """Lọc sạch lời mở đầu/suy nghĩ của Gemini và bỏ dấu markdown ** để hiển thị sạch trên Facebook."""
     if not text:
@@ -342,13 +358,15 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
             score = _content_quality_score(spun_text, brand_name)
             if spun_text and _preserves_core_info(
                 content, spun_text, brand_key=brand_key, truth_context=truth_context
-            ) and (not truth_context or score >= 7):
+            ) and (not truth_context or _campaign_quality_accepts(spun_text, brand_name)):
                 valid.append((score, spun_text))
         if valid:
             valid.sort(key=lambda item: item[0], reverse=True)
             return valid[0][1], model
+        # A model can return a grammatically truncated or bland candidate even
+        # with HTTP 200. Try the configured fallback model before rotating key.
         if res_data.get("candidates"):
-            raise ValueError("Gemini output làm mất hoặc thêm dữ liệu ngoài nguồn đã duyệt")
+            continue
     raise RuntimeError("Không có Gemini model được cấu hình nào trả về nội dung hợp lệ.")
 
 
