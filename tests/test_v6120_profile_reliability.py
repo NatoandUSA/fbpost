@@ -105,7 +105,7 @@ class ProfileReliabilityTests(unittest.TestCase):
         with patch("ai_spinner.spin_content_gemini_with_model", side_effect=fake_spin):
             result = ai_spinner.generate_unique_variant_with_evidence(
                 "Đang tìm homestay Huế, nhắn mình để hỏi phòng.",
-                ["key-111111111111"], brand_key="umee", include_signature=True,
+                ["campaign-key-999999999999"], brand_key="umee", include_signature=True,
                 signature_mode="linkless",
             )
         self.assertIn("SH44", captured["truth_context"])
