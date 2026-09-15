@@ -62,14 +62,14 @@ try:
     from services.job_manager import JobManager
     _reconciled = JobManager().reconcile_on_startup()
     if _reconciled:
-        print(f"[JobManager] Đã khôi phục {_reconciled} tiến trình dở dang.")
+        print(f"[JobManager] ÄÃ£ khÃ´i phá»¥c {_reconciled} tiáº¿n trÃ¬nh dá»Ÿ dang.")
 except Exception as _jm_err:
     print(f"Warning: JobManager init error: {_jm_err}")
 
 try:
     _queue_recovered = CampaignRepository().reconcile_processing_queue()
     if _queue_recovered:
-        print(f"[PublicationQueue] Đã chuyển {_queue_recovered} mục processing bị gián đoạn sang chưa xác minh để đối soát; không tự retry.")
+        print(f"[PublicationQueue] ÄÃ£ chuyá»ƒn {_queue_recovered} má»¥c processing bá»‹ giÃ¡n Ä‘oáº¡n sang chÆ°a xÃ¡c minh Ä‘á»ƒ Ä‘á»‘i soÃ¡t; khÃ´ng tá»± retry.")
 except Exception as _queue_err:
     print(f"Warning: Publication queue reconciliation error: {_queue_err}")
 
@@ -146,7 +146,7 @@ def load_queue():
         try:
             return CampaignRepository().list_queue()
         except Exception as db_err:
-            print(f"⚠️ Không thể đọc publication queue từ SQLite: {db_err}")
+            print(f"âš ï¸ KhÃ´ng thá»ƒ Ä‘á»c publication queue tá»« SQLite: {db_err}")
     if os.path.exists(QUEUE_FILE):
         try:
             with open(QUEUE_FILE, "r", encoding="utf-8") as f:
@@ -178,7 +178,7 @@ def load_campaigns():
         try:
             return CampaignRepository().list_campaigns()
         except Exception as db_err:
-            print(f"⚠️ Không thể đọc campaigns từ SQLite: {db_err}")
+            print(f"âš ï¸ KhÃ´ng thá»ƒ Ä‘á»c campaigns tá»« SQLite: {db_err}")
     if os.path.exists(CAMPAIGNS_FILE):
         try:
             with open(CAMPAIGNS_FILE, "r", encoding="utf-8") as f:
@@ -251,7 +251,7 @@ def parse_queue_date(value, field_name="date"):
     try:
         return datetime.strptime(raw, "%Y-%m-%d").date().isoformat()
     except ValueError as exc:
-        raise ValueError(f"{field_name} phải có định dạng YYYY-MM-DD.") from exc
+        raise ValueError(f"{field_name} pháº£i cÃ³ Ä‘á»‹nh dáº¡ng YYYY-MM-DD.") from exc
 
 def campaign_summary(campaign, queue):
     items = [item for item in queue if item.get("campaign_id") == campaign.get("id")]
@@ -357,14 +357,14 @@ def api_settings():
         save_config(config)
         return jsonify({
             "success": True,
-            "message": "Đã lưu cấu hình thành công!",
+            "message": "ÄÃ£ lÆ°u cáº¥u hÃ¬nh thÃ nh cÃ´ng!",
             "settings": {
                 "gpm_api_url": config.get("gpm_api_url", "http://127.0.0.1:19995"),
                 "delay_preset": config.get("delay_preset", "safe"),
                 "delay_min": config.get("delay_min", 300),
                 "delay_max": config.get("delay_max", 600),
                 "auto_join_groups": config.get("auto_join_groups", False),
-                "group_keywords": config.get("group_keywords", "Homestay Huế, Du lịch Huế"),
+                "group_keywords": config.get("group_keywords", "Homestay Huáº¿, Du lá»‹ch Huáº¿"),
             }
         })
 
@@ -382,7 +382,7 @@ def api_settings():
         "delay_min": config.get("delay_min", 300),
         "delay_max": config.get("delay_max", 600),
         "auto_join_groups": config.get("auto_join_groups", False),
-        "group_keywords": config.get("group_keywords", "Homestay Huế, Du lịch Huế"),
+        "group_keywords": config.get("group_keywords", "Homestay Huáº¿, Du lá»‹ch Huáº¿"),
     })
 
 
@@ -466,14 +466,14 @@ def create_group():
     group_type = data.get("group_type", "unknown")
     member_count = normalize_member_count(data.get("member_count"))
     if not valid_group_url(url):
-        return jsonify({"error": "Group link phải là URL HTTPS facebook.com hợp lệ."}), 400
+        return jsonify({"error": "Group link pháº£i lÃ  URL HTTPS facebook.com há»£p lá»‡."}), 400
     if len(name) > 120 or group_type not in GROUP_TYPES:
-        return jsonify({"error": "Tên hoặc loại Group không hợp lệ."}), 400
+        return jsonify({"error": "TÃªn hoáº·c loáº¡i Group khÃ´ng há»£p lá»‡."}), 400
     if data.get("member_count") not in (None, "") and member_count is None:
-        return jsonify({"error": "Số thành viên phải là số từ 0 đến 2 tỷ."}), 400
+        return jsonify({"error": "Sá»‘ thÃ nh viÃªn pháº£i lÃ  sá»‘ tá»« 0 Ä‘áº¿n 2 tá»·."}), 400
     groups = load_json_list(GROUPS_FILE)
     if any(entry.get("url") == url for entry in groups):
-        return jsonify({"error": "Group link này đã có trong danh sách."}), 409
+        return jsonify({"error": "Group link nÃ y Ä‘Ã£ cÃ³ trong danh sÃ¡ch."}), 409
     group = {
         "id": uuid.uuid4().hex[:12],
         "url": url,
@@ -497,22 +497,22 @@ def update_group(group_id):
     groups = load_json_list(GROUPS_FILE)
     group = next((entry for entry in groups if entry.get("id") == group_id), None)
     if not group:
-        return jsonify({"error": "Không tìm thấy Group."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y Group."}), 404
     status = data.get("status", group.get("status", "not_requested"))
     rating = data.get("rating", group.get("rating", 0))
     notes = data.get("notes", group.get("notes", ""))
     group_type = data.get("group_type", group.get("group_type", "unknown"))
     member_count = normalize_member_count(data.get("member_count", group.get("member_count")))
     if status not in GROUP_STATUSES or group_type not in GROUP_TYPES:
-        return jsonify({"error": "Trạng thái Group không hợp lệ."}), 400
+        return jsonify({"error": "Tráº¡ng thÃ¡i Group khÃ´ng há»£p lá»‡."}), 400
     try:
         rating = int(rating)
     except (TypeError, ValueError):
-        return jsonify({"error": "Điểm đánh giá không hợp lệ."}), 400
+        return jsonify({"error": "Äiá»ƒm Ä‘Ã¡nh giÃ¡ khÃ´ng há»£p lá»‡."}), 400
     if not 0 <= rating <= 5 or not isinstance(notes, str) or len(notes) > 2_000:
-        return jsonify({"error": "Điểm phải từ 0 đến 5 và ghi chú tối đa 2.000 ký tự."}), 400
+        return jsonify({"error": "Äiá»ƒm pháº£i tá»« 0 Ä‘áº¿n 5 vÃ  ghi chÃº tá»‘i Ä‘a 2.000 kÃ½ tá»±."}), 400
     if data.get("member_count", group.get("member_count")) not in (None, "") and member_count is None:
-        return jsonify({"error": "Số thành viên phải là số từ 0 đến 2 tỷ."}), 400
+        return jsonify({"error": "Sá»‘ thÃ nh viÃªn pháº£i lÃ  sá»‘ tá»« 0 Ä‘áº¿n 2 tá»·."}), 400
     group.update({"status": status, "rating": rating, "notes": notes.strip(), "group_type": group_type, "member_count": member_count, "updated_at": now_iso()})
     save_json_list(GROUPS_FILE, groups, "group-registry-")
     return jsonify(group)
@@ -523,7 +523,7 @@ def delete_group(group_id):
     groups = load_json_list(GROUPS_FILE)
     remaining = [entry for entry in groups if entry.get("id") != group_id]
     if len(remaining) == len(groups):
-        return jsonify({"error": "Không tìm thấy Group."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y Group."}), 404
     save_json_list(GROUPS_FILE, remaining, "group-registry-")
     return jsonify({"success": True})
 
@@ -546,7 +546,7 @@ def api_sync_groups_from_sheet():
         csv_url = to_csv_export_url(raw_sheet_url)
         csv_text = fetch_sheet_csv(csv_url)
     except Exception as e:
-        return jsonify({"success": False, "error": f"Lỗi tải Google Sheet: {str(e)}"}), 400
+        return jsonify({"success": False, "error": f"Lá»—i táº£i Google Sheet: {str(e)}"}), 400
 
     parsed = parse_group_sheet(csv_text, filter_active_only=filter_active)
     if not parsed.get("success"):
@@ -559,7 +559,7 @@ def api_sync_groups_from_sheet():
             app.logger.exception("Google Sheet parsed but registry synchronization failed")
             return jsonify({
                 "success": False,
-                "error": f"Đã đọc Google Sheet nhưng không thể lưu kho Group: {str(se)}",
+                "error": f"ÄÃ£ Ä‘á»c Google Sheet nhÆ°ng khÃ´ng thá»ƒ lÆ°u kho Group: {str(se)}",
                 "sheet": {
                     "total_rows": parsed.get("total_rows", 0),
                     "unique_count": parsed.get("unique_count", 0),
@@ -576,7 +576,7 @@ def api_get_sheet_config():
     from services.sheet_sync import DEFAULT_SHEET_URL
     return jsonify({
         "default_sheet_url": DEFAULT_SHEET_URL,
-        "sample_columns": ["STT", "Group Link", "Group Name", "Nhóm Public/Private", "Số thành viên làm tròn lên", "Đăng bài tự động (Y/N)"]
+        "sample_columns": ["STT", "Group Link", "Group Name", "NhÃ³m Public/Private", "Sá»‘ thÃ nh viÃªn lÃ m trÃ²n lÃªn", "ÄÄƒng bÃ i tá»± Ä‘á»™ng (Y/N)"]
     })
 
 
@@ -603,13 +603,13 @@ def create_manual_group_queue_item():
     planned_at = data.get("planned_at", "").strip()
     group = next((entry for entry in load_json_list(GROUPS_FILE) if entry.get("id") == group_id), None)
     if not group:
-        return jsonify({"error": "Hãy chọn Group trong registry."}), 400
+        return jsonify({"error": "HÃ£y chá»n Group trong registry."}), 400
     if not profile_id or len(profile_id) > 100:
-        return jsonify({"error": "Hãy chọn profile phụ trách."}), 400
+        return jsonify({"error": "HÃ£y chá»n profile phá»¥ trÃ¡ch."}), 400
     if not 15 <= len(content) <= 60_000:
-        return jsonify({"error": "Nội dung cần từ 15 đến 60.000 ký tự."}), 400
+        return jsonify({"error": "Ná»™i dung cáº§n tá»« 15 Ä‘áº¿n 60.000 kÃ½ tá»±."}), 400
     if len(planned_at) > 40:
-        return jsonify({"error": "Thời điểm dự kiến không hợp lệ."}), 400
+        return jsonify({"error": "Thá»i Ä‘iá»ƒm dá»± kiáº¿n khÃ´ng há»£p lá»‡."}), 400
     item = {
         "id": uuid.uuid4().hex[:12],
         "group_id": group["id"],
@@ -637,13 +637,13 @@ def update_manual_group_queue_item(item_id, action):
         "skip": ({"planned", "ready"}, "skipped"),
     }
     if action not in transitions:
-        return jsonify({"error": "Thao tác không hợp lệ."}), 400
+        return jsonify({"error": "Thao tÃ¡c khÃ´ng há»£p lá»‡."}), 400
     items, item = get_manual_group_queue_item(item_id)
     if not item:
-        return jsonify({"error": "Không tìm thấy mục trong hàng đợi."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y má»¥c trong hÃ ng Ä‘á»£i."}), 404
     expected, next_state = transitions[action]
     if (isinstance(expected, set) and item.get("state") not in expected) or (not isinstance(expected, set) and item.get("state") != expected):
-        return jsonify({"error": "Trạng thái hiện tại không cho phép thao tác này."}), 409
+        return jsonify({"error": "Tráº¡ng thÃ¡i hiá»‡n táº¡i khÃ´ng cho phÃ©p thao tÃ¡c nÃ y."}), 409
     item["state"] = next_state
     item["updated_at"] = now_iso()
     item.setdefault("audit", []).append({"at": now_iso(), "event": action})
@@ -666,9 +666,9 @@ def create_campaign():
     brand = data.get("brand", "").strip()
     target = data.get("target", "").strip()
     if not name or len(name) > 120:
-        return jsonify({"error": "Tên chiến dịch là bắt buộc và tối đa 120 ký tự."}), 400
+        return jsonify({"error": "TÃªn chiáº¿n dá»‹ch lÃ  báº¯t buá»™c vÃ  tá»‘i Ä‘a 120 kÃ½ tá»±."}), 400
     if len(brand) > 80 or len(target) > 2_000:
-        return jsonify({"error": "Thông tin chiến dịch vượt giới hạn cho phép."}), 400
+        return jsonify({"error": "ThÃ´ng tin chiáº¿n dá»‹ch vÆ°á»£t giá»›i háº¡n cho phÃ©p."}), 400
     campaign = {
         "id": uuid.uuid4().hex[:12],
         "name": name,
@@ -689,7 +689,7 @@ def toggle_campaign(campaign_id):
     campaigns = load_campaigns()
     campaign = next((entry for entry in campaigns if entry.get("id") == campaign_id), None)
     if not campaign:
-        return jsonify({"error": "Không tìm thấy chiến dịch."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y chiáº¿n dá»‹ch."}), 404
     campaign["state"] = "paused" if campaign.get("state") == "active" else "active"
     campaign["updated_at"] = now_iso()
     campaign.setdefault("audit", []).append({"at": now_iso(), "event": campaign["state"]})
@@ -700,9 +700,9 @@ def toggle_campaign(campaign_id):
 def approve_campaign_drafts(campaign_id):
     campaign = next((entry for entry in load_campaigns() if entry.get("id") == campaign_id), None)
     if not campaign:
-        return jsonify({"error": "Không tìm thấy chiến dịch."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y chiáº¿n dá»‹ch."}), 404
     if campaign.get("state") != "active":
-        return jsonify({"error": "Chỉ có thể duyệt mục thuộc chiến dịch đang hoạt động."}), 409
+        return jsonify({"error": "Chá»‰ cÃ³ thá»ƒ duyá»‡t má»¥c thuá»™c chiáº¿n dá»‹ch Ä‘ang hoáº¡t Ä‘á»™ng."}), 409
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         approved = CampaignRepository().approve_campaign_drafts_atomic(campaign_id)
         queue = CampaignRepository().list_queue()
@@ -726,16 +726,16 @@ def preflight_post():
     content = data.get("content", "").strip()
     issues = []
     if not target:
-        issues.append("Chưa chọn target.")
+        issues.append("ChÆ°a chá»n target.")
     if not content:
-        issues.append("Nội dung đang trống.")
+        issues.append("Ná»™i dung Ä‘ang trá»‘ng.")
     if len(content) > 60_000:
-        issues.append("Nội dung vượt giới hạn 60.000 ký tự.")
+        issues.append("Ná»™i dung vÆ°á»£t giá»›i háº¡n 60.000 kÃ½ tá»±.")
     if content and len(content) < 15:
-        issues.append("Nội dung quá ngắn; nên kiểm tra lại trước khi đăng.")
+        issues.append("Ná»™i dung quÃ¡ ngáº¯n; nÃªn kiá»ƒm tra láº¡i trÆ°á»›c khi Ä‘Äƒng.")
     duplicate = any(item.get("target") == target and item.get("content") == content and item.get("state") != "cancelled" for item in load_queue())
     if duplicate:
-        issues.append("Nội dung tương tự đã tồn tại trong hàng đợi.")
+        issues.append("Ná»™i dung tÆ°Æ¡ng tá»± Ä‘Ã£ tá»“n táº¡i trong hÃ ng Ä‘á»£i.")
     return jsonify({"ready": not issues, "issues": issues})
 
 @app.route('/api/queue', methods=['GET'])
@@ -756,7 +756,7 @@ def get_queue():
         limit = max(1, min(int(request.args.get("limit", 500)), 1000))
         offset = max(0, int(request.args.get("offset", 0)))
     except ValueError:
-        return jsonify({"error": "limit/offset không hợp lệ"}), 400
+        return jsonify({"error": "limit/offset khÃ´ng há»£p lá»‡"}), 400
     if active:
         items = [i for i in items if i.get("state") in ("draft", "approved", "processing", "reconciling")]
     elif state == "reconcile":
@@ -807,17 +807,17 @@ def create_queue_item():
     campaign_id = data.get("campaign_id", "").strip()
     allow_duplicate = bool(data.get("allow_duplicate", False))
     if not target or not content:
-        return jsonify({"error": "Target và nội dung là bắt buộc."}), 400
+        return jsonify({"error": "Target vÃ  ná»™i dung lÃ  báº¯t buá»™c."}), 400
     if len(target) > 2_000 or len(content) > 60_000:
-        return jsonify({"error": "Dữ liệu vượt giới hạn cho phép."}), 400
+        return jsonify({"error": "Dá»¯ liá»‡u vÆ°á»£t giá»›i háº¡n cho phÃ©p."}), 400
     if image_url and not is_valid_http_url(image_url):
-        return jsonify({"error": "Link ảnh phải là HTTPS hợp lệ."}), 400
+        return jsonify({"error": "Link áº£nh pháº£i lÃ  HTTPS há»£p lá»‡."}), 400
     if campaign_id:
         campaign = next((entry for entry in load_campaigns() if entry.get("id") == campaign_id), None)
         if not campaign:
-            return jsonify({"error": "Chiến dịch không tồn tại."}), 400
+            return jsonify({"error": "Chiáº¿n dá»‹ch khÃ´ng tá»“n táº¡i."}), 400
         if campaign.get("state") != "active":
-            return jsonify({"error": "Chiến dịch đang tạm dừng."}), 409
+            return jsonify({"error": "Chiáº¿n dá»‹ch Ä‘ang táº¡m dá»«ng."}), 409
     queue = load_queue()
     if not allow_duplicate:
         canonical_target = normalize_target_url(target)
@@ -828,7 +828,7 @@ def create_queue_item():
             and i.get("state") in ("draft", "approved", "pending")
         ), None)
         if existing:
-            return jsonify({"error": f"Bài viết với mục tiêu này đã có trong hàng đợi ({existing.get('state')}).", "duplicate": True, "existing_id": existing.get("id")}), 409
+            return jsonify({"error": f"BÃ i viáº¿t vá»›i má»¥c tiÃªu nÃ y Ä‘Ã£ cÃ³ trong hÃ ng Ä‘á»£i ({existing.get('state')}).", "duplicate": True, "existing_id": existing.get("id")}), 409
     item = {
         "id": uuid.uuid4().hex[:12],
         "target": target,
@@ -842,7 +842,7 @@ def create_queue_item():
     }
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         if not CampaignRepository().insert_queue_item(item):
-            return jsonify({"error": "Không thể tạo mục hàng đợi."}), 409
+            return jsonify({"error": "KhÃ´ng thá»ƒ táº¡o má»¥c hÃ ng Ä‘á»£i."}), 409
         # Compatibility mirror only after authoritative DB commit.
         _write_queue_json(CampaignRepository().list_queue())
     else:
@@ -855,13 +855,13 @@ def approve_queue_item(item_id):
     queue = load_queue()
     item = next((entry for entry in queue if entry.get("id") == item_id), None)
     if not item:
-        return jsonify({"error": "Không tìm thấy mục trong hàng đợi."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y má»¥c trong hÃ ng Ä‘á»£i."}), 404
     if item.get("state") != "draft":
-        return jsonify({"error": "Chỉ mục nháp mới có thể được duyệt."}), 409
+        return jsonify({"error": "Chá»‰ má»¥c nhÃ¡p má»›i cÃ³ thá»ƒ Ä‘Æ°á»£c duyá»‡t."}), 409
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         updated = CampaignRepository().transition_queue_item(item_id, ("draft",), "approved", {"approved_at": now_iso(), "error": None}, "approved")
         if not updated:
-            return jsonify({"error": "Trạng thái mục đã thay đổi; hãy làm mới hàng đợi."}), 409
+            return jsonify({"error": "Tráº¡ng thÃ¡i má»¥c Ä‘Ã£ thay Ä‘á»•i; hÃ£y lÃ m má»›i hÃ ng Ä‘á»£i."}), 409
         _write_queue_json(CampaignRepository().list_queue())
         return jsonify(updated)
     item["state"] = "approved"
@@ -873,7 +873,7 @@ def approve_queue_item(item_id):
 @app.route('/api/queue/<item_id>/retry', methods=['POST'])
 def retry_queue_item(item_id):
     updated=CampaignRepository().transition_queue_item(item_id,("failed",),"approved",{"error":None,"approved_at":now_iso()},"manual_retry_approved")
-    if not updated: return jsonify({"error":"Chỉ bài lỗi xác định trước submit mới được thử lại."}),409
+    if not updated: return jsonify({"error":"Chá»‰ bÃ i lá»—i xÃ¡c Ä‘á»‹nh trÆ°á»›c submit má»›i Ä‘Æ°á»£c thá»­ láº¡i."}),409
     _write_queue_json(CampaignRepository().list_queue()); return jsonify(updated)
 
 @app.route('/api/queue/<item_id>/cancel', methods=['POST'])
@@ -881,13 +881,13 @@ def cancel_queue_item(item_id):
     queue = load_queue()
     item = next((entry for entry in queue if entry.get("id") == item_id), None)
     if not item:
-        return jsonify({"error": "Không tìm thấy mục trong hàng đợi."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y má»¥c trong hÃ ng Ä‘á»£i."}), 404
     if item.get("state") == "published":
-        return jsonify({"error": "Không thể hủy mục đã đăng."}), 409
+        return jsonify({"error": "KhÃ´ng thá»ƒ há»§y má»¥c Ä‘Ã£ Ä‘Äƒng."}), 409
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         updated = CampaignRepository().transition_queue_item(item_id, ("draft", "approved", "pending", "unverified"), "cancelled", {}, "cancelled")
         if not updated:
-            return jsonify({"error": "Không thể hủy mục ở trạng thái hiện tại."}), 409
+            return jsonify({"error": "KhÃ´ng thá»ƒ há»§y má»¥c á»Ÿ tráº¡ng thÃ¡i hiá»‡n táº¡i."}), 409
         _write_queue_json(CampaignRepository().list_queue())
         return jsonify(updated)
     item["state"] = "cancelled"
@@ -920,7 +920,7 @@ def cancel_all_queue():
     data = json_body()
     states = data.get("states") or ["approved", "draft"]
     if not isinstance(states, list) or not states or any(state not in ("approved", "draft") for state in states):
-        return jsonify({"error": "Chỉ được hủy hàng loạt bài ở trạng thái approved hoặc draft."}), 400
+        return jsonify({"error": "Chá»‰ Ä‘Æ°á»£c há»§y hÃ ng loáº¡t bÃ i á»Ÿ tráº¡ng thÃ¡i approved hoáº·c draft."}), 400
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         cancelled = CampaignRepository().cancel_all_queue(states=tuple(states))
         _write_queue_json(CampaignRepository().list_queue())
@@ -942,7 +942,7 @@ def clear_queue_items():
     data = json_body()
     scope = (data.get("scope") or "").strip().lower()
     if scope not in ("all", "cancelled_or_failed", "date", "approved", "draft"):
-        return jsonify({"error": "Tham số scope không hợp lệ. Cần một trong: all, cancelled_or_failed, date, approved, draft."}), 400
+        return jsonify({"error": "Tham sá»‘ scope khÃ´ng há»£p lá»‡. Cáº§n má»™t trong: all, cancelled_or_failed, date, approved, draft."}), 400
     target_date = data.get("date")
     try:
         date_from = parse_queue_date(data.get("date_from") or target_date, "date_from")
@@ -950,9 +950,9 @@ def clear_queue_items():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     if scope == "date" and not date_from:
-        return jsonify({"error": "Scope date yêu cầu date hoặc date_from hợp lệ."}), 400
+        return jsonify({"error": "Scope date yÃªu cáº§u date hoáº·c date_from há»£p lá»‡."}), 400
     if date_from and date_to and date_from > date_to:
-        return jsonify({"error": "date_from không được sau date_to."}), 400
+        return jsonify({"error": "date_from khÃ´ng Ä‘Æ°á»£c sau date_to."}), 400
 
     if _is_canonical_runtime_file(QUEUE_FILE, "publication_queue.json"):
         repo = CampaignRepository()
@@ -1033,9 +1033,9 @@ def generate_content():
     data = json_body()
     prompt = data.get("prompt", "")
     if not proxy_url or not app_key:
-        return jsonify({"error": "AI chưa được cấu hình. Hãy đặt CONTENT_AI_PROXY_URL và CONTENT_AI_APP_KEY."}), 503
+        return jsonify({"error": "AI chÆ°a Ä‘Æ°á»£c cáº¥u hÃ¬nh. HÃ£y Ä‘áº·t CONTENT_AI_PROXY_URL vÃ  CONTENT_AI_APP_KEY."}), 503
     if not is_valid_http_url(proxy_url) or not isinstance(prompt, str) or not prompt or len(prompt) > 30_000:
-        return jsonify({"error": "Yêu cầu tạo nội dung không hợp lệ."}), 400
+        return jsonify({"error": "YÃªu cáº§u táº¡o ná»™i dung khÃ´ng há»£p lá»‡."}), 400
     try:
         response = requests.post(
             proxy_url,
@@ -1046,24 +1046,24 @@ def generate_content():
         response.raise_for_status()
         return jsonify(response.json())
     except (requests.RequestException, ValueError):
-        return jsonify({"error": "Không thể kết nối dịch vụ AI. Hãy thử lại sau."}), 502
+        return jsonify({"error": "KhÃ´ng thá»ƒ káº¿t ná»‘i dá»‹ch vá»¥ AI. HÃ£y thá»­ láº¡i sau."}), 502
 
 @app.errorhandler(RequestEntityTooLarge)
 def file_too_large(_error):
-    return jsonify({"error": "Ảnh tối đa 10 MB."}), 413
+    return jsonify({"error": "áº¢nh tá»‘i Ä‘a 10 MB."}), 413
 
 # ---- Image Upload Endpoint for Manual Posting ----
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     if 'image' not in request.files:
-        return jsonify({"error": "Không tìm thấy tệp gửi lên!"}), 400
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y tá»‡p gá»­i lÃªn!"}), 400
     file = request.files['image']
     if file.filename == '':
-        return jsonify({"error": "Chưa chọn tệp ảnh!"}), 400
+        return jsonify({"error": "ChÆ°a chá»n tá»‡p áº£nh!"}), 400
     extension = Path(secure_filename(file.filename)).suffix.lower()
     if extension not in ALLOWED_IMAGE_EXTENSIONS or not file.mimetype.startswith("image/"):
-        return jsonify({"error": "Chỉ nhận ảnh JPG, PNG, GIF hoặc WEBP."}), 400
+        return jsonify({"error": "Chá»‰ nháº­n áº£nh JPG, PNG, GIF hoáº·c WEBP."}), 400
 
     import uuid
     UPLOAD_DIR.mkdir(exist_ok=True)
@@ -1088,14 +1088,14 @@ def vault_payload(data, existing=None):
     date_added = valid_vault_date(data.get("date_added", existing.get("date_added", "") if existing else ""))
     password_changed_at = valid_vault_date(data.get("password_changed_at", existing.get("password_changed_at", "") if existing else ""))
     if not all(isinstance(value, str) for value in (platform, account_name, email, password, notes)):
-        return None, "Dữ liệu tài khoản không hợp lệ."
+        return None, "Dá»¯ liá»‡u tÃ i khoáº£n khÃ´ng há»£p lá»‡."
     values = [platform.strip(), account_name.strip(), email.strip(), password, notes.strip()]
     if not values[0] or not values[1] or not values[2]:
-        return None, "Nền tảng, tên gợi nhớ và email/tên đăng nhập là bắt buộc."
+        return None, "Ná»n táº£ng, tÃªn gá»£i nhá»› vÃ  email/tÃªn Ä‘Äƒng nháº­p lÃ  báº¯t buá»™c."
     if len(values[0]) > VAULT_PLATFORM_LIMIT or any(len(value) > VAULT_TEXT_LIMIT for value in values[1:]):
-        return None, "Một hoặc nhiều trường vượt giới hạn cho phép."
+        return None, "Má»™t hoáº·c nhiá»u trÆ°á»ng vÆ°á»£t giá»›i háº¡n cho phÃ©p."
     if date_added is None or password_changed_at is None:
-        return None, "Ngày cần theo định dạng YYYY-MM-DD."
+        return None, "NgÃ y cáº§n theo Ä‘á»‹nh dáº¡ng YYYY-MM-DD."
     return {
         "platform": values[0], "account_name": values[1], "email": values[2],
         "password": password, "notes": values[4], "date_added": date_added,
@@ -1128,7 +1128,7 @@ def create_vault_account():
         return jsonify({"error": error}), 400
     entry = {
         "id": uuid.uuid4().hex[:12], **fields, "created_at": now_iso(), "updated_at": now_iso(),
-        "password_history": ([{"at": now_iso(), "event": "Đã nhập mật khẩu"}] if fields["password"] else []),
+        "password_history": ([{"at": now_iso(), "event": "ÄÃ£ nháº­p máº­t kháº©u"}] if fields["password"] else []),
     }
     entries = load_json_list(VAULT_FILE)
     entries.insert(0, entry)
@@ -1141,7 +1141,7 @@ def update_vault_account(entry_id):
     entries = load_json_list(VAULT_FILE)
     entry = next((item for item in entries if item.get("id") == entry_id), None)
     if not entry:
-        return jsonify({"error": "Không tìm thấy tài khoản."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n."}), 404
     fields, error = vault_payload(json_body(), entry)
     if error:
         return jsonify({"error": error}), 400
@@ -1150,7 +1150,7 @@ def update_vault_account(entry_id):
     entry["updated_at"] = now_iso()
     if password_changed:
         entry["password_changed_at"] = fields["password_changed_at"] or datetime.now().date().isoformat()
-        entry.setdefault("password_history", []).insert(0, {"at": now_iso(), "event": "Đã cập nhật mật khẩu"})
+        entry.setdefault("password_history", []).insert(0, {"at": now_iso(), "event": "ÄÃ£ cáº­p nháº­t máº­t kháº©u"})
     save_json_list(VAULT_FILE, entries, "account-vault-")
     return jsonify(sanitize_vault_entry(entry))
 
@@ -1160,7 +1160,7 @@ def delete_vault_account(entry_id):
     entries = load_json_list(VAULT_FILE)
     remaining = [item for item in entries if item.get("id") != entry_id]
     if len(remaining) == len(entries):
-        return jsonify({"error": "Không tìm thấy tài khoản."}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n."}), 404
     save_json_list(VAULT_FILE, remaining, "account-vault-")
     return jsonify({"success": True})
 
@@ -1194,13 +1194,13 @@ def add_account():
     proxy = data.get('proxy', '').strip()
     
     if not name or len(name) > 100:
-        return jsonify({"error": "Vui lòng nhập tên tài khoản!"}), 400
+        return jsonify({"error": "Vui lÃ²ng nháº­p tÃªn tÃ i khoáº£n!"}), 400
     if acc_type not in {"local", "gpm"}:
-        return jsonify({"error": "Loại tài khoản không hợp lệ."}), 400
+        return jsonify({"error": "Loáº¡i tÃ i khoáº£n khÃ´ng há»£p lá»‡."}), 400
     if acc_type == "gpm" and not profile_id:
-        return jsonify({"error": "Profile GPM cần Copy ID từ ứng dụng GPM."}), 400
+        return jsonify({"error": "Profile GPM cáº§n Copy ID tá»« á»©ng dá»¥ng GPM."}), 400
     if len(profile_id) > 200 or len(proxy) > 300:
-        return jsonify({"error": "Thông tin profile hoặc proxy quá dài."}), 400
+        return jsonify({"error": "ThÃ´ng tin profile hoáº·c proxy quÃ¡ dÃ i."}), 400
         
     accounts = load_accounts()
     
@@ -1216,7 +1216,7 @@ def add_account():
         "type": acc_type,
         "profile_path_or_id": profile_id,
         "proxy": proxy,
-        "status": "Chưa xác thực",
+        "status": "ChÆ°a xÃ¡c thá»±c",
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     }
     
@@ -1224,7 +1224,7 @@ def add_account():
     if save_accounts(accounts):
         return jsonify(_public_account(new_acc))
     else:
-        return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
+        return jsonify({"error": "KhÃ´ng thá»ƒ lÆ°u tá»‡p accounts.json!"}), 500
 
 @app.route('/api/accounts/<id>', methods=['DELETE'])
 def delete_account(id):
@@ -1233,22 +1233,22 @@ def delete_account(id):
     
     filtered_accounts = [a for a in accounts if a["id"] != id]
     if len(filtered_accounts) == len(accounts):
-        return jsonify({"error": "Không tìm thấy tài khoản để xóa!"}), 404
+        return jsonify({"error": "KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n Ä‘á»ƒ xÃ³a!"}), 404
         
     if save_accounts(filtered_accounts):
         return jsonify({"success": True})
     else:
-        return jsonify({"error": "Không thể lưu tệp accounts.json!"}), 500
+        return jsonify({"error": "KhÃ´ng thá»ƒ lÆ°u tá»‡p accounts.json!"}), 500
 
 
 @app.route('/api/accounts/batch-import', methods=['POST'])
 def batch_import_accounts():
-    """Nhập danh sách Profile Facebook đã chọn từ GPM vào danh sách Tài khoản đã lưu (accounts.json)."""
+    """Nháº­p danh sÃ¡ch Profile Facebook Ä‘Ã£ chá»n tá»« GPM vÃ o danh sÃ¡ch TÃ i khoáº£n Ä‘Ã£ lÆ°u (accounts.json)."""
     from utils import load_accounts, save_accounts
     data = json_body()
     profiles = data.get('profiles', [])
     if not isinstance(profiles, list) or not profiles:
-        return jsonify({"error": "Danh sách profile không hợp lệ."}), 400
+        return jsonify({"error": "Danh sÃ¡ch profile khÃ´ng há»£p lá»‡."}), 400
 
     accounts = load_accounts()
     existing_ids = {str(a.get("profile_path_or_id")).strip() for a in accounts if a.get("profile_path_or_id")}
@@ -1271,7 +1271,7 @@ def batch_import_accounts():
             "profile_path_or_id": pid,
             "proxy": raw_proxy,
             "browser_type": browser_type,
-            "status": "Sẵn sàng (Facebook GPM)",
+            "status": "Sáºµn sÃ ng (Facebook GPM)",
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
         accounts.append(new_acc)
@@ -1284,22 +1284,22 @@ def batch_import_accounts():
                 "success": True,
                 "added_count": len(added_profiles),
                 "total_accounts": len(accounts),
-                "message": f"Đã thêm {len(added_profiles)} Profile Facebook vào danh sách lưu thành công!"
+                "message": f"ÄÃ£ thÃªm {len(added_profiles)} Profile Facebook vÃ o danh sÃ¡ch lÆ°u thÃ nh cÃ´ng!"
             })
         else:
-            return jsonify({"error": "Không thể ghi tệp accounts.json"}), 500
+            return jsonify({"error": "KhÃ´ng thá»ƒ ghi tá»‡p accounts.json"}), 500
 
     return jsonify({
         "success": True,
         "added_count": 0,
         "total_accounts": len(accounts),
-        "message": "Các profile đã chọn đều đã tồn tại trong danh sách tài khoản đã lưu."
+        "message": "CÃ¡c profile Ä‘Ã£ chá»n Ä‘á»u Ä‘Ã£ tá»“n táº¡i trong danh sÃ¡ch tÃ i khoáº£n Ä‘Ã£ lÆ°u."
     })
 
 
 @app.route('/api/gpm/profiles', methods=['GET'])
 def api_gpm_profiles():
-    """Kéo danh sách Profile trực tiếp từ GPMLogin REST API v3 (mặc định port 19995)."""
+    """KÃ©o danh sÃ¡ch Profile trá»±c tiáº¿p tá»« GPMLogin REST API v3 (máº·c Ä‘á»‹nh port 19995)."""
     from utils import fetch_gpm_profiles
     gpm_url = request.args.get('gpm_api_url', '').strip() or None
     page = max(1, request.args.get('page', 1, type=int))
@@ -1319,7 +1319,7 @@ def api_gpm_profiles():
 
 @app.route('/api/gpm/status', methods=['GET'])
 def api_gpm_status():
-    """Kiểm tra kết nối và số lượng Profile trực tiếp trong GPMLogin."""
+    """Kiá»ƒm tra káº¿t ná»‘i vÃ  sá»‘ lÆ°á»£ng Profile trá»±c tiáº¿p trong GPMLogin."""
     from utils import fetch_gpm_profiles
     gpm_url = request.args.get('gpm_api_url', '').strip() or None
     result = fetch_gpm_profiles(gpm_api_url=gpm_url, page=1, page_size=1)
@@ -1332,7 +1332,7 @@ def api_gpm_status():
 
 @app.route('/api/profiles/open-browser', methods=['POST'])
 def open_profile_browser():
-    """Khởi chạy Profile GPM hoặc Local Profile được chỉ định và mở trực tiếp link (Group/Page)."""
+    """Khá»Ÿi cháº¡y Profile GPM hoáº·c Local Profile Ä‘Æ°á»£c chá»‰ Ä‘á»‹nh vÃ  má»Ÿ trá»±c tiáº¿p link (Group/Page)."""
     from utils import resolve_account, load_accounts
     data = json_body()
     account_id = data.get('accountId', '').strip()
@@ -1345,7 +1345,7 @@ def open_profile_browser():
         account = accounts[0] if accounts else None
 
     if not account:
-        return jsonify({"error": "Chưa có tài khoản nào được cấu hình hoặc không thể kết nối GPM."}), 400
+        return jsonify({"error": "ChÆ°a cÃ³ tÃ i khoáº£n nÃ o Ä‘Æ°á»£c cáº¥u hÃ¬nh hoáº·c khÃ´ng thá»ƒ káº¿t ná»‘i GPM."}), 400
 
     def start_browser_background(acc, url, gpm_url):
         try:
@@ -1369,7 +1369,7 @@ def open_profile_browser():
     threading.Thread(target=start_browser_background, args=(account, target_url, gpm_api_url), daemon=True).start()
     return jsonify({
         "success": True,
-        "message": f"Đang khởi chạy Profile '{account.get('name')}' và mở liên kết: {target_url}",
+        "message": f"Äang khá»Ÿi cháº¡y Profile '{account.get('name')}' vÃ  má»Ÿ liÃªn káº¿t: {target_url}",
         "profile": account.get("name")
     })
 
@@ -1379,7 +1379,7 @@ def generate_2fa():
     data = json_body()
     secret = data.get('secret', '').strip()
     if not secret:
-        return jsonify({"error": "Vui lòng nhập khóa bảo mật 2FA!"}), 400
+        return jsonify({"error": "Vui lÃ²ng nháº­p khÃ³a báº£o máº­t 2FA!"}), 400
     try:
         secret = secret.replace(" ", "").upper()
         import hmac
@@ -1400,7 +1400,7 @@ def generate_2fa():
         token = str(binary % 1000000).zfill(6)
         return jsonify({"token": token})
     except Exception as e:
-        return jsonify({"error": f"Lỗi tính toán mã 2FA: {str(e)}"}), 400
+        return jsonify({"error": f"Lá»—i tÃ­nh toÃ¡n mÃ£ 2FA: {str(e)}"}), 400
 
 POSTED_LINKS_FILE = str(DATA_DIR / "posted_links.json")
 
@@ -1419,13 +1419,13 @@ def api_posted_links():
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    # Ưu tiên 1: Đọc từ SQLite ActivityRepository (nguồn chuẩn của hệ thống)
+    # Æ¯u tiÃªn 1: Äá»c tá»« SQLite ActivityRepository (nguá»“n chuáº©n cá»§a há»‡ thá»‘ng)
     try:
         from repositories.activity_repo import ActivityRepository
         try:
             limit = max(1, min(int(request.args.get("limit", 30)), 200))
         except ValueError:
-            return jsonify({"error": "limit không hợp lệ"}), 400
+            return jsonify({"error": "limit khÃ´ng há»£p lá»‡"}), 400
         state_filter = (request.args.get("state") or "").strip().lower()
         fetch_limit = 200 if state_filter else limit
         db_items = ActivityRepository().list_posted_links(limit=fetch_limit)
@@ -1442,7 +1442,7 @@ def api_posted_links():
                 "content": content_str,
                 "content_preview": preview,
                 "note": r.get("note", ""),
-                "status": r.get("status") or r.get("note") or "Đã xuất bản",
+                "status": r.get("status") or r.get("note") or "ÄÃ£ xuáº¥t báº£n",
                 "account_id": r.get("account_id", ""),
                 "url_type": r.get("url_type", "unknown"),
                 "publish_state": r.get("publish_state", "unknown"),
@@ -1450,9 +1450,9 @@ def api_posted_links():
             })
         return jsonify(formatted)
     except Exception as dbe:
-        print(f"⚠️ Không thể đọc posted_links từ DB: {dbe}")
+        print(f"âš ï¸ KhÃ´ng thá»ƒ Ä‘á»c posted_links tá»« DB: {dbe}")
 
-    # Fallback 2: Đọc từ JSON file nếu DB chưa có
+    # Fallback 2: Äá»c tá»« JSON file náº¿u DB chÆ°a cÃ³
     if not os.path.exists(POSTED_LINKS_FILE):
         return jsonify([])
     try:
@@ -1487,7 +1487,7 @@ def api_joined_groups():
     try:
         return jsonify(GroupRepository().list_joined_groups())
     except Exception as ge:
-        print(f"⚠️ Không thể đọc joined_groups từ SQLite: {ge}")
+        print(f"âš ï¸ KhÃ´ng thá»ƒ Ä‘á»c joined_groups tá»« SQLite: {ge}")
         try:
             with open(JOINED_GROUPS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -1507,7 +1507,7 @@ def api_ai_spin():
     brand_key = data.get("brandKey") or data.get("brand") or ""
     include_signature = bool(brand_key)  # Project selected => linkless search signature required.
     if not content and mode != "interact":
-        return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
+        return jsonify({"error": "Vui lÃ²ng nháº­p ná»™i dung cáº§n xÃ o."}), 400
     try:
         if mode == "comment":
             spun = spin_comment(content, api_key)
@@ -1545,7 +1545,7 @@ def api_photos_list():
     folder = request.args.get("folder", "uploads").strip()
     target_dir = Path(folder).resolve()
 
-    # Kiểm tra allowlist chống path traversal
+    # Kiá»ƒm tra allowlist chá»‘ng path traversal
     cfg = load_config()
     allowed_dirs = [
         UPLOAD_DIR.resolve(),
@@ -1565,7 +1565,7 @@ def api_photos_list():
         for allowed in allowed_dirs
     )
     if not is_allowed:
-        return jsonify({"exists": False, "count": 0, "photos": [], "error": "Thư mục không được phép truy cập."}), 403
+        return jsonify({"exists": False, "count": 0, "photos": [], "error": "ThÆ° má»¥c khÃ´ng Ä‘Æ°á»£c phÃ©p truy cáº­p."}), 403
 
     if not target_dir.exists() or not target_dir.is_dir():
         return jsonify({"exists": False, "count": 0, "photos": []})
@@ -1591,9 +1591,9 @@ def get_page_config():
     # Mask token safely (never leak short token)
     token = config.get("page_access_token", "")
     if token:
-        masked = f"...{token[-4:]}" if len(token) >= 4 else "(đã cấu hình)"
+        masked = f"...{token[-4:]}" if len(token) >= 4 else "(Ä‘Ã£ cáº¥u hÃ¬nh)"
     else:
-        masked = "(chưa cấu hình)"
+        masked = "(chÆ°a cáº¥u hÃ¬nh)"
     return jsonify({
         "page_id": config.get("page_id", ""),
         "page_name": config.get("page_name", ""),
@@ -1611,11 +1611,11 @@ def save_page_token():
     data = json_body()
     token = data.get("token", "").strip()
     if not token:
-        return jsonify({"error": "Token không được để trống"}), 400
+        return jsonify({"error": "Token khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng"}), 400
 
     ok, info = validate_token(token)
     if not ok:
-        return jsonify({"error": f"Token không hợp lệ: {info}"}), 400
+        return jsonify({"error": f"Token khÃ´ng há»£p lá»‡: {info}"}), 400
 
     config = load_config()
     config["page_access_token"] = token
@@ -1633,14 +1633,14 @@ def save_sheets_url():
         post_delay_min = int(data.get("post_delay_min", 0))
         post_delay_max = int(data.get("post_delay_max", 0))
     except (TypeError, ValueError):
-        return jsonify({"error": "Chu kỳ hoặc giãn cách không hợp lệ."}), 400
+        return jsonify({"error": "Chu ká»³ hoáº·c giÃ£n cÃ¡ch khÃ´ng há»£p lá»‡."}), 400
     if not is_valid_http_url(url):
-        return jsonify({"error": "Sheets URL phải là HTTPS hợp lệ."}), 400
+        return jsonify({"error": "Sheets URL pháº£i lÃ  HTTPS há»£p lá»‡."}), 400
     if interval not in {5, 10, 15, 30, 60}:
-        return jsonify({"error": "Chu kỳ chỉ có thể là 5, 10, 15, 30 hoặc 60 phút."}), 400
+        return jsonify({"error": "Chu ká»³ chá»‰ cÃ³ thá»ƒ lÃ  5, 10, 15, 30 hoáº·c 60 phÃºt."}), 400
     delay_is_disabled = post_delay_min == 0 and post_delay_max == 0
     if not delay_is_disabled and (post_delay_min < 5 or post_delay_max < post_delay_min or post_delay_max > 180):
-        return jsonify({"error": "Giãn cách ngẫu nhiên phải tối thiểu 5 phút, tối đa 180 phút và có giá trị lớn hơn hoặc bằng mức tối thiểu."}), 400
+        return jsonify({"error": "GiÃ£n cÃ¡ch ngáº«u nhiÃªn pháº£i tá»‘i thiá»ƒu 5 phÃºt, tá»‘i Ä‘a 180 phÃºt vÃ  cÃ³ giÃ¡ trá»‹ lá»›n hÆ¡n hoáº·c báº±ng má»©c tá»‘i thiá»ƒu."}), 400
     config = load_config()
     config["sheets_csv_url"] = url
     config["scheduler_interval_minutes"] = interval
@@ -1658,7 +1658,7 @@ def preview_sheets():
         config = load_config()
         url = config.get("sheets_csv_url", "")
     if not url:
-        return jsonify({"error": "Chưa có Sheets URL"}), 400
+        return jsonify({"error": "ChÆ°a cÃ³ Sheets URL"}), 400
     rows = _preview(url)
     return jsonify({"rows": rows})
 
@@ -1693,7 +1693,7 @@ def run_now():
     from scheduler import run_scheduler_job
     try:
         run_scheduler_job()
-        return jsonify({"success": True, "message": "Đã chạy thủ công xong!"})
+        return jsonify({"success": True, "message": "ÄÃ£ cháº¡y thá»§ cÃ´ng xong!"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1715,15 +1715,15 @@ def post_now_api():
     image_url = data.get("image_url", "").strip()
 
     if not token:
-        return jsonify({"error": "Chưa có Page Access Token. Hãy cấu hình ở tab Page Scheduler!"}), 400
+        return jsonify({"error": "ChÆ°a cÃ³ Page Access Token. HÃ£y cáº¥u hÃ¬nh á»Ÿ tab Page Scheduler!"}), 400
     if not page_id:
-        return jsonify({"error": "Chưa có Page ID"}), 400
+        return jsonify({"error": "ChÆ°a cÃ³ Page ID"}), 400
     if not content:
-        return jsonify({"error": "Nội dung không được để trống"}), 400
+        return jsonify({"error": "Ná»™i dung khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng"}), 400
     if len(content) > 60_000:
-        return jsonify({"error": "Nội dung quá dài."}), 400
+        return jsonify({"error": "Ná»™i dung quÃ¡ dÃ i."}), 400
     if image_url and not is_valid_http_url(image_url):
-        return jsonify({"error": "Link ảnh phải là HTTPS hợp lệ."}), 400
+        return jsonify({"error": "Link áº£nh pháº£i lÃ  HTTPS há»£p lá»‡."}), 400
 
     ok, result = post_to_page(page_id, token, content, image_url or None)
     if ok:
@@ -1735,7 +1735,7 @@ def post_now_api():
 def api_backup_database():
     try:
         backup_file = backup_db()
-        return jsonify({"success": True, "backup_file": str(backup_file), "message": "Sao lưu cơ sở dữ liệu SQLite thành công!"})
+        return jsonify({"success": True, "backup_file": str(backup_file), "message": "Sao lÆ°u cÆ¡ sá»Ÿ dá»¯ liá»‡u SQLite thÃ nh cÃ´ng!"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
