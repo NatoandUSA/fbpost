@@ -179,17 +179,17 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
                 if not row.is_visible(timeout=250): continue
                 label=(row.inner_text(timeout=500) or "").strip(); links=row.locator("a[href]")
                 href=" ".join((links.nth(j).get_attribute("href") or "") for j in range(min(links.count(),8)))
-                score=(100 if handle.casefold() in href.casefold() else 0)+(40 if label.casefold()==name.casefold() else 0)+(15 if name.casefold() in label.casefold() else 0)
+                score=(100 if handle.casefold() in href.casefold() else 0)+(80 if label.lstrip("@").strip().casefold()==name.casefold() else 0)+(30 if name.casefold() in label.casefold() else 0)
                 if score: ranked.append((score,idx,label,href))
             except Exception: continue
         ranked.sort(reverse=True,key=lambda x:x[0])
         print(f"[Page Mention Resolver] brand={brand_key} query={name!r} candidates={len(ranked)}")
         for score, row_idx, label, href in ranked[:8]:
             print(f"[Page Mention Candidate] idx={row_idx} score={score} text={label[:100]!r} href={href[:180]!r}")
-        if not ranked or ranked[0][0] < 100:
-            raise RuntimeError("canonical handle candidate not found")
+        if not ranked or ranked[0][0] < 70:
+            raise RuntimeError("canonical Page semantic candidate not found")
         if len(ranked) > 1 and ranked[1][0] == ranked[0][0]:
-            raise RuntimeError("ambiguous canonical Page candidates")
+            raise RuntimeError("ambiguous canonical Page semantic candidates")
         print(f"[Page Mention Resolver] selected idx={ranked[0][1]} score={ranked[0][0]}")
         candidates.nth(ranked[0][1]).click(force=True,timeout=2500); time.sleep(0.7)
         if not mention_entity_committed(locator,brand_key): raise RuntimeError("selected Page entity not committed")

@@ -9,7 +9,19 @@ import os
 BASE_DIR = Path(__file__).resolve().parent
 VERSION_FILE = BASE_DIR / "VERSION"
 
-DATA_DIR = Path(os.getenv("FB_AUTOMATION_DATA_DIR", str(BASE_DIR / "data"))).resolve()
+def _default_data_dir() -> Path:
+    env = os.getenv("FB_AUTOMATION_DATA_DIR", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+    parts = BASE_DIR.parts
+    lowered = [part.casefold() for part in parts]
+    if "release" in lowered:
+        idx = lowered.index("release")
+        repo_root = Path(*parts[:idx])
+        return (repo_root / "data").resolve()
+    return (BASE_DIR / "data").resolve()
+
+DATA_DIR = _default_data_dir()
 UPLOAD_DIR = DATA_DIR / "uploads"
 LOG_DIR = DATA_DIR / "logs"
 JOBS_LOG_DIR = LOG_DIR / "jobs"

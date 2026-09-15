@@ -82,6 +82,22 @@ def _locate_target_post_article(page, canonical_url):
     current_ident = _post_identity(current_url) if current_url else {}
     ident = _post_identity(canonical_url)
     post_id = (current_ident.get("post_id") or ident.get("post_id") or "").strip()
+    # share/p tokens are routing identities, not always the DOM post identity.
+    # Once Facebook hydrates the permalink, resolve a unique concrete post id
+    # from links in the exact permalink surface before failing closed.
+    if post_id and not post_id.isdigit():
+        concrete = set()
+        try:
+            links = page.locator("a[href*=\'/posts/\'], a[href*=\'/permalink/\'], a[href*=\'story_fbid=\']")
+            for idx in range(min(links.count(), 80)):
+                href = links.nth(idx).get_attribute("href") or ""
+                found = _post_identity(href).get("post_id") or ""
+                if found.isdigit(): concrete.add(found)
+        except Exception:
+            pass
+        if len(concrete) == 1:
+            post_id = next(iter(concrete))
+            print(f"[Comment Resolver] routing_identity_resolved={post_id}")
     if not post_id:
         return None
 
@@ -144,6 +160,22 @@ def _locate_target_post_article(page, canonical_url):
                     print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={top[3]}")
                     return top[5]
                 if len(visible_dialogs) > 1:
+                    # A share route can open two sibling dialogs (post + share shell).
+                    # Prefer the unique dialog that owns a visible article/comment control;
+                    # remain fail-closed when more than one qualifies.
+                    qualified = []
+                    for row in ranked:
+                        dialog = row[5]
+                        try:
+                            controls = dialog.locator("div[role=\'button\'][aria-label*=\'comment\' i], div[role=\'button\'][aria-label*=\'bình luận\' i], div[role=\'textbox\'][contenteditable=\'true\']").count()
+                        except Exception:
+                            controls = 0
+                        if row[2] and controls:
+                            qualified.append((row, controls))
+                    if len(qualified) == 1:
+                        row, controls = qualified[0]
+                        print(f"[Comment Resolver] post_identity={post_id} scope=semantic-post-dialog index={row[4]} articles={row[2]} controls={controls}")
+                        return row[5]
                     print(f"[Comment Resolver] post_identity={post_id} scope=ambiguous-dialogs count={len(visible_dialogs)} top_score={top[0]:.2f} second_score={second_score:.2f}")
                     return None
                 print(f"[Comment Resolver] post_identity={post_id} scope=permalink-shell-wait chars={top[3]}")
