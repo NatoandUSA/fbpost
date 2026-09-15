@@ -35,6 +35,26 @@ def _browse_group_context(page, phase):
         return False
 
 
+def _pending_admin_posts_count(page):
+    """Read the group pending-approval counter without modifying moderation state."""
+    try:
+        text = page.locator("body").inner_text(timeout=2500) or ""
+        if not isinstance(text, str):
+            return 0
+    except Exception:
+        return 0
+    patterns = (
+        r"(?:\u0110ang\s+ch\u1edd\s+qu\u1ea3n\s+tr\u1ecb\s+vi\u00ean\s+ph\u00ea\s+duy\u1ec7t|pending\s+admin\s+approval)[\s\S]{0,100}?(\d+)\s+(?:b\u00e0i\s+vi\u1ebft|posts?)",
+        r"(\d+)\s+(?:b\u00e0i\s+vi\u1ebft|posts?)[\s\S]{0,70}?(?:ch\u1edd\s+(?:qu\u1ea3n\s+tr\u1ecb\s+vi\u00ean\s+)?ph\u00ea\s+duy\u1ec7t|pending\s+approval)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            try: return max(0, int(match.group(1)))
+            except (TypeError, ValueError): pass
+    return 0
+
+
 def _ensure_group_membership(page, group_url):
     """Require confirmed membership before posting. Never treat pending/unverified as joined."""
     joined_markers = ("đã tham gia", "joined", "rời khỏi nhóm", "leave group")
@@ -186,6 +206,15 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 code = "GROUP_MEMBERSHIP_PENDING" if membership_state == "pending" else "GROUP_MEMBERSHIP_UNVERIFIED"
                 message = "Nhóm đang chờ duyệt thành viên." if membership_state == "pending" else "Không xác minh được trạng thái đã tham gia nhóm; dừng trước khi đăng."
                 return ActionResult(success=False, code=code, state=membership_state, message=message, target_url=group_url)
+
+            pending_admin_posts = _pending_admin_posts_count(page)
+            if pending_admin_posts:
+                print(f"GROUP_PENDING_COUNT:{pending_admin_posts}")
+            if pending_admin_posts >= 2:
+                print(f"[Moderation Capacity] SKIP pending={pending_admin_posts} threshold=2 before composer")
+                return ActionResult(success=True, code="GROUP_PENDING_CAPACITY", state="skipped",
+                                    message=f"Group has {pending_admin_posts} posts pending admin approval; threshold is 2.",
+                                    target_url=group_url, metadata={"pending_count": pending_admin_posts})
             
             # Tự động đóng popup / thông báo che khuất giao diện nếu có
             try:

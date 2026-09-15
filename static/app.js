@@ -5460,6 +5460,26 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
+    // v6.1.22 AI Content Studio: master content first; per-target variation remains downstream.
+    const studioGenerateBtn = document.getElementById('studio-generate-btn');
+    const studioUseBtn = document.getElementById('studio-use-btn');
+    const studioOutput = document.getElementById('studio-output');
+    if (studioGenerateBtn) studioGenerateBtn.addEventListener('click', async () => {
+        const keyword = document.getElementById('studio-keyword')?.value.trim() || '';
+        if (!keyword) { showToast('Keyword / search intent is required.', 'error'); return; }
+        studioGenerateBtn.disabled = true; studioGenerateBtn.textContent = 'Generating + checking Truth/Similarity...';
+        try {
+            const keyText = document.getElementById('gemini-api-key-input')?.value || '';
+            const payload = {brand:document.getElementById('studio-brand')?.value || 'umee', topic:document.getElementById('studio-topic')?.value || 'room_sale', keyword, audience:document.getElementById('studio-audience')?.value.trim() || '', angle:document.getElementById('studio-angle')?.value.trim() || '', verifiedFacts:document.getElementById('studio-facts')?.value.trim() || '', apiKeys:keyText.split(/[\r\n,;]+/).map(v=>v.trim()).filter(Boolean)};
+            const res = await fetch('/api/content-studio/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+            const data = await res.json(); if (!res.ok || !data.success) throw new Error(data.error || 'Content Studio failed');
+            studioOutput.value = data.content || ''; const sim=Number(data.similarity?.max_similarity || 0);
+            document.getElementById('studio-quality').textContent = `Quality ${data.score}/100 | Truth PASS | Similarity ${(sim*100).toFixed(1)}% (limit ${(Number(data.similarity?.threshold||.82)*100).toFixed(0)}%) | ${data.model || data.mode}`;
+            showToast('Master Post passed Truth + Similarity Gate.', 'success');
+        } catch(err) { showToast(err.message,'error'); } finally { studioGenerateBtn.disabled=false; studioGenerateBtn.textContent='AI - Tao Master Post bang Gemini'; }
+    });
+    if (studioUseBtn) studioUseBtn.addEventListener('click',()=>{ const text=studioOutput?.value.trim()||''; if(!text){showToast('No Master Post yet.','error');return;} postContent.value=text; const autoSpin=document.getElementById('auto-spin-opt'); if(autoSpin) autoSpin.checked=true; showToast('Master Post moved to composer; Variant Engine enabled.','success'); });
+
     setupGoogleSheetSync();
 
     // Khởi tạo trạng thái cách ly panel theo tab mặc định & nạp cấu hình hệ thống

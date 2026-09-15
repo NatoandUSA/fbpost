@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
-    <title>FB Automation Workspace v6.1.21</title>
-    <link rel="stylesheet" href="styles.css?v=6.1.21">
+    <title>FB Automation Workspace v6.1.22</title>
+    <link rel="stylesheet" href="styles.css?v=6.1.22">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -24,7 +24,7 @@
                 <div style="display:flex; flex-direction:column;">
                     <div style="display:flex; align-items:center; gap:6px;">
                         <span class="brand-text">FB Auto 2026</span>
-                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.1.21</span>
+                        <span class="version-badge" id="sidebar-version-badge" style="background:#10B981; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.1);">v6.1.22</span>
                     </div>
                     <span id="sidebar-build-time" style="font-size:10px; color:#94A3B8; margin-top:2px;">Build: 2026-09-15</span>
                 </div>
@@ -108,7 +108,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="build-info" id="build-info">UI v6.1.21</div>
+                <div class="build-info" id="build-info">UI v6.1.22</div>
             </div>
         </aside>
 
@@ -124,7 +124,7 @@
                 <div class="header-right">
                     <div id="header-build-badge" style="display:flex; align-items:center; gap:8px; background:#EFF6FF; border:1px solid #BFDBFE; padding:5px 12px; border-radius:8px; font-size:12px; font-weight:700; color:#1E40AF; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
                         <span style="display:inline-block; width:8px; height:8px; background:#10B981; border-radius:50%; box-shadow:0 0 6px #10B981;"></span>
-                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.1.21</span>
+                        <span id="header-version-text" style="color:#1D4ED8; font-size:13px;">Phiên bản: v6.1.22</span>
                         <span style="color:#93C5FD;">|</span>
                         <span id="header-build-time-text" style="color:#3B82F6; font-weight:600;">Build: 2026-09-15</span>
                     </div>
@@ -498,6 +498,22 @@ https://www.facebook.com/groups/648990015540886/</textarea>
 
                         <!-- 7. Content Hub Integrated Section -->
                         <div id="content-hub-section" class="hidden">
+                            <div class="card" id="content-studio-card" style="margin-bottom:16px;border:1px solid #BFDBFE;">
+                                <div class="card-header"><div class="card-title-group"><span>AI</span><h3>AI Content Studio v6.1.22</h3></div><span class="sched-badge">Truth + Similarity Gate</span></div>
+                                <div class="composer-body-card">
+                                    <div class="form-grid">
+                                        <div class="field-group"><label class="field-label">Project</label><select id="studio-brand" class="field-input"><option value="umee">UMEE</option><option value="lacasa">Lacasa</option></select></div>
+                                        <div class="field-group"><label class="field-label">Topic</label><select id="studio-topic" class="field-input"><option value="room_sale">Ban phong</option><option value="hourly">Ban phong theo gio</option><option value="event">Ban phong theo su kien</option><option value="rain">Ban phong mua mua</option><option value="hue_info">Thong tin / du lich Hue</option><option value="food">Am thuc Hue</option><option value="place">Dia diem Hue</option><option value="custom">Chu de tuy chinh</option></select></div>
+                                    </div>
+                                    <div class="field-group"><label class="field-label">Keyword / Search intent</label><input id="studio-keyword" class="field-input" placeholder="VD: homestay Hue co may chieu cho couple"></div>
+                                    <div class="form-grid"><div class="field-group"><label class="field-label">Audience</label><input id="studio-audience" class="field-input" placeholder="couple / khach du lich / runner"></div><div class="field-group"><label class="field-label">Content angle</label><input id="studio-angle" class="field-input" placeholder="local guide / conversion / helpful"></div></div>
+                                    <div class="field-group"><label class="field-label">Verified live facts (optional)</label><textarea id="studio-facts" class="field-textarea" rows="2" placeholder="Gia / phong trong / su kien: chi nhap khi da xac minh"></textarea></div>
+                                    <button id="studio-generate-btn" class="btn btn-primary btn-full" type="button">AI - Tao Master Post bang Gemini</button>
+                                    <div id="studio-quality" class="field-hint" style="margin-top:8px;"></div>
+                                    <textarea id="studio-output" class="field-textarea" rows="12" style="margin-top:8px;" placeholder="Master Post output"></textarea>
+                                    <button id="studio-use-btn" class="btn btn-secondary btn-full" type="button" style="margin-top:8px;">Dua Master Post vao bang dang bai</button>
+                                </div>
+                            </div>
                             <div class="brands">
                                 <button type="button" class="brand active" id="brandLacasa">🌿 Lacasa</button>
                                 <button type="button" class="brand" id="brandUmee">🎬 UMEE</button>
@@ -559,8 +575,8 @@ https://www.facebook.com/groups/648990015540886/</textarea>
 
                                 <div class="genwrap" style="margin-top: 14px;">
                                     <div class="gen2">
-                                        <button class="gen ghost2" id="genOffBtn">⚡ Tạo Cục Bộ</button>
-                                        <button class="gen" id="genBtn">🤖 Tạo bằng AI (Claude)</button>
+                                        <button class="gen ghost2 hidden" id="genOffBtn">⚡ Tạo Cục Bộ</button>
+                                        <button class="gen hidden" id="genBtn">🤖 Tạo bằng AI (Claude)</button>
                                     </div>
                                 </div>
                                 <div class="status" id="status"></div>
@@ -1457,6 +1473,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <div id="toast-container" class="toast-container"></div>
 
     <script type="module" src="js/main.js"></script>
-    <script src="app.js?v=6.1.21"></script>
+    <script src="app.js?v=6.1.22"></script>
 </body>
 </html>

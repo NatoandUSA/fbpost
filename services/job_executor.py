@@ -104,6 +104,22 @@ def _select_rotation_pool(all_accs, data):
     return [a for a in all_accs if a.get("id")]
 
 
+def _resume_rotation_after_last_post(accounts_pool):
+    """Persist fair round-robin implicitly from the last profile that actually posted."""
+    if len(accounts_pool) < 2:
+        return accounts_pool
+    try:
+        rows = ActivityRepository().list_posted_links(limit=100)
+        last_id = next((str(r.get("account_id")) for r in rows if r.get("account_id")), "")
+        ids = [str(a.get("id")) for a in accounts_pool]
+        if last_id in ids:
+            start = (ids.index(last_id) + 1) % len(accounts_pool)
+            return accounts_pool[start:] + accounts_pool[:start]
+    except Exception:
+        pass
+    return accounts_pool
+
+
 def execute_automation_task(
     job_id: str,
     cmd: str,
@@ -183,7 +199,7 @@ def execute_automation_task(
     if rotate_accounts and cmd != "auth":
         try:
             all_accs = load_accounts()
-            accounts_pool = _select_rotation_pool(all_accs, data)
+            accounts_pool = _resume_rotation_after_last_post(_select_rotation_pool(all_accs, data))
         except Exception:
             accounts_pool = []
 
@@ -748,6 +764,7 @@ def execute_automation_task(
     skipped_duplicates = 0
     published_count = 0
     pending_count = 0
+    moderation_skipped_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
     if job_repo:
@@ -996,7 +1013,16 @@ def execute_automation_task(
             except Exception:
                 deferred_comment = None
 
-        if action_state == "published":
+        if cmd == "group" and action_code == "GROUP_PENDING_CAPACITY":
+            moderation_skipped_count += 1
+            outcome = "skipped_moderation_capacity"
+            pending_seen = int((structured_result.get("metadata") or {}).get("pending_count") or 0)
+            try:
+                ModerationRepository().record_pending_count(target, pending_seen, curr_acc_id, action_code)
+            except Exception as moderation_err:
+                on_line(f"[Moderation Registry] Cannot persist pending counter: {moderation_err}\n")
+            on_line(f"[Moderation Capacity] SKIPPED target before composer: pending={pending_seen}, threshold=2.\n")
+        elif action_state == "published":
             published_count += 1
             outcome = "published"
 
@@ -1135,7 +1161,9 @@ def execute_automation_task(
             batch_failed = True
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
-        if action_state == "published" and ret == 0:
+        if cmd == "group" and action_code == "GROUP_PENDING_CAPACITY":
+            workflow_finish_task(wf_task_id, state="completed", submission_status="NOT_SUBMITTED", verification_status="SKIPPED_MODERATION_CAPACITY", error_code=action_code, error_message=structured_result.get("message") or "Skipped before composer")
+        elif action_state == "published" and ret == 0:
             workflow_finish_task(wf_task_id, state="published", submission_status="SUBMIT_CONFIRMED", verification_status="PERMALINK_FOUND", result_url=structured_result.get("result_url") or "")
         elif is_post_pending(structured_result):
             workflow_finish_task(wf_task_id, state="pending", submission_status="PENDING_APPROVAL", verification_status="PENDING_EVIDENCE", result_url=structured_result.get("result_url") or "")
@@ -1147,7 +1175,10 @@ def execute_automation_task(
         if queue_item_id:
             from repositories.campaign_repo import CampaignRepository
             transition_from = ("reconciling",) if cmd == "reconcile-post" else ("processing",)
-            if action_state == "published" and ret == 0:
+            if cmd == "group" and action_code == "GROUP_PENDING_CAPACITY":
+                final_queue_state = "approved"
+                updates = {"error": structured_result.get("message") or "T?m b? qua v? nh?m c? >=2 b?i ch? duy?t."}
+            elif action_state == "published" and ret == 0:
                 final_queue_state = "published"
                 updates = {"published_at": now_iso(), "result_url": structured_result.get("result_url") or "", "error": None}
             elif is_post_pending(structured_result) and ret == 0:

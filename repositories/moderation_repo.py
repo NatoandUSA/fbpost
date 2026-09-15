@@ -62,6 +62,29 @@ class ModerationRepository(BaseRepository):
             """, (target, evidence, now, profile_id))
         return target
 
+    def record_pending_count(self, group_url, pending_count, profile_id=None, evidence="group_pending_counter"):
+        target = canonical_group_url(group_url)
+        now = _now()
+        count = max(0, int(pending_count or 0))
+        with self.transaction() as conn:
+            conn.execute("""
+                INSERT INTO group_moderation_registry
+                (group_url,requires_approval,evidence,confirmed_count,last_confirmed_at,last_profile_id,pending_count,last_pending_checked_at,skip_threshold)
+                VALUES (?,1,?,1,?,?,?, ?,2)
+                ON CONFLICT(group_url) DO UPDATE SET
+                    requires_approval=1,evidence=excluded.evidence,last_profile_id=excluded.last_profile_id,
+                    pending_count=excluded.pending_count,last_pending_checked_at=excluded.last_pending_checked_at
+            """, (target,evidence,now,profile_id,count,now))
+        return count
+
+    def moderation_info(self, group_url):
+        conn = self.get_conn()
+        try:
+            row = conn.execute("SELECT * FROM group_moderation_registry WHERE group_url=?", (canonical_group_url(group_url),)).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
     def requires_approval(self, group_url):
         conn = self.get_conn()
         try:

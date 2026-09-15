@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-15 v6.1.21"
+BUILD_TIME = "2026-09-15 v6.1.22"
 
 
 def app_build_info():
@@ -994,6 +994,36 @@ def clear_queue_items():
         save_queue(queue)
 
     return jsonify({"success": True, "deleted": deleted})
+
+@app.route('/api/content-studio/topics', methods=['GET'])
+def content_studio_topics():
+    from content_studio import topic_catalog
+    return jsonify({"success": True, "topics": topic_catalog()})
+
+
+@app.route('/api/content-studio/generate', methods=['POST'])
+def content_studio_generate():
+    from content_studio import generate_with_quality
+    data = json_body()
+    cfg = load_config()
+    brand = str(data.get("brand") or "").strip().lower()
+    topic = str(data.get("topic") or "room_sale").strip()
+    keyword = str(data.get("keyword") or "").strip()
+    supplied = data.get("apiKeys") or data.get("api_keys") or ""
+    keys = supplied or cfg.get("gemini_api_keys") or cfg.get("gemini_api_key") or ""
+    history = []
+    try:
+        history = [row.get("content") or "" for row in ActivityRepository().list_posted_links(limit=200)]
+    except Exception:
+        history = []
+    try:
+        result = generate_with_quality(brand, topic, keyword, keys, history=history,
+            audience=str(data.get("audience") or ""), angle=str(data.get("angle") or ""),
+            user_facts=str(data.get("verifiedFacts") or ""), attempts=data.get("attempts", 4))
+        return jsonify({"success": True, **result})
+    except (ValueError, RuntimeError) as exc:
+        return jsonify({"error": str(exc)}), 422
+
 
 @app.route('/api/content/generate', methods=['POST'])
 def generate_content():
