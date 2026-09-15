@@ -841,7 +841,8 @@ def execute_automation_task(
                     )
                 elif spin_result["changed"]:
                     detail = f"; Gemini lỗi: {spin_result['error']}" if spin_result["error"] else ""
-                    on_line(f"🔀 [Local Spinner] Đã tạo biến thể truth-safe cho mục tiêu {i+1}/{total}{detail}.\n")
+                    engine = "Content Hub Fallback" if spin_result.get("mode") == "content_hub_fallback" else "Local Spinner"
+                    on_line(f"🔀 [{engine}] Đã tạo biến thể truth-safe cho mục tiêu {i+1}/{total}{detail}.\n")
                 else:
                     pool = f" key pool={spin_result.get('key_pool_size', 0)}, attempted={spin_result.get('keys_attempted', 0)}."
                     detail = f" Gemini lỗi: {spin_result['error']}." if spin_result["error"] else ""

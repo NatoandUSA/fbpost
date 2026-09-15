@@ -212,6 +212,38 @@ def spin_content_local(content: str) -> str:
     return "\n".join(out).strip()
 
 
+def spin_content_hub_local(content: str, brand_key: str, variant_seed: str = "") -> str:
+    """Create useful quota-free copy from source plus two audited Content Hub facts."""
+    key = str(brand_key or "").strip().lower()
+    reference = load_content_reference()
+    brand = reference.get(key) or {}
+    facts = [
+        str(item).strip().rstrip(".") for item in brand.get("facts") or []
+        if str(item).strip() and not str(item).strip().casefold().startswith(("tên:", "điện thoại"))
+    ]
+    if not facts:
+        return spin_content_local(content)
+    from brand_profiles import brand_name
+    display_name = brand_name(key) or key.upper()
+    digest = hashlib.sha256(f"{key}|{variant_seed}|{content}".encode("utf-8")).digest()
+    start = int.from_bytes(digest[:4], "big") % len(facts)
+    chosen = [facts[start], facts[(start + 3) % len(facts)]] if len(facts) > 3 else facts[:2]
+    hooks = (
+        f"Đang tìm một homestay Huế vừa dễ chủ động lịch trình, vừa có thông tin rõ ràng? 🌿",
+        f"Một chuyến Huế thoải mái thường bắt đầu từ nơi nghỉ hợp đúng nhu cầu của bạn 🏡",
+        f"Bạn ưu tiên điều gì khi chọn homestay Huế: sự riêng tư, tiện nghi hay lịch nhận phòng linh hoạt? ✨",
+    )
+    hook = hooks[digest[4] % len(hooks)]
+    source = spin_content_local(content).strip()
+    return (
+        f"{hook}\n\n"
+        f"{display_name} gửi bạn một vài thông tin đã được xác nhận để dễ cân nhắc:\n\n"
+        + "\n".join(f"✨ {fact}." for fact in chosen)
+        + f"\n\n{source}\n\n"
+        f"Bạn muốn xem hình ảnh hoặc hỏi loại phòng phù hợp? Hãy inbox {display_name} nhé! 📩"
+    ).strip()
+
+
 def _gemini_models():
     return tuple(dict.fromkeys((GEMINI_MODEL,) + GEMINI_FALLBACK_MODELS))
 
@@ -447,7 +479,11 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
     elif all_api_keys:
         error = f"Tất cả {len(all_api_keys)} Gemini key đang cooldown sau lỗi quota/timeout"
     if spun is None:
-        spun = spin_content_local(source)
+        if brand_key and content_reference_context(brand_key):
+            spun = spin_content_hub_local(source, brand_key, variant_seed=variant_seed)
+            mode = "content_hub_fallback"
+        else:
+            spun = spin_content_local(source)
     else:
         spun = clean_ai_output(spun)
 

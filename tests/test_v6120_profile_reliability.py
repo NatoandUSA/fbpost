@@ -141,6 +141,20 @@ class ProfileReliabilityTests(unittest.TestCase):
                 ai_spinner._urlopen_json(req, attempts=3)
         self.assertEqual(mocked.call_count, 1)
 
+    def test_all_keys_429_uses_audited_content_hub_fallback(self):
+        error = urllib.error.HTTPError("https://example.invalid", 429, "quota", {}, None)
+        with patch("ai_spinner.spin_content_gemini_with_model", side_effect=error):
+            result = ai_spinner.generate_unique_variant_with_evidence(
+                "Đang tìm homestay Huế. Nhắn mình để hỏi phòng UMEE Homestay.",
+                ["key-111111111111", "key-222222222222"], brand_key="umee",
+                include_signature=True, signature_mode="linkless", variant_seed="group-123",
+            )
+        self.assertEqual(result["mode"], "content_hub_fallback")
+        self.assertTrue(result["changed"])
+        self.assertIn("thông tin đã được xác nhận", result["content"])
+        self.assertIn("HTTP 429", result["error"])
+        self.assertNotIn("https://", result["content"])
+
     def test_umee_mention_and_publish_error_detection_are_strict(self):
         source = Path("utils.py").read_text(encoding="utf-8")
         self.assertIn('"umee": ("UMEE Homestay", "umeehomestay")', source)
