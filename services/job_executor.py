@@ -873,8 +873,8 @@ def execute_automation_task(
             task_content = apply_brand_signature(content, brand_key, include_signature, mode=sig_mode)
 
         if cmd in ("group", "page"):
-            from composer_guard import dedupe_content_blocks, audit_final_content
-            task_content = dedupe_content_blocks(task_content)
+            from composer_guard import dedupe_content_blocks, audit_final_content, normalize_single_cta
+            task_content = normalize_single_cta(task_content, brand_key) if sig_mode == "linkless" else dedupe_content_blocks(task_content)
             content_audit = audit_final_content(task_content, brand_key, linkless=(sig_mode == "linkless"))
             if not content_audit["pass"]:
                 batch_failed = True

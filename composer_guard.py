@@ -35,6 +35,23 @@ def dedupe_content_blocks(content):
             out.append(block)
     return "\n\n".join(out).strip()
 
+def normalize_single_cta(content, brand_key=""):
+    """Keep factual blocks intact while making the canonical linkless signature the sole CTA."""
+    key = str(brand_key or "").strip().casefold()
+    if key not in PAGE_ENTITIES:
+        return dedupe_content_blocks(content)
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", str(content or "").strip()) if b.strip()]
+    kept = []
+    for block in blocks:
+        if CTA_RE.search(block):
+            # Only the canonical signature block owns the final CTA.
+            if "━━━━━━━━━━━━━━━━━━━━" in block and "📩" in block:
+                kept.append(block)
+            continue
+        kept.append(block)
+    return dedupe_content_blocks("\n\n".join(kept))
+
+
 def audit_final_content(content, brand_key="", linkless=True):
     text = str(content or "").strip()
     clean = dedupe_content_blocks(text)
