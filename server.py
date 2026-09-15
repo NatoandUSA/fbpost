@@ -997,8 +997,8 @@ def clear_queue_items():
 
 @app.route('/api/content-studio/topics', methods=['GET'])
 def content_studio_topics():
-    from content_studio import topic_catalog
-    return jsonify({"success": True, "topics": topic_catalog()})
+    from content_studio import topic_catalog, writing_option_catalog
+    return jsonify({"success": True, "topics": topic_catalog(), "writing_options": writing_option_catalog()})
 
 
 @app.route('/api/content-studio/generate', methods=['POST'])
@@ -1019,7 +1019,8 @@ def content_studio_generate():
     try:
         result = generate_with_quality(brand, topic, keyword, keys, history=history,
             audience=str(data.get("audience") or ""), angle=str(data.get("angle") or ""),
-            user_facts=str(data.get("verifiedFacts") or ""), attempts=data.get("attempts", 4))
+            user_facts=str(data.get("verifiedFacts") or ""), attempts=data.get("attempts", 4),
+            tone=str(data.get("tone") or "natural"), length=str(data.get("length") or "medium"), cta=str(data.get("cta") or "message"))
         return jsonify({"success": True, **result})
     except (ValueError, RuntimeError) as exc:
         return jsonify({"error": str(exc)}), 422

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from content_studio import similarity_gate, score_content, topic_catalog
+from content_studio import similarity_gate, score_content, topic_catalog, _local_master, writing_option_catalog
 from fb_group import _pending_admin_posts_count
 from services.job_executor import _resume_rotation_after_last_post
 
@@ -16,6 +16,14 @@ class ContentStudioV6122Tests(unittest.TestCase):
     def test_topics_cover_operational_intents(self):
         ids={x['id'] for x in topic_catalog()}
         self.assertTrue({'room_sale','hourly','event','rain','hue_info','custom'} <= ids)
+
+    def test_writing_options_catalog(self):
+        opts=writing_option_catalog(); self.assertIn("tone",opts); self.assertIn("length",opts); self.assertIn("cta",opts)
+
+    def test_local_fallback_honors_options(self):
+        a=_local_master("umee","room_sale","homestay Huế","couple","local guide","", "concise","short","question")
+        b=_local_master("umee","room_sale","homestay Huế","gia đình","conversion","", "story","long","save")
+        self.assertIn("couple",a); self.assertIn("Bạn đang ưu tiên",a); self.assertIn("gia đình",b); self.assertIn("lưu lại",b); self.assertNotEqual(a,b)
 
     def test_similarity_gate_rejects_duplicate(self):
         text='UMEE Homestay Huế riêng tư ngay trung tâm, nhắn mình để hỏi phòng.'

@@ -51,16 +51,23 @@ khuyến mãi, thời tiết, lịch/giờ/địa điểm sự kiện, khoảng 
 Không đặt URL trong thân bài. Keyword dùng tự nhiên, không nhồi. Có hook khác biệt, đoạn ngắn dễ đọc, CTA phù hợp.
 Không lặp nguyên một đoạn. Chỉ trả nội dung bài Facebook, không markdown giải thích."""
 
-def _local_master(brand, topic, keyword, audience="", user_facts=""):
+def _local_master(brand, topic, keyword, audience="", angle="", user_facts="", tone="natural", length="medium", cta="message"):
+    """Deterministic truth-safe fallback that still honors writing options."""
     ref = load_content_reference(); facts = list((ref.get(brand) or {}).get("facts") or [])
     chosen = facts[:2]
-    lead = {"hourly":"C\u1ea7n m\u1ed9t kho\u1ea3ng ngh\u1ec9 linh ho\u1ea1t t\u1ea1i Hu\u1ebf?", "event":"C\u00f3 l\u1ecbch tr\u00ecnh ho\u1eb7c s\u1ef1 ki\u1ec7n \u1edf Hu\u1ebf v\u00e0 c\u1ea7n ch\u1ed7 ngh\u1ec9 ph\u00f9 h\u1ee3p?", "rain":"Nh\u1eefng ng\u00e0y Hu\u1ebf c\u00f3 m\u01b0a, m\u1ed9t ch\u1ed7 ngh\u1ec9 thu\u1eadn ti\u1ec7n gi\u00fap l\u1ecbch tr\u00ecnh nh\u1eb9 nh\u00e0ng h\u01a1n.", "hue_info":"\u0110ang l\u00ean l\u1ecbch kh\u00e1m ph\u00e1 Hu\u1ebf v\u00e0 mu\u1ed1n th\u00f4ng tin r\u00f5 r\u00e0ng tr\u01b0\u1edbc chuy\u1ebfn \u0111i?"}.get(topic, "\u0110ang t\u00ecm m\u1ed9t homestay Hu\u1ebf v\u1edbi th\u00f4ng tin r\u00f5 r\u00e0ng, d\u1ec5 c\u00e2n nh\u1eafc?")
-    fact_lines = "\n".join(f"\u2022 {x}" for x in chosen)
-    live = f"\n\u2022 {user_facts.strip()}" if user_facts.strip() else ""
     name = "UMEE Homestay" if brand == "umee" else "Lacasa Homestay"
-    return f"{lead}\n\n{name} g\u1eedi b\u1ea1n v\u00e0i th\u00f4ng tin \u0111\u00e3 \u0111\u01b0\u1ee3c x\u00e1c nh\u1eadn:\n{fact_lines}{live}\n\nN\u1ebfu b\u1ea1n \u0111ang t\u00ecm theo nhu c\u1ea7u '{keyword}', h\u00e3y nh\u1eafn \u0111\u1ec3 \u0111\u01b0\u1ee3c ki\u1ec3m tra th\u00f4ng tin ph\u00f9 h\u1ee3p v\u1edbi l\u1ecbch tr\u00ecnh th\u1ef1c t\u1ebf c\u1ee7a b\u1ea1n."
+    audience_text = (audience or "khách đang tìm lưu trú tại Huế").strip()
+    angle_text = (angle or "hữu ích, tự nhiên").strip()
+    tone_lead = {"natural":"Một gợi ý nhẹ nhàng cho", "friendly":"Nếu bạn đang lên lịch ở Huế, đây là vài thông tin dành cho", "concise":"Thông tin nhanh cho", "story":"Một hành trình ở Huế thường bắt đầu từ việc chọn nơi nghỉ phù hợp cho"}.get(tone, "Một gợi ý nhẹ nhàng cho")
+    lead = f"{tone_lead} {audience_text}: {keyword}."
+    fact_limit = 1 if length == "short" else min(3 if length == "long" else 2, len(facts))
+    fact_lines = "\n".join(f"• {x}" for x in facts[:fact_limit])
+    live = f"\n• {user_facts.strip()}" if user_facts.strip() else ""
+    angle_line = f"\n\nGóc nội dung: {angle_text}." if angle else ""
+    cta_text = {"message":"Nếu cần kiểm tra thông tin phù hợp với lịch trình thực tế, hãy nhắn cho chúng tôi.", "question":"Bạn đang ưu tiên điều gì nhất cho chuyến đi Huế lần này?", "save":"Bạn có thể lưu lại các thông tin này để đối chiếu khi lên lịch Huế.", "soft":"Nếu thấy phù hợp, bạn có thể nhắn để hỏi thêm thông tin đã được xác nhận."}.get(cta, "Nếu cần thêm thông tin, hãy nhắn cho chúng tôi.")
+    return f"{lead}\n\n{name} — thông tin đã được xác nhận:\n{fact_lines}{live}{angle_line}\n\n{cta_text}"
 
-def generate_master(brand, topic, keyword, api_keys, audience="", angle="", user_facts="", seed=""):
+def generate_master(brand, topic, keyword, api_keys, audience="", angle="", user_facts="", seed="", tone="natural", length="medium", cta="message"):
     brand = str(brand or "").strip().lower()
     if brand not in ("umee", "lacasa"):
         raise ValueError("Project phải là UMEE hoặc Lacasa")
@@ -68,7 +75,7 @@ def generate_master(brand, topic, keyword, api_keys, audience="", angle="", user
         raise ValueError("Chủ đề không hợp lệ")
     if not str(keyword or "").strip():
         raise ValueError("Keyword/search intent là bắt buộc")
-    prompt = _prompt(brand, topic, keyword, audience, angle, user_facts, seed)
+    prompt = _prompt(brand, topic, keyword, audience, angle, user_facts, seed) + f"\nWRITING OPTIONS: tone={tone}; length={length}; cta={cta}. Follow these options unless they conflict with Truth Gate."
     keys = _ordered_available_keys(api_keys)
     errors = []
     for slot, key in enumerate(keys, 1):
@@ -90,16 +97,16 @@ def generate_master(brand, topic, keyword, api_keys, audience="", angle="", user
                 break
             except Exception as exc:
                 errors.append(f"key#{slot}/{model}: {exc}")
-    fallback = _local_master(brand, topic, keyword, audience, user_facts)
+    fallback = _local_master(brand, topic, keyword, audience, angle, user_facts, tone, length, cta)
     return {"content": fallback, "mode": "content_hub_fallback", "model": "local-truth-template", "key_slot": 0, "truth_pass": True, "error": "; ".join(errors[-6:])}
 
-def generate_with_quality(brand, topic, keyword, api_keys, history=None, audience="", angle="", user_facts="", attempts=4):
+def generate_with_quality(brand, topic, keyword, api_keys, history=None, audience="", angle="", user_facts="", attempts=4, tone="natural", length="medium", cta="message"):
     """Generate until Truth + similarity gates pass. Never weakens the gate to force a result."""
     history = list(history or [])[-200:]
     rejected = []
     for attempt in range(max(1, min(int(attempts), 8))):
         seed = hashlib.sha256(f"{brand}|{topic}|{keyword}|{len(history)}|{attempt}".encode()).hexdigest()[:12]
-        result = generate_master(brand, topic, keyword, api_keys, audience, angle, user_facts, seed)
+        result = generate_master(brand, topic, keyword, api_keys, audience, angle, user_facts, seed, tone, length, cta)
         gate = similarity_gate(result["content"], history)
         result["similarity"] = gate
         result["score"] = score_content(result["content"], keyword, result.get("truth_pass", False))
@@ -110,3 +117,10 @@ def generate_with_quality(brand, topic, keyword, api_keys, history=None, audienc
 
 def topic_catalog():
     return [{"id": key, "label": value} for key, value in TOPICS.items()]
+
+def writing_option_catalog():
+    return {
+        "tone": [{"id":"natural","label":"Tự nhiên"},{"id":"friendly","label":"Thân thiện"},{"id":"concise","label":"Ngắn gọn"},{"id":"story","label":"Kể chuyện"}],
+        "length": [{"id":"short","label":"Ngắn"},{"id":"medium","label":"Vừa"},{"id":"long","label":"Dài"}],
+        "cta": [{"id":"message","label":"Nhắn tin tư vấn"},{"id":"question","label":"Đặt câu hỏi"},{"id":"save","label":"Gợi ý lưu bài"},{"id":"soft","label":"CTA nhẹ"}],
+    }
