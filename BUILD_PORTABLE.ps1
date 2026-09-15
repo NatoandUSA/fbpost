@@ -41,4 +41,3 @@ Move-Item -LiteralPath $tmpHash -Destination ($zip + '.sha256') -Force
 Write-Host "Built $zip"
 Write-Host "SHA256 $hash"
 
-
