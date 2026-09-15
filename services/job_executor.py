@@ -830,17 +830,22 @@ def execute_automation_task(
             try:
                 from ai_spinner import generate_unique_variant_with_evidence
                 spin_result = generate_unique_variant_with_evidence(
-                    content, gemini_api_key, brand_key=brand_key, include_signature=include_signature, signature_mode=sig_mode
+                    content, gemini_api_key, brand_key=brand_key, include_signature=include_signature,
+                    signature_mode=sig_mode, variant_seed=target,
                 )
                 task_content = spin_result["content"]
                 if spin_result["mode"] == "gemini" and spin_result["changed"]:
-                    on_line(f"🤖 [AI Content Spinner] Gemini đã tạo biến thể mới cho mục tiêu {i+1}/{total}.\n")
+                    on_line(
+                        f"🤖 [AI Content Spinner] Gemini đã tạo biến thể Content Hub cho mục tiêu {i+1}/{total} "
+                        f"({spin_result.get('model', 'unknown')} · key pool {spin_result.get('key_pool_size', 0)}).\n"
+                    )
                 elif spin_result["changed"]:
                     detail = f"; Gemini lỗi: {spin_result['error']}" if spin_result["error"] else ""
                     on_line(f"🔀 [Local Spinner] Đã tạo biến thể truth-safe cho mục tiêu {i+1}/{total}{detail}.\n")
                 else:
+                    pool = f" key pool={spin_result.get('key_pool_size', 0)}, attempted={spin_result.get('keys_attempted', 0)}."
                     detail = f" Gemini lỗi: {spin_result['error']}." if spin_result["error"] else ""
-                    on_line(f"ℹ️ [Content Spinner] Nội dung không đổi; không có biến thể hợp lệ.{detail}\n")
+                    on_line(f"ℹ️ [Content Spinner] Nội dung không đổi; không có biến thể hợp lệ.{pool}{detail}\n")
             except Exception as spin_err:
                 on_line(f"⚠️ [AI Spinner] Xào bài gặp lỗi ({spin_err}), dùng nội dung gốc.\n")
                 from brand_profiles import apply_brand_signature

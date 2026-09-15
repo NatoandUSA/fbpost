@@ -14,11 +14,12 @@ import urllib.request
 import urllib.error
 import time as _time
 import threading
+import hashlib
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip() or "gemini-3.6-flash"
 GEMINI_FALLBACK_MODELS = tuple(
     model.strip() for model in os.getenv(
-        "GEMINI_FALLBACK_MODELS", ""
+        "GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.5-flash-lite"
     ).split(",") if model.strip()
 )
 CONTENT_REFERENCE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content_reference.json")
@@ -49,7 +50,9 @@ def _ordered_available_keys(value):
         _KEY_POOL_CURSOR = (_KEY_POOL_CURSOR + 1) % len(keys)
         ordered = keys[start:] + keys[:start]
         available = [key for key in ordered if _KEY_COOLDOWNS.get(key, 0) <= now]
-    return available or ordered
+    # When every key is cooling down, fail fast to the safe local fallback.
+    # Retrying cooled keys immediately only compounds 429 responses.
+    return available
 
 
 def _cooldown_key(key, seconds=90):
@@ -107,7 +110,7 @@ def _content_hub_numbers(brand_key: str = None) -> set:
     return set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(text)))
 
 
-def _preserves_core_info(original: str, generated: str, brand_key: str = None) -> bool:
+def _preserves_core_info(original: str, generated: str, brand_key: str = None, truth_context: str = "") -> bool:
     """Reject AI output that drops phone/price/link/address invariants from the source."""
     src = extract_core_info(original)
     dst = generated or ""
@@ -124,7 +127,8 @@ def _preserves_core_info(original: str, generated: str, brand_key: str = None) -
     # AI is allowed to rephrase, never to manufacture dynamic facts.
     src_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(original)))
     dst_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(dst)))
-    if not dst_numbers.issubset(src_numbers):
+    approved_numbers = set(re.findall(r"\b\d+(?:[.,]\d+)?\b", _without_phone_spans(truth_context)))
+    if not dst_numbers.issubset(src_numbers | approved_numbers):
         return False
     risky = ("rẻ nhất", "tốt nhất hôm nay", "phòng có hạn", "voucher", "giảm giá đặc biệt", "giá cực ưu đãi", "ưu đãi", "chỉ mất vài phút", "điểm dừng chân lý tưởng", "hỗ trợ ngay lập tức")
     src_low, dst_low = (original or "").casefold(), dst.casefold()
@@ -138,6 +142,8 @@ def _urlopen_json(req, timeout=20, attempts=3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError:
+            raise
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last = exc
             if attempt + 1 < attempts:
@@ -210,6 +216,30 @@ def _gemini_models():
     return tuple(dict.fromkeys((GEMINI_MODEL,) + GEMINI_FALLBACK_MODELS))
 
 
+def _content_quality_score(text: str, brand_name: str = "") -> int:
+    """Rank truthful candidates by Facebook readability, not sales hyperbole."""
+    value = (text or "").strip()
+    low = value.casefold()
+    score = 0
+    if 320 <= len(value) <= 900:
+        score += 3
+    paragraphs = [p for p in re.split(r"\n\s*\n", value) if p.strip()]
+    if 3 <= len(paragraphs) <= 8:
+        score += 3
+    if brand_name and brand_name.casefold() in low:
+        score += 2
+    if "homestay huế" in low:
+        score += 2
+    if any(token in low for token in ("inbox", "nhắn", "liên hệ", "xem phòng", "hỏi phòng")):
+        score += 2
+    first = value.splitlines()[0] if value else ""
+    if "?" in first or any(ch in first for ch in "🌿🏡✨📍"):
+        score += 1
+    if "**" in value or len(re.findall(r"#[\wÀ-ỹ]+", value)) > 4:
+        score -= 3
+    return score
+
+
 def clean_ai_output(text: str) -> str:
     """Lọc sạch lời mở đầu/suy nghĩ của Gemini và bỏ dấu markdown ** để hiển thị sạch trên Facebook."""
     if not text:
@@ -230,7 +260,7 @@ def clean_ai_output(text: str) -> str:
     return cleaned.strip()
 
 
-def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None) -> tuple:
+def spin_content_gemini_with_model(content: str, api_key: str, style: str = "tự nhiên", brand_name: str = "", truth_context: str = "", brand_key: str = None, variant_seed: str = "") -> tuple:
     """
     Xào bài viết qua Google Gemini API (Online).
     Tạo ra bài viết độc nhất 100%, câu cú mượt mà, hấp dẫn và giữ nguyên dữ liệu gốc.
@@ -246,7 +276,8 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         "EXPERIENCE-FIRST: diễn đạt cảm xúc nhưng không thêm tiện nghi hay lời hứa",
         "LOCAL-INTENT: kết nối nhu cầu lưu trú và du lịch Huế, không bịa địa điểm",
     )
-    strategy = strategies[abs(hash(content)) % len(strategies)]
+    digest = hashlib.sha256(f"{content or ''}|{variant_seed or ''}".encode("utf-8")).digest()
+    strategy = strategies[int.from_bytes(digest[:4], "big") % len(strategies)]
     tag_instruction = ""
     if brand_name:
         tag_instruction = (
@@ -259,18 +290,21 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         f"Bạn là một chuyên gia sáng tạo nội dung mạng xã hội (Facebook Copywriter) chuyên ngành Homestay, Du lịch và Bất động sản tại Huế.\n"
         + tag_instruction
         + f"CHIẾN LƯỢC BIÊN TẬP: {strategy}.\n"
-        + f"Hãy viết lại bài đăng Facebook sau đây với văn phong {style}, nhưng chỉ diễn đạt lại dữ liệu đã có, "
-        f"sử dụng các biểu cảm emoji sinh động, bố cục thoáng đãng và có lời kêu gọi hành động thu hút.\n\n"
+        + f"Hãy biên tập lại bài đăng Facebook sau đây với văn phong {style}, giàu hình ảnh nhưng không phô trương. "
+        f"Mở bằng một hook cụ thể, chia 4-7 đoạn ngắn dễ đọc và kết bằng CTA hội thoại tự nhiên.\n\n"
         f"YÊU CẦU BẮT BUỘC — CONTENT HUB TRUTH CONTRACT:\n"
-        f"- KHÔNG thêm tiện nghi, khoảng cách, thời gian di chuyển, giá, số phòng trống, khuyến mãi, voucher, sự kiện hoặc lời hứa không có trong bài gốc.\n"
+        f"- KHÔNG thêm dữ kiện ngoài bài gốc hoặc FACT của đúng thương hiệu trong Content Hub.\n"
+        f"- Tuyệt đối không tự thêm khoảng cách, thời gian di chuyển, giá, số phòng trống, khuyến mãi, voucher, sự kiện hoặc lời hứa động.\n"
         f"- Giữ nguyên toàn bộ số điện thoại, Zalo, địa chỉ, giá phòng hoặc link nếu có trong bài gốc.\n"
         f"- Không dùng claim rẻ nhất/tốt nhất hôm nay/phòng có hạn/chỉ vài phút nếu bài gốc không có dữ liệu đó.\n"
         f"- Không thêm các lời hứa như 'lý tưởng', 'hỗ trợ ngay lập tức', 'ưu đãi' nếu bài gốc không nêu.\n"
         f"- Bài chính tuyệt đối không chứa URL hoặc tên miền; thông tin liên kết sẽ được đưa vào first comment.\n"
-        f"- Được đổi câu chữ và thứ tự đoạn; KHÔNG thay đổi nghĩa của facts.\n"
+        f"- Được đổi câu chữ, cấu trúc và thứ tự đoạn; tránh lặp gần nguyên văn bài gốc.\n"
+        f"- Có thể bổ sung tối đa 2 FACT từ Content Hub bên dưới; không biến RULE thành fact.\n"
+        f"- Không dùng câu rỗng như 'điểm dừng chân lý tưởng', 'đừng bỏ lỡ', 'trải nghiệm tuyệt vời'.\n"
         f"- Viết bằng Tiếng Việt tự nhiên, phù hợp đăng nhóm cộng đồng hoặc fanpage.\n"
         f"- KHÔNG thêm bất kỳ lời dẫn giải nào như 'Dưới đây là bài viết...'. Chỉ trả về duy nhất nội dung bài đăng.\n\n"
-        + (f"{truth_context}\n\nChỉ dùng FACT phù hợp với nội dung bài gốc; RULE luôn bắt buộc. Không tự thêm fact chỉ để làm bài dài hơn.\n\n" if truth_context else "")
+        + (f"{truth_context}\n\nChỉ chọn FACT phù hợp với thương hiệu và mạch bài; RULE luôn bắt buộc.\n\n" if truth_context else "")
         + f"NỘI DUNG BÀI GỐC:\n{content}"
     )
 
@@ -284,8 +318,8 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         ],
         "generationConfig": {
             "maxOutputTokens": 2048,
-            "temperature": 0.85,
-            "topP": 0.9
+            "temperature": 0.92,
+            "topP": 0.92
         }
     }
 
@@ -296,19 +330,25 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
             headers={"Content-Type": "application/json", "x-goog-api-key": api_key.strip()}
         )
         try:
-            res_data = _urlopen_json(req, timeout=20, attempts=3)
+            res_data = _urlopen_json(req, timeout=18, attempts=1)
         except urllib.error.HTTPError as exc:
             if exc.code in (400, 404):
                 continue
             raise
-        candidates = res_data.get("candidates", [])
-        if candidates and "content" in candidates[0] and "parts" in candidates[0]["content"]:
-            spun_text = candidates[0]["content"]["parts"][0].get("text", "").strip()
-            spun_text = clean_ai_output(spun_text)
-            if spun_text and _preserves_core_info(content, spun_text, brand_key=brand_key):
-                return spun_text, model
-            if spun_text:
-                raise ValueError("Gemini output làm mất hoặc thêm dữ liệu ngoài bài gốc")
+        valid = []
+        for candidate in res_data.get("candidates", []):
+            parts = (candidate.get("content") or {}).get("parts") or []
+            spun_text = clean_ai_output(parts[0].get("text", "")) if parts else ""
+            score = _content_quality_score(spun_text, brand_name)
+            if spun_text and _preserves_core_info(
+                content, spun_text, brand_key=brand_key, truth_context=truth_context
+            ) and (not truth_context or score >= 7):
+                valid.append((score, spun_text))
+        if valid:
+            valid.sort(key=lambda item: item[0], reverse=True)
+            return valid[0][1], model
+        if res_data.get("candidates"):
+            raise ValueError("Gemini output làm mất hoặc thêm dữ liệu ngoài nguồn đã duyệt")
     raise RuntimeError("Không có Gemini model được cấu hình nào trả về nội dung hợp lệ.")
 
 
@@ -348,13 +388,15 @@ def generate_unique_variant(content: str, api_key: str = None, brand_key: str = 
 
 
 def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key: str = None,
-                                          include_signature: bool = False, signature_mode: str = "canonical") -> dict:
+                                          include_signature: bool = False, signature_mode: str = "canonical",
+                                          variant_seed: str = "") -> dict:
     """Generate content and expose real provenance/change evidence for truthful logs."""
     from brand_profiles import apply_brand_signature, brand_name, prepare_linkless_post
 
     if not content or not content.strip():
         return {"content": content, "mode": "unchanged", "changed": False, "error": "empty_content"}
 
+    all_api_keys = parse_gemini_keys(api_key)
     api_keys = _ordered_available_keys(api_key)
     source = prepare_linkless_post(content)
     spun = None
@@ -366,8 +408,9 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
           try:
             spun, used_model = spin_content_gemini_with_model(
                 source, selected_key, brand_name=brand_name(brand_key),
-                truth_context="",
+                truth_context=content_reference_context(brand_key),
                 brand_key=brand_key,
+                variant_seed=variant_seed,
             )
             mode = "gemini"
             used_key_slot = slot
@@ -378,7 +421,11 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
                 _cooldown_key(selected_key, 120 if exc.code == 429 else 300)
           except Exception as exc:
             errors.append(f"key#{slot}: {exc}")
+            if isinstance(exc, (TimeoutError, OSError, urllib.error.URLError)):
+                _cooldown_key(selected_key, 45)
         error = "; ".join(errors)
+    elif all_api_keys:
+        error = f"Tất cả {len(all_api_keys)} Gemini key đang cooldown sau lỗi quota/timeout"
     if spun is None:
         spun = spin_content_local(source)
     else:
@@ -390,11 +437,14 @@ def generate_unique_variant_with_evidence(content: str, api_key=None, brand_key:
     changed = comparable_source != comparable_spun
     if not changed:
         mode = "unchanged"
-    result = {"content": final, "mode": mode, "changed": changed, "error": error}
+    result = {
+        "content": final, "mode": mode, "changed": changed, "error": error,
+        "key_pool_size": len(all_api_keys), "keys_attempted": len(api_keys),
+    }
     if mode == "gemini":
         result["model"] = used_model
         result["key_slot"] = used_key_slot
-        result["key_pool_size"] = len(api_keys)
+        result["key_pool_size"] = len(all_api_keys)
     return result
 
 

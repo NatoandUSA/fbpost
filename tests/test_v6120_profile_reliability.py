@@ -1,5 +1,6 @@
 import json
 import re
+import urllib.error
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +12,7 @@ from repositories.workflow_repo import WorkflowRepository
 from repositories.moderation_repo import ModerationRepository
 from brand_profiles import BRAND_FIRST_COMMENTS, get_first_comment_text
 from fb_comment import COMMENT_REJECTION_RE
+import ai_spinner
 
 
 class ProfileReliabilityTests(unittest.TestCase):
@@ -89,6 +91,45 @@ class ProfileReliabilityTests(unittest.TestCase):
         self.assertIn("p.comment_rejected", js)
         self.assertIn("t.profile_name || t.profile_id", js)
         self.assertIn("loadProfilePerformance", js)
+
+    def test_campaign_spinner_passes_audited_brand_content_hub(self):
+        captured = {}
+        def fake_spin(content, key, **kwargs):
+            captured.update(kwargs)
+            return "Bạn cần tìm homestay Huế?\n\nUMEE Homestay có bãi đỗ ô tô miễn phí trước cửa.\n\nInbox để hỏi phòng nhé 🌿", "model-test"
+        with patch("ai_spinner.spin_content_gemini_with_model", side_effect=fake_spin):
+            result = ai_spinner.generate_unique_variant_with_evidence(
+                "Đang tìm homestay Huế, nhắn mình để hỏi phòng.",
+                ["key-111111111111"], brand_key="umee", include_signature=True,
+                signature_mode="linkless",
+            )
+        self.assertIn("SH44", captured["truth_context"])
+        self.assertIn("bãi đỗ ô tô miễn phí", captured["truth_context"])
+        self.assertEqual(result["key_pool_size"], 1)
+        self.assertEqual(result["mode"], "gemini")
+
+    def test_hub_numbers_are_allowed_only_when_context_is_supplied(self):
+        original = "UMEE Homestay tại Huế. Inbox để hỏi phòng."
+        generated = "UMEE Homestay ở SH44, có máy chiếu 100 inch và self check-in 24/7. Inbox để hỏi phòng."
+        self.assertFalse(ai_spinner._preserves_core_info(original, generated, brand_key="umee"))
+        self.assertTrue(ai_spinner._preserves_core_info(
+            original, generated, brand_key="umee",
+            truth_context=ai_spinner.content_reference_context("umee"),
+        ))
+
+    def test_http_429_rotates_without_retrying_same_key(self):
+        req = object()
+        error = urllib.error.HTTPError("https://example.invalid", 429, "quota", {}, None)
+        with patch("urllib.request.urlopen", side_effect=error) as mocked:
+            with self.assertRaises(urllib.error.HTTPError):
+                ai_spinner._urlopen_json(req, attempts=3)
+        self.assertEqual(mocked.call_count, 1)
+
+    def test_umee_mention_and_publish_error_detection_are_strict(self):
+        source = Path("utils.py").read_text(encoding="utf-8")
+        self.assertIn('"umee": ("UMEE Homestay", "umeehomestay")', source)
+        self.assertIn("[role='alert'], [aria-live='assertive']", source)
+        self.assertNotIn('if any(err_kw in dlg_text', source)
 
 
 if __name__ == "__main__":

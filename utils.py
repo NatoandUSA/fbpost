@@ -160,7 +160,7 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
     """Type one verified Facebook Page entity; fall back to unchanged plain text."""
     profiles = {
         "lacasa": ("Lacasa Homestay", "lacasahomestayinvietnam"),
-        "umee": ("Umee Homestay", "umeehomestay"),
+        "umee": ("UMEE Homestay", "umeehomestay"),
     }
     name, handle = profiles.get(str(brand_key or "").casefold(), ("", ""))
     value = str(text or "")
@@ -179,7 +179,7 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
         # Facebook's 2026 mention popup often exposes no role=option. The first
         # matching result is keyboard-highlighted (blue), so Enter is the most
         # stable commit path and avoids clicking a nested avatar/text node.
-        popup_match = page.get_by_text(name, exact=True)
+        popup_match = page.get_by_text(re.compile(rf"^\s*{re.escape(name)}\s*$", re.IGNORECASE))
         popup_visible = any(popup_match.nth(i).is_visible(timeout=300) for i in range(min(popup_match.count(), 12)))
         if popup_visible:
             page.keyboard.press("Enter")
@@ -187,8 +187,14 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
         else:
             raise RuntimeError("page autocomplete was not visible")
 
-        current = (locator.inner_text() or "").strip()
-        committed = f"@{name}".casefold() not in current.casefold()
+        def _entity_committed():
+            entity = locator.locator(f"a[href*='{handle}' i]")
+            semantic = locator.locator("[contenteditable='false']").filter(
+                has_text=re.compile(re.escape(name), re.IGNORECASE)
+            )
+            return bool(entity.count() or semantic.count())
+
+        committed = _entity_committed()
         if not committed:
             # DOM fallback: click the outermost visible result row, then Enter.
             candidates = page.locator("[role='listbox'] [role='option'], [role='menu'] [role='menuitem'], div[role='dialog'] [tabindex='0']")
@@ -196,15 +202,15 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
             for idx in range(min(candidates.count(), 40)):
                 candidate = candidates.nth(idx)
                 label = (candidate.inner_text(timeout=500) or "").strip().casefold()
-                if name.casefold() in label and candidate.is_visible(timeout=300):
+                hrefs = candidate.locator(f"a[href*='{handle}' i]")
+                if (name.casefold() in label or hrefs.count()) and candidate.is_visible(timeout=300):
                     chosen = candidate
                     break
             if chosen is None:
                 raise RuntimeError("page autocomplete result row was not found")
             chosen.click(force=True, timeout=2500)
             time.sleep(0.5)
-            current = (locator.inner_text() or "").strip()
-            committed = f"@{name}".casefold() not in current.casefold()
+            committed = _entity_committed()
         if not committed:
             raise RuntimeError("page autocomplete result was not committed")
         page.keyboard.insert_text(suffix)
@@ -217,7 +223,7 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
         # an anchor. Popup-visible -> Enter -> popup-closed -> @ removed is also
         # durable selection evidence; never infer success from text alone.
         semantic = locator.locator("[contenteditable='false']").filter(has_text=re.compile(re.escape(name), re.I))
-        if semantic.count() or committed:
+        if semantic.count():
             print(f"✅ [Page Mention] Đã commit autocomplete Page: {name} (@{handle}).")
             return True
         raise RuntimeError("selected candidate was not retained as a Page entity")
@@ -1646,9 +1652,26 @@ def click_post_publish_button(page, dialog=None):
                 break
             else:
                 dlg_text = (open_composer.inner_text() or "").lower()
-                # Phát hiện lỗi chặn bài hoặc vi phạm tiêu chuẩn
-                if any(err_kw in dlg_text for err_kw in ["không thể đăng", "bị hạn chế", "bị chặn", "something went wrong", "tạm thời bị chặn", "vi phạm tiêu chuẩn"]):
-                    print(f"❌ Facebook thông báo lỗi bài viết: {dlg_text[:150]}")
+                # Never scan the whole composer body for error keywords: marketing
+                # copy can legitimately contain the same words. Only a visible
+                # Facebook alert/live-region is authoritative failure evidence.
+                error_pattern = re.compile(
+                    r"không thể đăng|bị hạn chế|bị chặn|something went wrong|tạm thời bị chặn|vi phạm tiêu chuẩn",
+                    re.IGNORECASE,
+                )
+                error_surfaces = page.locator("[role='alert'], [aria-live='assertive']")
+                matched_error = ""
+                for error_idx in range(min(error_surfaces.count(), 20)):
+                    surface = error_surfaces.nth(error_idx)
+                    try:
+                        message = (surface.inner_text(timeout=400) or "").strip()
+                        if message and len(message) <= 500 and error_pattern.search(message) and surface.is_visible(timeout=250):
+                            matched_error = message
+                            break
+                    except Exception:
+                        continue
+                if matched_error:
+                    print(f"❌ Facebook thông báo lỗi bài viết qua alert: {matched_error[:250]}")
                     return False
 
                 # Kiểm tra xem có thông báo chờ admin duyệt xuất hiện không
