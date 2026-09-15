@@ -157,7 +157,9 @@ class ProfileReliabilityTests(unittest.TestCase):
 
     def test_umee_mention_and_publish_error_detection_are_strict(self):
         source = Path("utils.py").read_text(encoding="utf-8")
-        self.assertIn("from composer_guard import page_entity, mention_entity_committed", source)
+        self.assertIn("from adapters.facebook_mention import type_with_page_mention", source)
+        adapter = Path("adapters/facebook_mention.py").read_text(encoding="utf-8")
+        self.assertIn("from composer_guard import page_entity", adapter)
         self.assertIn("[role='alert'], [aria-live='assertive']", source)
         self.assertNotIn('if any(err_kw in dlg_text', source)
 

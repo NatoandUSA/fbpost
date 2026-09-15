@@ -3,11 +3,14 @@ import re
 
 from playwright.sync_api import sync_playwright
 
+from adapters.facebook_publication import scan_post_permalink, copy_post_permalink, has_pending_notice
+# Compatibility patch points retained for stable tests/callers; implementation lives in adapter.
+_scan_post_permalink_once = scan_post_permalink
+_copy_post_permalink_via_share_sheet = copy_post_permalink
+_has_pending_post_notice = has_pending_notice
+
 from utils import (
     ActionResult,
-    _has_pending_post_notice,
-    _scan_post_permalink_once,
-    _copy_post_permalink_via_share_sheet,
     close_browser,
     launch_browser,
     record_posted_link,
