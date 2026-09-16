@@ -859,7 +859,7 @@ class V604QueueAndHistoryTests(unittest.TestCase):
 class Phase1ArchitectureTests(unittest.TestCase):
     def test_paths_and_version(self):
         from paths import get_version, DATA_DIR, UPLOAD_DIR, BACKUP_DIR, LOG_DIR
-        self.assertEqual(get_version(), "6.1.25")
+        self.assertEqual(get_version(), "6.1.26")
         self.assertTrue(DATA_DIR.exists())
         self.assertTrue(UPLOAD_DIR.exists())
         self.assertTrue(BACKUP_DIR.exists())

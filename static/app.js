@@ -3770,7 +3770,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         mode: 'post',
                         apiKey: geminiApiKeyInput ? geminiApiKeyInput.value.trim() : '',
                         brandKey: brandProjectSelect ? brandProjectSelect.value : '',
-                        includeSignature: !!(brandProjectSelect && brandProjectSelect.value)
+                        includeSignature: false
                     })
                 });
                 const data = await res.json();

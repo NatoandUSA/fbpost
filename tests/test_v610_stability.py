@@ -312,10 +312,10 @@ class V610FinalLaunchInvariantsTests(unittest.TestCase):
 
 
 class V610SignatureApiContractTests(unittest.TestCase):
-    def test_ai_spin_api_requires_signature_for_selected_project(self):
+    def test_ai_spin_api_manual_preview_defers_signature_to_executor(self):
         root = Path(__file__).resolve().parents[1]
         src = (root / "server.py").read_text(encoding="utf-8")
-        self.assertIn("include_signature = bool(brand_key)", src)
+        self.assertIn('include_signature = bool(data.get("includeSignature", False))', src)
 
 
 class V610LaunchRepairTests(unittest.TestCase):

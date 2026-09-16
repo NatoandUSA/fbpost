@@ -154,8 +154,18 @@ def execute_automation_task(
         gemini_api_key = cfg.get("gemini_api_keys") or cfg.get("gemini_api_key") or ""
     else:
         gemini_api_key = raw_gemini_key
-    photo_folder = data.get("photoFolder", "").strip()
+    raw_photo_folder = data.get("photoFolder", "")
+    # Older/newer clients may send a single folder or a list. Normalize at the
+    # executor boundary so UI payload shape can never crash a job with .strip().
+    if isinstance(raw_photo_folder, (list, tuple, set)):
+        legacy_photo_folders = [str(p).strip() for p in raw_photo_folder if str(p).strip()]
+        photo_folder = legacy_photo_folders[0] if legacy_photo_folders else ""
+    else:
+        photo_folder = str(raw_photo_folder or "").strip()
+        legacy_photo_folders = []
     photo_folders = [str(p).strip() for p in (data.get("photoFolders") or []) if str(p).strip()]
+    if not photo_folders and legacy_photo_folders:
+        photo_folders = legacy_photo_folders
     if not photo_folders and photo_folder:
         photo_folders = [photo_folder]
     photo_count_mode = data.get("photoCountMode", "2-4")

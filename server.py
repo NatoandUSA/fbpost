@@ -1506,7 +1506,9 @@ def api_ai_spin():
     api_key = supplied_keys or cfg.get("gemini_api_keys") or cfg.get("gemini_api_key", "")
     mode = data.get("mode", "post")
     brand_key = data.get("brandKey") or data.get("brand") or ""
-    include_signature = bool(brand_key)  # Project selected => linkless search signature required.
+    # Manual rewrite returns clean copy for review/editing. The executor adds the
+    # mandatory project signature once, immediately before the Facebook composer.
+    include_signature = bool(data.get("includeSignature", False))
     if not content and mode != "interact":
         return jsonify({"error": "Vui lòng nhập nội dung cần xào."}), 400
     try:
