@@ -2013,8 +2013,8 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
 
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
-        self.assertIn('styles.css?v=6.1.22', html)
-        self.assertIn('app.js?v=6.1.22', html)
+        self.assertIn('styles.css?v=6.1.27', html)
+        self.assertIn('app.js?v=6.1.27', html)
         self.assertNotIn('app.js?v=5.8.0', html)
 
     def test_composer_verifier_requires_full_signature_block_when_expected(self):

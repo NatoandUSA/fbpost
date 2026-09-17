@@ -1512,3 +1512,13 @@ select.field-input { cursor: pointer; }
 .workspace-grid.queue-focus .workflow-table-wrap{max-height:38vh;overflow:auto;}
 #history-section #posted-links-card{width:100%;box-shadow:none;}
 #history-section #posted-links-list{max-height:68vh!important;overflow:auto!important;}
+
+/* v6.1.27 UI containment hotfix */
+.app-layout{height:100dvh;min-height:0}
+.app-workspace{min-width:0;min-height:0}
+.workspace-grid{min-width:0;min-height:0;overscroll-behavior:contain}
+.workspace-panel,.panel-left,.panel-right{min-width:0;max-width:100%}
+.card,.workflow-guide{max-width:100%}
+.log-card{width:100%;min-width:0}
+.log-output{width:100%;max-width:100%;box-sizing:border-box}
+@media(max-width:1100px){.panel-right{width:100%}}
