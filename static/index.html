@@ -168,7 +168,13 @@
                         <div class="workflow-actions">
                             <button class="composer-tab btn btn-secondary btn-sm" type="button" data-target="content-hub" data-workspace-target="content-hub">✨ Mở Content Hub</button>
                             <button class="btn btn-primary btn-sm" type="button" data-workspace-target="page-scheduler">🗓 Mở lịch Page</button>
+                            <button id="open-group-registry-btn" class="btn btn-secondary btn-sm" type="button">👥 Quản lý Groups</button>
                         </div>
+                    </section>
+
+                    <section id="group-registry-card" class="card hidden">
+                        <div class="card-header"><div class="card-title-group"><span class="card-icon">👥</span><h3>Groups đã ghi nhận</h3></div><button id="refresh-group-registry-btn" class="btn btn-secondary btn-xs" type="button">🔄 Làm mới</button></div>
+                        <div style="overflow:auto;max-height:360px"><table><thead><tr><th>Group</th><th>Duyệt admin</th><th>Pending</th><th>Ưu tiên</th><th>Profile cuối</th></tr></thead><tbody id="group-registry-body"><tr><td colspan="5">Chưa tải dữ liệu.</td></tr></tbody></table></div>
                     </section>
 
                     <!-- Profiles / Accounts Card -->

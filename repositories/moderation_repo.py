@@ -77,6 +77,21 @@ class ModerationRepository(BaseRepository):
             """, (target,evidence,now,profile_id,count,now))
         return count
 
+    def list_moderated_groups(self, limit=500):
+        conn = self.get_conn()
+        try:
+            rows = conn.execute("""
+                SELECT group_url,requires_approval,pending_count,last_pending_checked_at,
+                       skip_threshold,evidence,confirmed_count,last_confirmed_at,last_profile_id
+                FROM group_moderation_registry
+                ORDER BY CASE WHEN pending_count >= skip_threshold THEN 0 WHEN requires_approval=1 THEN 1 ELSE 2 END,
+                         COALESCE(last_pending_checked_at,last_confirmed_at,'') DESC
+                LIMIT ?
+            """, (int(limit),)).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
     def moderation_info(self, group_url):
         conn = self.get_conn()
         try:

@@ -753,6 +753,17 @@ def execute_automation_task(
         on_line(f"RUN_RESULT:{'failed' if failed else 'finished'}\n")
         return not failed
 
+    # Profile rotation is LRU, not input-order round robin. Profiles with no
+    # activity history sort first; every profile is consumed once before reuse.
+    if rotate_accounts and accounts_pool:
+        try:
+            last_used = ActivityRepository().latest_activity_by_profile()
+            accounts_pool = sorted(accounts_pool, key=lambda a: (last_used.get(str(a.get("id") or ""), ""), str(a.get("name") or a.get("id") or "")))
+            order = ", ".join(str(a.get("name") or a.get("id")) for a in accounts_pool)
+            on_line(f"[Profile Rotation] LRU order (idle longest first): {order}\n")
+        except Exception as exc:
+            on_line(f"[Profile Rotation] LRU history unavailable; keeping configured order: {exc}\n")
+
     # 8. POSTING (GROUP, PAGE, RECONCILE)
     tasks = data.get("tasks", [])
     if not tasks:
@@ -1131,7 +1142,7 @@ def execute_automation_task(
                             target, task_content, curr_acc_id, queue_item_id or None,
                             delay_seconds=600, reconcile_kind="moderation"
                         )
-                        on_line("🕒 [First Comment] Đã lưu comment liên kết; sẽ đăng sau khi bài được duyệt và có permalink.\n")
+                        on_line("🕒 [First Comment] Đã lưu first comment dạng text; sẽ đăng sau khi bài được duyệt và có permalink.\n")
                 except Exception as moderation_err:
                     on_line(f"⚠️ [Group Moderation] Không thể lưu trạng thái chờ duyệt: {moderation_err}\n")
         elif submit_was_triggered:

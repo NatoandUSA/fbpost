@@ -1626,90 +1626,25 @@ def click_post_publish_button(page, dialog=None):
 
 
 def add_feeling(page):
-    """
-    Chọn cảm xúc ngẫu nhiên trong khung soạn thảo Facebook:
-    - Tìm icon Cảm xúc qua aria-label (hỗ trợ cả khi bị ẩn trong nút 'Xem thêm').
-    - Chọn cảm xúc từ danh sách hoặc gõ tìm kiếm.
-    - Luôn đảm bảo thoát màn hình phụ và trở về khung soạn bài chính.
-    """
-    print("😊 Đang thêm cảm xúc ngẫu nhiên cho bài viết...")
+    """Best-effort feeling. Fail-soft: preserve the main composer above all else."""
+    print("😊 Đang thêm cảm xúc (SafeMode)...")
     try:
-        # 1. Tìm nút Cảm xúc/hoạt động trong dialog
-        feeling_selectors = [
-            "div[role='dialog'] div[aria-label*='Cảm xúc/hoạt động' i]",
-            "div[role='dialog'] div[aria-label*='Feeling/activity' i]",
-            "div[role='dialog'] div[aria-label*='Cảm xúc' i]",
-            "div[role='dialog'] div[aria-label*='Feeling' i]",
-            "div[role='dialog'] [role='button'][aria-label*='Cảm xúc' i]",
-            "div[role='dialog'] div[role='button']:has-text('Cảm xúc')",
-            "div[role='dialog'] div[role='button']:has-text('Feeling')"
-        ]
-        feeling_btn = None
-        for sel in feeling_selectors:
-            cand = page.locator(sel).first
-            if cand.is_visible(timeout=1000):
-                feeling_btn = cand
-                break
-
-        # Nếu không thấy trực tiếp, thử mở menu "Xem thêm" (...) ở thanh công cụ dưới cùng
-        if not feeling_btn:
-            more_selectors = [
-                "div[role='dialog'] div[aria-label*='Xem thêm' i]",
-                "div[role='dialog'] div[aria-label*='More' i]",
-                "div[role='dialog'] div[role='button'][aria-label*='Thêm vào' i]"
-            ]
-            for m_sel in more_selectors:
-                m_btn = page.locator(m_sel).first
-                if m_btn.is_visible(timeout=1000):
-                    m_btn.click(force=True)
-                    time.sleep(1.0)
-                    for sel in feeling_selectors:
-                        cand = page.locator(sel).first
-                        if cand.is_visible(timeout=1000):
-                            feeling_btn = cand
-                            break
-                    break
-
-        if feeling_btn and feeling_btn.is_visible():
-            feeling_btn.click(force=True, timeout=5000)
-            time.sleep(random.uniform(1.5, 2.5))
-            
-            feelings_list = ["Vui vẻ", "Hạnh phúc", "Tuyệt vời", "Hào hứng", "Biết ơn", "Năng động", "Hài lòng"]
-            selected_feeling = random.choice(feelings_list)
-            
-            search_input = page.locator("div[role='dialog'] input[placeholder*='Search' i], div[role='dialog'] input[placeholder*='Tìm kiếm' i], div[role='dialog'] input[type='search'], div[role='dialog'] input[type='text']").first
-            if search_input.is_visible(timeout=2500):
-                search_input.fill(selected_feeling)
-                time.sleep(random.uniform(1.5, 2.5))
-                
-                # Tìm option tương ứng với cảm xúc đã chọn
-                first_option = page.locator("div[role='dialog'] div[role='button']").filter(
-                    has_text=re.compile(selected_feeling, re.IGNORECASE)
-                ).first
-                if not first_option.is_visible(timeout=1500):
-                    # Fallback tìm bất kỳ cảm xúc thông dụng nào xuất hiện
-                    first_option = page.locator("div[role='dialog'] div[role='button']").filter(
-                        has_text=re.compile(r"Vui vẻ|Hạnh phúc|Tuyệt vời|Hào hứng|Biết ơn|Happy|Loved|Excited", re.IGNORECASE)
-                    ).first
-
-                if first_option.is_visible(timeout=2000):
-                    first_option.click(force=True, timeout=5000)
-                    print(f"✅ Đã gắn cảm xúc: {selected_feeling}")
-                    time.sleep(1.5)
-
-        # Đảm bảo nếu màn hình phụ vẫn còn (chưa tự thoát), bấm nút Quay lại về khung soạn thảo chính
-        back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
-        if back_btn.is_visible(timeout=1000):
-            back_btn.click(force=True)
-            time.sleep(1.0)
-    except Exception as e:
-        print(f"⚠️ Cảnh báo: Bỏ qua thêm cảm xúc ({e}).")
-        try:
-            back_btn = page.locator("div[role='dialog'] div[aria-label*='Quay lại' i], div[role='dialog'] div[aria-label*='Back' i]").first
-            if back_btn.is_visible(timeout=1000):
-                back_btn.click(force=True)
-        except Exception:
-            pass
+        # Facebook feeling UI is volatile and has closed a populated composer in live runs.
+        # Until the active DOM exposes a provably scoped feeling surface, do not mutate it.
+        editors = page.locator("div[role='dialog'] [contenteditable='true']")
+        visible = [editors.nth(i) for i in range(min(editors.count(), 12)) if editors.nth(i).is_visible(timeout=150)]
+        if len(visible) != 1:
+            print(f"⚠️ [Feeling SafeMode] SKIP ambiguous composer editors={len(visible)}")
+            return False
+        text = (visible[0].inner_text(timeout=500) or '').strip()
+        if not text:
+            print("⚠️ [Feeling SafeMode] SKIP empty composer")
+            return False
+        print("ℹ️ [Feeling SafeMode] SKIP volatile feeling surface; composer preserved.")
+        return False
+    except Exception as exc:
+        print(f"⚠️ [Feeling SafeMode] SKIP error={type(exc).__name__}:{exc}")
+        return False
 
 def add_checkin(page, brand_key=None):
     """

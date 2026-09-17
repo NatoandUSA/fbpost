@@ -50,7 +50,8 @@ class ProfileReliabilityTests(unittest.TestCase):
         for brand_key, variants in BRAND_FIRST_COMMENTS.items():
             self.assertGreaterEqual(len(variants), 3)
             for text in variants:
-                self.assertEqual(len(re.findall(r"https?://\S+", text)), 1)
+                self.assertEqual(len(re.findall(r"https?://\S+", text)), 0)
+                self.assertRegex(text, r"0905\s*555\s*317")
                 self.assertNotIn("zalo.me/", text.lower())
                 self.assertIn("0905 555 317", text)
             chosen = [get_first_comment_text(brand_key, f"group-{i}") for i in range(20)]

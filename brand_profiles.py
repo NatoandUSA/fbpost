@@ -39,15 +39,16 @@ BRAND_LINKLESS_SIGNATURES = {
 URL_RE = re.compile(r"(?i)\b(?:https?://|www\.|fb\.com/|zalo\.me/|maps\.app\.goo\.gl/)[^\s]+")
 
 BRAND_FIRST_COMMENTS = {
+    # URL comments are frequently suppressed by Facebook; keep contact text link-free.
     "umee": (
-        "🌿 Xem thông tin và hình ảnh UMEE Homestay tại: https://www.facebook.com/umeehomestay\n📞 Hotline/Zalo: 0905 555 317 · Bạn có thể inbox Page để hỏi loại phòng phù hợp.",
-        "🏡 Tham khảo UMEE Homestay Huế: https://www.facebook.com/umeehomestay\n☎️ Liên hệ/Zalo 0905 555 317 để nhận thông tin phòng.",
-        "📍 Cần xem phòng UMEE? Ghé Page chính thức: https://www.facebook.com/umeehomestay\nHotline/Zalo: 0905 555 317.",
+        "🌿 UMEE Homestay · Hotline/Zalo: 0905 555 317",
+        "🏡 UMEE Homestay Huế · 0905 555 317",
+        "📞 UMEE Homestay — Hotline/Zalo 0905 555 317",
     ),
     "lacasa": (
-        "🌿 Xem thông tin và hình ảnh Lacasa Homestay tại: https://www.facebook.com/lacasahomestayinvietnam\n📞 Hotline/Zalo: 0905 555 317 · Bạn có thể inbox Page để hỏi loại phòng phù hợp.",
-        "🏡 Tham khảo Lacasa Homestay Huế: https://www.facebook.com/lacasahomestayinvietnam\n☎️ Liên hệ/Zalo 0905 555 317 để nhận thông tin phòng.",
-        "📍 Cần xem phòng Lacasa? Ghé Page chính thức: https://www.facebook.com/lacasahomestayinvietnam\nHotline/Zalo: 0905 555 317.",
+        "🌿 Lacasa Homestay · Hotline/Zalo: 0905 555 317",
+        "🏡 Lacasa Homestay Huế · 0905 555 317",
+        "📞 Lacasa Homestay — Hotline/Zalo 0905 555 317",
     ),
 }
 

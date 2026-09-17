@@ -66,6 +66,20 @@ class ActivityRepository(BaseRepository):
             conn.execute("DELETE FROM activity_log")
         return True
 
+    def latest_activity_by_profile(self):
+        """Return latest recorded use per profile for least-recently-used scheduling."""
+        conn = self.get_conn()
+        try:
+            rows = conn.execute("""
+                SELECT profile_id, MAX(timestamp) AS last_used_at
+                FROM activity_log
+                WHERE COALESCE(profile_id,'') <> ''
+                GROUP BY profile_id
+            """).fetchall()
+            return {str(r["profile_id"]): str(r["last_used_at"] or "") for r in rows}
+        finally:
+            conn.close()
+
     # Posted Links
     def list_posted_links(self, limit: int = 200) -> List[Dict[str, Any]]:
         conn = self.get_conn()

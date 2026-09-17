@@ -1,4 +1,4 @@
-﻿"""Facebook Page mention adapter isolated from posting core.
+"""Facebook Page mention adapter isolated from posting core.
 
 The adapter owns volatile Facebook autocomplete DOM. Posting code only consumes
 MentionResult and never knows selectors/ranking details.
@@ -108,8 +108,29 @@ def _semantic_commit_evidence(editor, entity):
             return {"kind": "atomic_mention", "text": matches[0]}
     except Exception:
         pass
+    # A committed Facebook mention may be structured without a canonical href.
+    # Plain typed text stays a text node, so require an exact-name descendant element.
+    try:
+        nodes = editor.locator("a, span, strong, [role='link'], [data-lexical-text], [data-lexical-decorator]")
+        structured = []
+        for i in range(min(nodes.count(), 80)):
+            node = nodes.nth(i)
+            text = (node.inner_text(timeout=200) or node.text_content(timeout=200) or "").strip().lstrip("@").strip()
+            if text.casefold() != entity["name"].casefold():
+                continue
+            attrs = node.evaluate("e => ({tag:e.tagName, role:e.getAttribute('role'), ce:e.getAttribute('contenteditable'), lexical:e.getAttribute('data-lexical-text')})")
+            structured.append(attrs)
+        if structured:
+            return {"kind": "structured_mention", "node": structured[0]}
+    except Exception:
+        pass
     return {}
 
+
+def mention_commit_evidence(editor, brand_key):
+    """Public verifier shared by initial mention and pre-submit audit."""
+    entity = page_entity(brand_key)
+    return _semantic_commit_evidence(editor, entity) if entity else {}
 
 def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
     entity = page_entity(brand_key)

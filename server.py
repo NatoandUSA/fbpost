@@ -322,6 +322,17 @@ def get_status():
     return jsonify({"authenticated": is_authenticated})
 
 
+@app.route('/api/groups/moderation', methods=['GET'])
+def api_groups_moderation():
+    from repositories.moderation_repo import ModerationRepository
+    rows = ModerationRepository().list_moderated_groups()
+    for row in rows:
+        pending = int(row.get("pending_count") or 0)
+        threshold = int(row.get("skip_threshold") or 2)
+        row["decision"] = "skip" if pending >= threshold else ("low_priority" if row.get("requires_approval") else "normal")
+    return jsonify({"groups": rows, "count": len(rows)})
+
+
 @app.route('/api/app-info', methods=['GET'])
 def get_app_info():
     return jsonify(app_build_info())

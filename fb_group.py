@@ -464,11 +464,12 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 return ActionResult(success=False, code="COMPOSER_LOST_BEFORE_SUBMIT", message="Composer bị mất trước khi bấm Đăng.", target_url=group_url)
 
             # 3. Tìm và bấm chính xác nút 'Đăng' (loại bỏ 'Đăng ẩn danh' và xác nhận dialog đóng)
-            from composer_guard import audit_final_content, mention_entity_committed
+            from composer_guard import audit_final_content
+            from adapters.facebook_mention import mention_commit_evidence
             pre_submit = audit_final_content(content, brand_key, linkless=True)
             if not pre_submit["pass"]:
                 return ActionResult(success=False, code="FINAL_CONTENT_AUDIT_FAILED", message=",".join(pre_submit["issues"]), target_url=group_url)
-            if mention_verified and not mention_entity_committed(textbox, brand_key):
+            if mention_verified and not mention_commit_evidence(textbox, brand_key):
                 print("[Pre-submit Audit] Page mention entity was lost; fail-closed.")
                 return ActionResult(success=False, code="MENTION_ENTITY_LOST", message="Page mention entity was lost before submit.", target_url=group_url)
             print(f"[Pre-submit Audit] PASS mention={'VERIFIED_ENTITY' if mention_verified else 'PLAIN_TEXT_FALLBACK'} cta={pre_submit['cta_count']}")

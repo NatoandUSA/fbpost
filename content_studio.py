@@ -52,20 +52,19 @@ Không đặt URL trong thân bài. Keyword dùng tự nhiên, không nhồi. C�
 Không lặp nguyên một đoạn. Chỉ trả nội dung bài Facebook, không markdown giải thích."""
 
 def _local_master(brand, topic, keyword, audience="", angle="", user_facts="", tone="natural", length="medium", cta="message"):
-    """Deterministic truth-safe fallback that still honors writing options."""
+    """Human-readable truth-safe fallback; no synthetic labels or filler prose."""
     ref = load_content_reference(); facts = list((ref.get(brand) or {}).get("facts") or [])
-    chosen = facts[:2]
-    name = "UMEE Homestay" if brand == "umee" else "Lacasa Homestay"
-    audience_text = (audience or "khách đang tìm lưu trú tại Huế").strip()
-    angle_text = (angle or "hữu ích, tự nhiên").strip()
-    tone_lead = {"natural":"Một gợi ý nhẹ nhàng cho", "friendly":"Nếu bạn đang lên lịch ở Huế, đây là vài thông tin dành cho", "concise":"Thông tin nhanh cho", "story":"Một hành trình ở Huế thường bắt đầu từ việc chọn nơi nghỉ phù hợp cho"}.get(tone, "Một gợi ý nhẹ nhàng cho")
-    lead = f"{tone_lead} {audience_text}: {keyword}."
-    fact_limit = 1 if length == "short" else min(3 if length == "long" else 2, len(facts))
-    fact_lines = "\n".join(f"• {x}" for x in facts[:fact_limit])
+    limit = 1 if length == "short" else (3 if length == "long" else 2)
+    chosen = facts[:limit]
+    leads = {"hourly":"Cần một khoảng nghỉ linh hoạt tại Huế?", "event":"Có lịch trình hoặc sự kiện ở Huế và cần chỗ nghỉ phù hợp?", "rain":"Những ngày Huế có mưa, một chỗ nghỉ thuận tiện giúp lịch trình nhẹ nhàng hơn.", "hue_info":"Đang lên lịch khám phá Huế và muốn thông tin rõ ràng trước chuyến đi?"}
+    lead = leads.get(topic, "Đang tìm một homestay Huế với thông tin rõ ràng, dễ cân nhắc?")
+    if audience:
+        lead = f"{lead} Gợi ý này dành cho {audience.strip()}."
+    fact_lines = "\n".join(f"• {x}" for x in chosen)
     live = f"\n• {user_facts.strip()}" if user_facts.strip() else ""
-    angle_line = f"\n\nGóc nội dung: {angle_text}." if angle else ""
-    cta_text = {"message":"Nếu cần kiểm tra thông tin phù hợp với lịch trình thực tế, hãy nhắn cho chúng tôi.", "question":"Bạn đang ưu tiên điều gì nhất cho chuyến đi Huế lần này?", "save":"Bạn có thể lưu lại các thông tin này để đối chiếu khi lên lịch Huế.", "soft":"Nếu thấy phù hợp, bạn có thể nhắn để hỏi thêm thông tin đã được xác nhận."}.get(cta, "Nếu cần thêm thông tin, hãy nhắn cho chúng tôi.")
-    return f"{lead}\n\n{name} — thông tin đã được xác nhận:\n{fact_lines}{live}{angle_line}\n\n{cta_text}"
+    name = "UMEE Homestay" if brand == "umee" else "Lacasa Homestay"
+    ctas = {"question":"Bạn đang ưu tiên điều gì nhất cho chuyến đi Huế lần này?", "save":"Bạn có thể lưu lại để đối chiếu khi lên lịch Huế.", "soft":"Nếu thấy phù hợp, bạn có thể nhắn để kiểm tra thông tin thực tế.", "message":"Nếu cần kiểm tra thông tin phù hợp với lịch trình thực tế, hãy nhắn để được xác nhận."}
+    return f"{lead}\n\n{name} gửi bạn vài thông tin đã được xác nhận:\n{fact_lines}{live}\n\n{ctas.get(cta, ctas['message'])}"
 
 def generate_master(brand, topic, keyword, api_keys, audience="", angle="", user_facts="", seed="", tone="natural", length="medium", cta="message"):
     brand = str(brand or "").strip().lower()
