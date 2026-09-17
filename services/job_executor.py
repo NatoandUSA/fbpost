@@ -1081,7 +1081,7 @@ def execute_automation_task(
                             return False
                         on_line("💬 [First Comment] Đang nhập bình luận thông tin liên hệ bằng luồng human typing...\n")
                         try:
-                            comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text]
+                            comment_cmd = build_cmd_for_account(curr_acc_id) + ["comment", post_permalink, first_comment_text, "--brand-key", comment_brand_key]
                             if not anti_hash_text:
                                 comment_cmd.append("--no-anti-hash-text")
                             comment_result = {}

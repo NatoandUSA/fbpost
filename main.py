@@ -92,6 +92,7 @@ def main():
     comment_parser.add_argument("--max-delay", type=int, default=45, help="Max delay between comments in seconds")
     comment_parser.add_argument("--anti-hash-text", action="store_true", default=False, help="Legacy compatibility option; disabled by default")
     comment_parser.add_argument("--no-anti-hash-text", action="store_false", dest="anti_hash_text", help="Disable anti-hash text")
+    comment_parser.add_argument("--brand-key", default=None, help="Tag selected Project Page in first comment: umee or lacasa")
 
     # Join-group command
     join_group_parser = subparsers.add_parser("join-group", help="Search and automatically join Facebook groups by keywords")
@@ -181,7 +182,7 @@ def main():
                 urls = [l.strip() for l in f if l.strip()]
             success = bool(comment_on_list(urls, args.content or "", args.account_id, args.gpm_api, args.like, args.min_delay, args.max_delay, anti_hash_text=args.anti_hash_text))
         elif args.url and args.content:
-            result = comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text)
+            result = comment_on_post(args.url, args.content, args.account_id, args.gpm_api, args.like, anti_hash_text=args.anti_hash_text, brand_key=getattr(args, "brand_key", None))
             if hasattr(result, "to_dict"):
                 print("ACTION_RESULT:" + json.dumps(result.to_dict(), ensure_ascii=False))
             success = bool(result)

@@ -325,7 +325,7 @@ def _save_comment_evidence(page, code):
     except Exception:
         return ""
 
-def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=False, anti_hash_text=False):
+def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None, like_post=False, anti_hash_text=False, brand_key=None):
     """
     Tự động mở một bài viết Facebook (trong Group public hoặc Fanpage public) và để lại bình luận.
     Hỗ trợ Spintax, human typing, like trước khi comment, và xử lý các loại giao diện Facebook.
@@ -475,7 +475,17 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 pass
             time.sleep(random.uniform(0.3, 0.7))
 
-            human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
+            mention_verified = False
+            if brand_key:
+                from adapters.facebook_mention import type_with_page_mention
+                mention_result = type_with_page_mention(
+                    page, comment_input, parsed_comment, brand_key=brand_key,
+                    plain_type=lambda p, loc, txt: human_type(p, loc, txt, multiline_key="Shift+Enter"),
+                )
+                mention_verified = bool(mention_result.verified)
+                print(f"[First Comment Mention] brand={brand_key} status={'VERIFIED_ENTITY' if mention_verified else 'PLAIN_TEXT_FALLBACK'}")
+            else:
+                human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
             time.sleep(random.uniform(1.0, 2.0))
 
             # 4. Ưu tiên nút Gửi/Send rõ ràng; Enter chỉ là fallback.
