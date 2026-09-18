@@ -85,6 +85,52 @@ class WorkflowRepository(BaseRepository):
         finally:
             conn.close()
 
+    def membership_ineligible_profiles(self, target_url: str):
+        """Profiles already proven not to be members of this exact group target."""
+        from utils import normalize_target_url
+        wanted = normalize_target_url(target_url or "")
+        if not wanted:
+            return set()
+        conn = self.get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT profile_id,target_url FROM workflow_tasks
+                   WHERE action='group' AND error_code='GROUP_MEMBERSHIP_UNVERIFIED'
+                     AND profile_id IS NOT NULL AND profile_id!=''"""
+            ).fetchall()
+            return {str(r["profile_id"]) for r in rows
+                    if normalize_target_url(r["target_url"] or "") == wanted}
+        finally:
+            conn.close()
+
+    def system_posting_summary(self):
+        """Authoritative persisted totals for dashboard audit/operations."""
+        conn = self.get_conn()
+        try:
+            post = {r["publish_state"]: int(r["n"]) for r in conn.execute(
+                "SELECT publish_state,COUNT(*) n FROM posted_links GROUP BY publish_state"
+            ).fetchall()}
+            mod = conn.execute(
+                """SELECT COUNT(*) groups_known,
+                          SUM(CASE WHEN requires_approval=1 THEN 1 ELSE 0 END) approval_groups,
+                          SUM(CASE WHEN pending_count>=skip_threshold THEN 1 ELSE 0 END) capacity_blocked_groups,
+                          COALESCE(SUM(pending_count),0) tracked_pending_posts
+                   FROM group_moderation_registry"""
+            ).fetchone()
+            return {
+                "published": int(post.get("published", 0)),
+                "pending": int(post.get("pending", 0)),
+                "submitted_unverified": int(post.get("submitted_unverified", 0)),
+                "groups_known_moderated": int(mod["groups_known"] or 0),
+                "approval_groups": int(mod["approval_groups"] or 0),
+                "capacity_blocked_groups": int(mod["capacity_blocked_groups"] or 0),
+                "tracked_pending_posts": int(mod["tracked_pending_posts"] or 0),
+                "configured_profiles": int(conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]),
+                "configured_groups": int(conn.execute("SELECT COUNT(*) FROM groups").fetchone()[0]),
+            }
+        finally:
+            conn.close()
+
     def profile_posting_performance(self, limit=200):
         """Evidence-based posting totals; pending is reported separately from success."""
         conn = self.get_conn()
@@ -96,7 +142,8 @@ class WorkflowRepository(BaseRepository):
                        SUM(CASE WHEN state='published' THEN 1 ELSE 0 END) AS published,
                        SUM(CASE WHEN state='pending' THEN 1 ELSE 0 END) AS pending,
                        SUM(CASE WHEN state='unverified' THEN 1 ELSE 0 END) AS unverified,
-                       SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END) AS failed,
+                       SUM(CASE WHEN state='failed' AND COALESCE(error_code,'')!='GROUP_MEMBERSHIP_UNVERIFIED' THEN 1 ELSE 0 END) AS failed,
+                       SUM(CASE WHEN state='failed' AND error_code='GROUP_MEMBERSHIP_UNVERIFIED' THEN 1 ELSE 0 END) AS membership_unverified,
                        SUM(CASE WHEN state IN ('running','queued') THEN 1 ELSE 0 END) AS active,
                        ROUND(AVG(CASE WHEN finished_at IS NOT NULL AND started_at IS NOT NULL
                            THEN (julianday(finished_at)-julianday(started_at))*86400 END), 1) AS avg_seconds,
@@ -119,6 +166,9 @@ class WorkflowRepository(BaseRepository):
             for row in rows:
                 item = dict(row)
                 item['comment_rejected'] = int(rejected_by_profile.get(item['profile_id'], 0))
+                # Membership mismatch is target/profile compatibility, not a posting-engine failure.
+                # Keep it visible but exclude it from the posting success denominator.
+                item['membership_unverified'] = int(item.get('membership_unverified') or 0)
                 terminal = item['published'] + item['pending'] + item['unverified'] + item['failed']
                 item['published_rate'] = round((item['published'] * 100.0 / terminal), 1) if terminal else 0.0
                 result.append(item)

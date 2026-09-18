@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Facebook Automation Workspace 2026 - Modern Flat UI">
     <title>FB Automation Workspace v6.1.27</title>
-    <link rel="stylesheet" href="styles.css?v=6.1.27">
+    <link rel="stylesheet" href="styles.css?v=6.1.28">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -899,8 +899,8 @@ https://www.facebook.com/groups/648990015540886/</textarea>
       <div class="card-title-group"><span>📊</span><h3>Đánh giá hiệu suất đăng bài theo Profile</h3><span id="profile-performance-summary" class="workflow-summary"></span></div>
       <button id="refresh-profile-performance-btn" class="btn btn-secondary btn-xs" type="button">↻ Làm mới</button>
     </div>
-    <div class="workflow-table-wrap"><table class="workflow-table"><thead><tr><th>Tên Profile</th><th>Tổng lượt</th><th>Đã đăng</th><th>Chờ duyệt</th><th>Chưa xác minh</th><th>Lỗi</th><th>Comment bị từ chối</th><th>Tỷ lệ đăng xác minh</th><th>TB thời gian</th></tr></thead><tbody id="profile-performance-body"><tr><td colspan="9" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
-    <p class="field-hint" style="padding:0 14px 12px;">Tỷ lệ chỉ tính bài có permalink đã xác minh; bài chờ quản trị viên duyệt được tách riêng, không tính thành công giả.</p>
+    <div class="workflow-table-wrap"><table class="workflow-table"><thead><tr><th>Tên Profile</th><th>Tổng lượt</th><th>Đã đăng</th><th>Chờ duyệt</th><th>Chưa xác minh</th><th>Không phải member</th><th>Lỗi thực thi</th><th>Comment bị từ chối</th><th>Tỷ lệ đăng xác minh</th><th>TB thời gian</th></tr></thead><tbody id="profile-performance-body"><tr><td colspan="10" class="empty">Chưa có dữ liệu.</td></tr></tbody></table></div>
+    <p class="field-hint" style="padding:0 14px 12px;">Tỷ lệ chỉ tính bài có permalink đã xác minh; chờ duyệt/chưa xác minh được tách riêng. “Không phải member” là không tương thích Profile–Group, không tính là lỗi engine.</p>
   </div>
 </section>
 
@@ -1481,6 +1481,6 @@ https://www.facebook.com/groups/648990015540886/</textarea>
     <div id="toast-container" class="toast-container"></div>
 
     <script type="module" src="js/main.js"></script>
-    <script src="app.js?v=6.1.27"></script>
+    <script src="app.js?v=6.1.28"></script>
 </body>
 </html>

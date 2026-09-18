@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-17 v6.1.27"
+BUILD_TIME = "2026-09-18 v6.1.28"
 
 
 def app_build_info():
@@ -1793,9 +1793,17 @@ def api_workflow_profile_performance():
         for key in (account.get('id'), account.get('profile_path_or_id')):
             if key and display:
                 names[str(key)] = display
+    name_counts = {}
+    for account in load_accounts():
+        display = str(account.get('name') or '').strip()
+        if display:
+            name_counts[display] = name_counts.get(display, 0) + 1
     for row in rows:
         row['profile_name'] = names.get(str(row.get('profile_id') or ''), str(row.get('profile_id') or ''))
-    return jsonify({'count': len(rows), 'profiles': rows})
+        row['duplicate_profile_name'] = name_counts.get(row['profile_name'], 0) > 1
+    summary = WorkflowRepository().system_posting_summary()
+    summary['duplicate_profile_names'] = sorted([name for name, count in name_counts.items() if count > 1])
+    return jsonify({'count': len(rows), 'profiles': rows, 'summary': summary})
 
 @app.route('/api/workflows/tasks/<task_id>/events', methods=['GET'])
 def api_workflow_events(task_id):

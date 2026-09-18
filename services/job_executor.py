@@ -925,8 +925,24 @@ def execute_automation_task(
                 on_line(f"📁 [Luân phiên ảnh] Folder {(i % len(photo_folders))+1}/{len(photo_folders)}: {selected_photo_folder} · đã chọn {len(task_images)} ảnh.\n")
 
         if rotate_accounts and accounts_pool:
-            curr_acc = accounts_pool[i % len(accounts_pool)]
+            # Do not repeatedly assign a Group to a profile already proven not to be
+            # a member of that exact Group. Preserve LRU order and round-robin fairness
+            # among the remaining eligible profiles.
+            eligible_pool = accounts_pool
+            excluded_membership = set()
+            if cmd == "group":
+                try:
+                    from repositories.workflow_repo import WorkflowRepository
+                    excluded_membership = WorkflowRepository().membership_ineligible_profiles(target)
+                    candidates = [a for a in accounts_pool if str(a.get("id") or "") not in excluded_membership]
+                    if candidates:
+                        eligible_pool = candidates
+                except Exception as membership_history_err:
+                    on_line(f"[Profile Eligibility] history unavailable: {membership_history_err}\n")
+            curr_acc = eligible_pool[i % len(eligible_pool)]
             curr_acc_id = curr_acc.get("id")
+            if excluded_membership:
+                on_line(f"🧭 [Profile Eligibility] Bỏ {len(excluded_membership)} profile đã xác minh không phải member của Group này.\n")
             on_line(f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bài đăng {i+1}/{total}\n")
         else:
             curr_acc_id = account_id

@@ -577,17 +577,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/workflows/profile-performance');
             const data = await res.json();
             const rows = Array.isArray(data.profiles) ? data.profiles : [];
-            if (profilePerformanceSummary) profilePerformanceSummary.textContent = `${rows.length} profile`;
+            if (profilePerformanceSummary) {
+                const s = data.summary || {};
+                const dup = (s.duplicate_profile_names || []).length ? ' · Trùng tên: ' + s.duplicate_profile_names.join(', ') : '';
+                profilePerformanceSummary.textContent = (s.configured_profiles || rows.length) + ' profile · ' + (s.configured_groups || 0) + ' groups · Đã xác minh ' + (s.published || 0) + ' · Chờ duyệt ' + (s.pending || 0) + ' · Chưa xác minh ' + (s.submitted_unverified || 0) + ' · Group cần duyệt ' + (s.approval_groups || 0) + ' · Khóa ≥2 pending ' + (s.capacity_blocked_groups || 0) + dup;
+            }
             profilePerformanceBody.innerHTML = rows.length ? rows.map(p => `<tr>
                 <td title="${escapeHtml(p.profile_id || '')}"><strong>${escapeHtml(p.profile_name || p.profile_id || '?')}</strong></td>
                 <td>${Number(p.total || 0)}</td><td>${Number(p.published || 0)}</td><td>${Number(p.pending || 0)}</td>
-                <td>${Number(p.unverified || 0)}</td><td>${Number(p.failed || 0)}</td>
+                <td>${Number(p.unverified || 0)}</td><td>${Number(p.membership_unverified || 0)}</td><td>${Number(p.failed || 0)}</td>
                 <td>${Number(p.comment_rejected || 0)}</td>
                 <td><strong>${Number(p.published_rate || 0).toFixed(1)}%</strong></td>
                 <td>${p.avg_seconds == null ? '—' : `${Number(p.avg_seconds).toFixed(1)}s`}</td>
-            </tr>`).join('') : '<tr><td colspan="9" class="empty">Chưa có dữ liệu đăng bài theo profile.</td></tr>';
+            </tr>`).join('') : '<tr><td colspan="10" class="empty">Chưa có dữ liệu đăng bài theo profile.</td></tr>';
         } catch (err) {
-            profilePerformanceBody.innerHTML = `<tr><td colspan="9" class="empty">Không tải được hiệu suất: ${escapeHtml(err.message || err)}</td></tr>`;
+            profilePerformanceBody.innerHTML = `<tr><td colspan="10" class="empty">Không tải được hiệu suất: ${escapeHtml(err.message || err)}</td></tr>`;
         }
     }
 
