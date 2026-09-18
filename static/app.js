@@ -5515,8 +5515,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadGroupRegistry(){
  const body=document.getElementById('group-registry-body'); if(!body)return;
- try{const r=await fetch('/api/groups/moderation'); const d=await r.json(); const rows=d.groups||[];
- body.innerHTML=rows.length?rows.map(g=>`<tr><td>${escapeHtml(g.group_url||'')}</td><td>${g.requires_approval?'Có':'Không'}</td><td>${Number(g.pending_count||0)}</td><td>${g.decision==='skip'?'SKIP ≥2 pending':g.decision==='low_priority'?'Thấp':'Bình thường'}</td><td>${escapeHtml(g.last_profile_id||'')}</td></tr>`).join(''):'<tr><td colspan="5">Chưa có group cần quản trị viên duyệt.</td></tr>';}
+ const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ try{const r=await fetch('/api/groups/moderation'); if(!r.ok) throw new Error('HTTP '+r.status); const d=await r.json(); const rows=d.groups||[];
+ body.innerHTML=rows.length?rows.map(g=>`<tr><td>${safe(g.group_url||'')}</td><td>${g.requires_approval?'Có':'Không'}</td><td>${Number(g.pending_count||0)}</td><td>${g.decision==='skip'?'SKIP ≥2 pending':g.decision==='low_priority'?'Thấp':'Bình thường'}</td><td>${safe(g.last_profile_id||'')}</td></tr>`).join(''):'<tr><td colspan="5">Chưa có group cần quản trị viên duyệt.</td></tr>';}
  catch(e){body.innerHTML='<tr><td colspan="5">Không tải được registry.</td></tr>';}
 }
 document.addEventListener('click',e=>{if(e.target&&e.target.id==='open-group-registry-btn'){document.getElementById('group-registry-card')?.classList.toggle('hidden');loadGroupRegistry();} if(e.target&&e.target.id==='refresh-group-registry-btn')loadGroupRegistry();});
