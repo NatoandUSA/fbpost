@@ -253,10 +253,10 @@ def _content_quality_score(text: str, brand_name: str = "") -> int:
     value = (text or "").strip()
     low = value.casefold()
     score = 0
-    if 320 <= len(value) <= 900:
+    if 140 <= len(value) <= 750:
         score += 3
     paragraphs = [p for p in re.split(r"\n\s*\n", value) if p.strip()]
-    if 3 <= len(paragraphs) <= 8:
+    if 3 <= len(paragraphs) <= 6:
         score += 3
     if brand_name and brand_name.casefold() in low:
         score += 2
@@ -278,8 +278,8 @@ def _campaign_quality_accepts(text: str, brand_name: str = "") -> bool:
     low = value.casefold()
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", value) if p.strip()]
     return (
-        240 <= len(value) <= 900
-        and 4 <= len(paragraphs) <= 8
+        140 <= len(value) <= 750
+        and 3 <= len(paragraphs) <= 6
         and (not brand_name or brand_name.casefold() in low)
         and "homestay huế" in low
         and any(token in low for token in ("inbox", "nhắn", "liên hệ", "xem phòng", "hỏi phòng"))
@@ -339,7 +339,7 @@ def spin_content_gemini_with_model(content: str, api_key: str, style: str = "t�
         + tag_instruction
         + f"CHIẾN LƯỢC BIÊN TẬP: {strategy}.\n"
         + f"Hãy biên tập lại bài đăng Facebook sau đây với văn phong {style}, giàu hình ảnh nhưng không phô trương. "
-        f"Mở bằng một hook cụ thể, chia 4-7 đoạn ngắn dễ đọc và kết bằng CTA hội thoại tự nhiên.\n\n"
+        f"Mở bằng một hook cụ thể, giữ 3-5 đoạn ngắn, 140-750 ký tự và kết bằng một CTA hội thoại tự nhiên.\n\n"
         f"YÊU CẦU BẮT BUỘC — CONTENT HUB TRUTH CONTRACT:\n"
         f"- KHÔNG thêm dữ kiện ngoài bài gốc hoặc FACT của đúng thương hiệu trong Content Hub.\n"
         f"- Tuyệt đối không tự thêm khoảng cách, thời gian di chuyển, giá, số phòng trống, khuyến mãi, voucher, sự kiện hoặc lời hứa động.\n"

@@ -120,6 +120,19 @@ def _resume_rotation_after_last_post(accounts_pool):
     return accounts_pool
 
 
+
+def _published_content_history(limit=200):
+    """Only verified published posts participate in the persistent anti-duplicate gate."""
+    try:
+        return [
+            str(row.get("content") or "").strip()
+            for row in ActivityRepository().list_posted_links(limit=limit)
+            if str(row.get("publish_state") or "").lower() == "published"
+            and str(row.get("content") or "").strip()
+        ]
+    except Exception:
+        return []
+
 def execute_automation_task(
     job_id: str,
     cmd: str,
@@ -788,6 +801,8 @@ def execute_automation_task(
     moderation_skipped_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
+    published_content_history = _published_content_history(200) if cmd in ("group", "page") else []
+    batch_attempted_content = []
     if job_repo:
         job_repo.update_job(job_id, progress_total=total)
 
@@ -911,6 +926,21 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
+            from brand_profiles import prepare_linkless_post
+            from content_studio import similarity_gate
+            comparable_content = prepare_linkless_post(task_content)
+            comparable_history = [prepare_linkless_post(item) for item in (published_content_history + batch_attempted_content)]
+            similarity_result = similarity_gate(comparable_content, comparable_history, threshold=0.82)
+            if not similarity_result["pass"]:
+                batch_failed = True
+                on_line(
+                    f"[CROSS_POST_SIMILARITY_REJECTED] similarity={similarity_result['max_similarity']:.3f} "
+                    f">= {similarity_result['threshold']:.2f}; stop before Facebook.\n"
+                )
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
+            batch_attempted_content.append(task_content)
             has_sig="yes" if ("━━━━━━━━━━━━━━━━━━━━" in task_content or "-------------------" in task_content) else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
