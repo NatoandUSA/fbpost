@@ -41,7 +41,25 @@ class DeliveryShardingPlanner:
         if max_shards is not None:
             effective = min(effective, max(0, int(max_shards)))
 
-        profiles = [p for p in (capacity.get('profiles') or []) if p.get('state') in {'READY', 'DEGRADED'}]
+        active_shard_jobs = []
+        active_item_ids = set()
+        active_profile_ids = set()
+        for job in self.job_manager.list_jobs(limit=1000):
+            if str(job.get('state') or '') not in {'queued', 'running'}:
+                continue
+            payload = job.get('payload') or {}
+            if not str(payload.get('shardId') or '').strip():
+                continue
+            active_shard_jobs.append(job)
+            for profile_id in payload.get('accountIds') or []:
+                if str(profile_id).strip():
+                    active_profile_ids.add(str(profile_id).strip())
+            for task in payload.get('tasks') or []:
+                if isinstance(task, dict) and str(task.get('queueItemId') or '').strip():
+                    active_item_ids.add(str(task.get('queueItemId')).strip())
+
+        profiles = [p for p in (capacity.get('profiles') or [])
+                    if p.get('state') in {'READY', 'DEGRADED'} and str(p.get('id') or '') not in active_profile_ids]
         profiles = sorted(profiles, key=self._profile_rank)
         shard_slots = min(effective, len(profiles))
 
@@ -55,6 +73,9 @@ class DeliveryShardingPlanner:
         eligible = []
         skipped = []
         for item in items:
+            if str(item.get('id') or '') in active_item_ids:
+                skipped.append({'id': item.get('id'), 'reason': 'ALREADY_IN_FLIGHT'})
+                continue
             target = normalize_target_url(item.get('target') or '')
             if not target:
                 skipped.append({'id': item.get('id'), 'reason': 'INVALID_TARGET'})
@@ -107,6 +128,9 @@ class DeliveryShardingPlanner:
             'batch_size': batch_size,
             'effective_parallelism': effective,
             'shard_slots': shard_slots,
+            'active_shard_jobs': len(active_shard_jobs),
+            'active_shard_item_ids': sorted(active_item_ids),
+            'active_shard_profile_ids': sorted(active_profile_ids),
             'approved_items': len(items),
             'eligible_items': len(eligible),
             'wave_items': len(wave_items),

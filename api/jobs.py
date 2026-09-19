@@ -7,9 +7,11 @@ from services.job_manager import JobManager
 from repositories.reconcile_repo import ReconcileRepository
 from repositories.campaign_repo import CampaignRepository
 from services.delivery_sharding import DeliveryShardingPlanner
+from services.auto_refill import AutoRefillController
 
 jobs_bp = Blueprint("jobs", __name__)
 job_manager = JobManager()
+auto_refill_controller = AutoRefillController(job_manager)
 ALLOWED_JOB_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 
 
@@ -93,6 +95,34 @@ def plan_delivery_shards():
         return jsonify({"success": False, "error": "batchSize/maxShards must be integers"}), 400
     plan = DeliveryShardingPlanner(job_manager).plan(campaign_id, batch_size=batch_size, max_shards=max_shards)
     return jsonify({"success": True, **plan})
+
+
+@jobs_bp.route("/api/delivery/refill/status", methods=["GET"])
+def get_refill_status():
+    return jsonify({"success": True, **auto_refill_controller.status()})
+
+
+@jobs_bp.route("/api/delivery/refill/tick", methods=["POST"])
+def tick_refill():
+    data = request.get_json(silent=True) or {}
+    try:
+        batch_size = int(data.get("batchSize", 10))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "batchSize must be an integer"}), 400
+    result = auto_refill_controller.tick(batch_size=batch_size)
+    return jsonify({"success": True, **result})
+
+
+@jobs_bp.route("/api/delivery/refill/start", methods=["POST"])
+def start_refill():
+    started = auto_refill_controller.start()
+    return jsonify({"success": True, "started": started, **auto_refill_controller.status()})
+
+
+@jobs_bp.route("/api/delivery/refill/stop", methods=["POST"])
+def stop_refill():
+    stopped = auto_refill_controller.stop()
+    return jsonify({"success": True, "stopped": stopped, **auto_refill_controller.status()})
 
 
 @jobs_bp.route("/api/delivery/shards/dispatch", methods=["POST"])
