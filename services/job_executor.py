@@ -955,7 +955,6 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
-            published_content_history.append(task_content)
             has_sig="yes" if ("━━━━━━━━━━━━━━━━━━━━" in task_content or "-------------------" in task_content) else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
@@ -1272,6 +1271,14 @@ def execute_automation_task(
         elif cmd == "reconcile-post" and action_state not in ("published", "pending"):
             # Manual reconcile must not surface a green success when nothing was verified.
             batch_failed = True
+        # Only content that actually crossed the Facebook submit boundary may influence
+        # later intra-batch similarity decisions. Failed/rejected pre-submit candidates must
+        # not poison the remainder of the batch.
+        if cmd in ("group", "page") and (
+            action_state == "published" or is_post_pending(structured_result) or submit_was_triggered
+        ):
+            published_content_history.append(task_content)
+
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
         if cmd == "group" and action_code == "GROUP_PENDING_CAPACITY":

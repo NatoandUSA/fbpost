@@ -213,35 +213,92 @@ def spin_content_local(content: str) -> str:
 
 
 def spin_content_hub_local(content: str, brand_key: str, variant_seed: str = "") -> str:
-    """Create useful quota-free copy from source plus two audited Content Hub facts."""
+    """Create a deterministic truth-safe variant without copying the whole source body.
+
+    The previous fallback appended the source verbatim, so target-seeded variants were still
+    near-identical and the cross-post similarity gate correctly rejected most of a campaign.
+    This version builds from audited facts plus source invariants (phone/address/link/price)
+    and varies hook, fact selection/order, framing and close by target seed.
+    """
     key = str(brand_key or "").strip().lower()
     reference = load_content_reference()
     brand = reference.get(key) or {}
-    facts = [
+    raw_facts = [
         str(item).strip().rstrip(".") for item in brand.get("facts") or []
-        if str(item).strip() and not str(item).strip().casefold().startswith(("tên:", "điện thoại"))
+        if str(item).strip()
     ]
-    if not facts:
+    # Names/contact/address are preserved separately and should not dominate semantic variation.
+    variable_facts = [
+        fact for fact in raw_facts
+        if not fact.casefold().startswith(("tên:", "địa chỉ:", "điện thoại", "zalo:"))
+    ]
+    if not variable_facts:
         return spin_content_local(content)
+
     from brand_profiles import brand_name
     display_name = brand_name(key) or key.upper()
     digest = hashlib.sha256(f"{key}|{variant_seed}|{content}".encode("utf-8")).digest()
-    start = int.from_bytes(digest[:4], "big") % len(facts)
-    chosen = [facts[start], facts[(start + 3) % len(facts)]] if len(facts) > 3 else facts[:2]
+    n = len(variable_facts)
+    # Deterministic non-adjacent fact choices provide a much larger truthful variant space.
+    first = digest[0] % n
+    step = 1 + (digest[1] % max(1, n - 1))
+    second = (first + step) % n
+    if second == first and n > 1:
+        second = (second + 1) % n
+    third = (second + 1 + digest[2] % max(1, n - 1)) % n
+    chosen = [variable_facts[first]]
+    if n > 1 and variable_facts[second] not in chosen:
+        chosen.append(variable_facts[second])
+    if n > 4 and digest[3] % 3 == 0 and variable_facts[third] not in chosen:
+        chosen.append(variable_facts[third])
+
     hooks = (
-        f"Đang tìm một homestay Huế vừa dễ chủ động lịch trình, vừa có thông tin rõ ràng? 🌿",
-        f"Một chuyến Huế thoải mái thường bắt đầu từ nơi nghỉ hợp đúng nhu cầu của bạn 🏡",
-        f"Bạn ưu tiên điều gì khi chọn homestay Huế: sự riêng tư, tiện nghi hay lịch nhận phòng linh hoạt? ✨",
+        "Một buổi ở Huế đôi khi chỉ cần chỗ nghỉ riêng tư, tiện và dễ chủ động.",
+        "Nếu lịch ở Huế cần linh hoạt, chọn nơi nghỉ có đúng tiện nghi mình dùng sẽ dễ chịu hơn.",
+        "Có những chuyến Huế mà điều quan trọng nhất là về phòng có thể nghỉ ngay, không phải xoay xở thêm.",
+        "Thay vì chọn phòng theo hình ảnh, có thể bắt đầu từ những tiện nghi thực sự cần cho lịch ở Huế.",
+        "Một chỗ nghỉ hợp lịch trình thường nằm ở những chi tiết nhỏ: riêng tư, tự chủ và tiện dùng.",
+        "Đi Huế ngắn ngày hay nghỉ qua đêm đều dễ hơn khi biết trước phòng có những gì mình cần.",
     )
-    hook = hooks[digest[4] % len(hooks)]
-    source = spin_content_local(content).strip()
-    return (
-        f"{hook}\n\n"
-        f"{display_name} gửi bạn một vài thông tin đã được xác nhận để dễ cân nhắc:\n\n"
-        + "\n".join(f"✨ {fact}." for fact in chosen)
-        + f"\n\n{source}\n\n"
-        f"Bạn muốn xem hình ảnh hoặc hỏi loại phòng phù hợp? Hãy inbox {display_name} nhé! 📩"
-    ).strip()
+    intros = (
+        f"{display_name} có vài thông tin đã được xác nhận để bạn cân nhắc:",
+        f"Một vài thông tin đã được xác nhận tại {display_name}:",
+        f"Nếu đang so sánh chỗ nghỉ, đây là các thông tin đã được xác nhận tại {display_name}:",
+        f"Với nhu cầu nghỉ linh hoạt, {display_name} có các thông tin đã được xác nhận sau:",
+    )
+    closes = (
+        "Tình trạng từng loại phòng thay đổi theo thời điểm, nên Home sẽ kiểm tra đúng ngày và nhu cầu trước khi xác nhận.",
+        "Mỗi loại phòng có cấu hình khác nhau; Home sẽ kiểm tra đúng phòng trước khi xác nhận tiện nghi.",
+        "Nếu cần đúng bồn tắm, bếp hay loại phòng cụ thể, Home sẽ kiểm tra lại theo ngày trước khi chốt.",
+        "Bạn có thể gửi ngày, khung giờ và số người để Home đối chiếu loại phòng phù hợp.",
+    )
+
+    # Preserve source invariants without preserving the whole promotional body.
+    core = extract_core_info(content or "")
+    invariant_lines = []
+    for address in core["addresses"][:1]:
+        invariant_lines.append(address)
+    for phone in core["phones"][:1]:
+        invariant_lines.append(f"Liên hệ/Zalo: {phone}")
+    for price in core["prices"][:1]:
+        invariant_lines.append(f"Thông tin giá từ nội dung gốc: {price}")
+    for link in core["links"][:1]:
+        invariant_lines.append(link)
+
+    # Structural variation: bullets vs short paragraphs, and fact order.
+    if digest[4] % 2:
+        fact_block = "\n".join(f"• {fact}." for fact in chosen)
+    else:
+        fact_block = "\n\n".join(f"{fact}." for fact in reversed(chosen))
+    blocks = [
+        hooks[digest[5] % len(hooks)],
+        intros[digest[6] % len(intros)],
+        fact_block,
+    ]
+    if invariant_lines:
+        blocks.append("\n".join(invariant_lines))
+    blocks.append(closes[digest[7] % len(closes)])
+    return "\n\n".join(blocks).strip()
 
 
 def _gemini_models():
