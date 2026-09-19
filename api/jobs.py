@@ -5,6 +5,8 @@ Decouples subprocess lifecycle from HTTP connection.
 from flask import Blueprint, jsonify, request, Response
 from services.job_manager import JobManager
 from repositories.reconcile_repo import ReconcileRepository
+from repositories.campaign_repo import CampaignRepository
+from services.delivery_sharding import DeliveryShardingPlanner
 
 jobs_bp = Blueprint("jobs", __name__)
 job_manager = JobManager()
@@ -63,6 +65,63 @@ def get_active_job():
 @jobs_bp.route("/api/capacity", methods=["GET"])
 def get_capacity():
     return jsonify({"success": True, **job_manager.full_capacity_snapshot()})
+
+
+def _resolve_active_campaign(campaign_id):
+    campaign = next((c for c in CampaignRepository().list_campaigns() if str(c.get("id")) == str(campaign_id)), None)
+    if not campaign:
+        return None, (jsonify({"success": False, "error": "Campaign not found"}), 404)
+    if str(campaign.get("state") or campaign.get("status") or "active").lower() != "active":
+        return None, (jsonify({"success": False, "error": "Campaign is not active"}), 409)
+    return campaign, None
+
+
+@jobs_bp.route("/api/delivery/shards/plan", methods=["POST"])
+def plan_delivery_shards():
+    data = request.get_json(silent=True) or {}
+    campaign_id = str(data.get("campaignId") or "").strip()
+    if not campaign_id:
+        return jsonify({"success": False, "error": "campaignId is required"}), 400
+    _, error = _resolve_active_campaign(campaign_id)
+    if error:
+        return error
+    try:
+        batch_size = int(data.get("batchSize", 10))
+        max_shards = data.get("maxShards")
+        max_shards = int(max_shards) if max_shards is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "batchSize/maxShards must be integers"}), 400
+    plan = DeliveryShardingPlanner(job_manager).plan(campaign_id, batch_size=batch_size, max_shards=max_shards)
+    return jsonify({"success": True, **plan})
+
+
+@jobs_bp.route("/api/delivery/shards/dispatch", methods=["POST"])
+def dispatch_delivery_shards():
+    data = request.get_json(silent=True) or {}
+    campaign_id = str(data.get("campaignId") or "").strip()
+    if not campaign_id:
+        return jsonify({"success": False, "error": "campaignId is required"}), 400
+    campaign, error = _resolve_active_campaign(campaign_id)
+    if error:
+        return error
+    try:
+        batch_size = int(data.get("batchSize", 10))
+        max_shards = data.get("maxShards")
+        max_shards = int(max_shards) if max_shards is not None else None
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "batchSize/maxShards must be integers"}), 400
+    allowed_options = (
+        "brandKey", "autoSpin", "photoFolder", "photoFolders", "photoCountMode",
+        "skipDuplicate24h", "skipDuplicateHours", "cleanExif", "antiHashText",
+        "autoFirstComment", "delayMin", "delayMax", "feeling", "checkin",
+    )
+    base_payload = {key: data[key] for key in allowed_options if key in data}
+    if "brandKey" not in base_payload and campaign.get("brand"):
+        base_payload["brandKey"] = campaign.get("brand")
+    result = DeliveryShardingPlanner(job_manager).dispatch(
+        campaign_id, batch_size=batch_size, max_shards=max_shards, base_payload=base_payload
+    )
+    return jsonify({"success": True, "deferred": result.get("dispatched_shards", 0) == 0, **result}), 202 if result.get("dispatched_shards", 0) else 200
 
 
 import re
