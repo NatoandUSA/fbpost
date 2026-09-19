@@ -121,6 +121,22 @@ def _resume_rotation_after_last_post(accounts_pool):
 
 
 
+def _take_profile_round(round_queue, accounts_pool, excluded=None, scores=None):
+    """Each profile is used at most once per round; per-target exclusions keep their slot for later targets."""
+    excluded = {str(v) for v in (excluded or set())}
+    scores = scores or {}
+    by_id = {str(a.get("id") or ""): a for a in accounts_pool}
+    if not round_queue:
+        round_queue.extend(pid for pid in by_id if pid)
+    eligible = [pid for pid in round_queue if pid not in excluded and pid in by_id]
+    if not eligible:
+        return None
+    order = {pid: i for i, pid in enumerate(round_queue)}
+    chosen = max(eligible, key=lambda pid: (float(scores.get(pid, 0)), -order[pid]))
+    round_queue.remove(chosen)
+    return by_id[chosen]
+
+
 def _published_content_history(limit=200):
     """Only verified published posts participate in the persistent anti-duplicate gate."""
     try:
@@ -801,6 +817,7 @@ def execute_automation_task(
     moderation_skipped_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
+    profile_round_queue = [str(a.get("id") or "") for a in accounts_pool] if rotate_accounts else []
     published_content_history = _published_content_history(200) if cmd in ("group", "page") else []
     batch_attempted_content = []
     if job_repo:
@@ -955,25 +972,28 @@ def execute_automation_task(
                 on_line(f"📁 [Luân phiên ảnh] Folder {(i % len(photo_folders))+1}/{len(photo_folders)}: {selected_photo_folder} · đã chọn {len(task_images)} ảnh.\n")
 
         if rotate_accounts and accounts_pool:
-            # Do not repeatedly assign a Group to a profile already proven not to be
-            # a member of that exact Group. Preserve LRU order and round-robin fairness
-            # among the remaining eligible profiles.
-            eligible_pool = accounts_pool
             excluded_membership = set()
+            profile_scores = {}
             if cmd == "group":
                 try:
                     from repositories.workflow_repo import WorkflowRepository
-                    excluded_membership = WorkflowRepository().membership_ineligible_profiles(target)
-                    candidates = [a for a in accounts_pool if str(a.get("id") or "") not in excluded_membership]
-                    if candidates:
-                        eligible_pool = candidates
+                    workflow_repo = WorkflowRepository()
+                    excluded_membership = workflow_repo.membership_ineligible_profiles(target)
+                    profile_scores = workflow_repo.profile_group_scores(target)
                 except Exception as membership_history_err:
                     on_line(f"[Profile Eligibility] history unavailable: {membership_history_err}\n")
-            curr_acc = eligible_pool[i % len(eligible_pool)]
+            curr_acc = _take_profile_round(profile_round_queue, accounts_pool, excluded_membership, profile_scores)
+            if not curr_acc:
+                batch_failed = True
+                on_line("[Profile Eligibility] No eligible unused profile remains in this round for target; skip before Facebook.\n")
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
             curr_acc_id = curr_acc.get("id")
             if excluded_membership:
-                on_line(f"🧭 [Profile Eligibility] Bỏ {len(excluded_membership)} profile đã xác minh không phải member của Group này.\n")
-            on_line(f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bài đăng {i+1}/{total}\n")
+                on_line(f"[Profile Eligibility] Excluded {len(excluded_membership)} proven non-member profile(s) for this Group.\n")
+            score = profile_scores.get(str(curr_acc_id), 0)
+            on_line(f"[Profile Round] Using {curr_acc.get('name', curr_acc_id)}; group-score={score}; unused-slots={len(profile_round_queue)}.\n")
         else:
             curr_acc_id = account_id
 
