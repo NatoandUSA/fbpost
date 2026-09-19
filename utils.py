@@ -1268,7 +1268,11 @@ def click_post_publish_button(page, dialog=None):
             except Exception:
                 pass
         try:
-            dlgs = page.locator("div[role='dialog']").all()
+            dlgs_locator = page.locator("div[role='dialog']")
+            try:
+                dlgs = dlgs_locator.all()
+            except (AttributeError, TypeError):
+                dlgs = [dlgs_locator.nth(i) for i in range(dlgs_locator.count())]
             for d in dlgs:
                 try:
                     if is_composer_dialog(d) and d not in containers:
@@ -1586,8 +1590,11 @@ def click_post_publish_button(page, dialog=None):
                 )
                 error_surfaces = page.locator("[role='alert'], [aria-live='assertive']")
                 matched_error = ""
-                for error_idx in range(min(error_surfaces.count(), 20)):
-                    surface = error_surfaces.nth(error_idx)
+                try:
+                    surface_items = error_surfaces.all()[:20]
+                except (AttributeError, TypeError):
+                    surface_items = [error_surfaces.nth(idx) for idx in range(min(error_surfaces.count(), 20))]
+                for surface in surface_items:
                     try:
                         message = (surface.inner_text(timeout=400) or "").strip()
                         if message and len(message) <= 500 and error_pattern.search(message) and surface.is_visible(timeout=250):
