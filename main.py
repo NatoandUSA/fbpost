@@ -18,6 +18,15 @@ configure_unicode_output()
 def check_state():
     pass
 
+def _terminal_worker_exit(success):
+    """Exit a short-lived worker without waiting for leaked non-daemon helper threads."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    finally:
+        os._exit(0 if success else 1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Facebook Automation Tool")
     parser.add_argument("--account-id", default=None, help="The Account ID to use for running the automation")
@@ -222,8 +231,12 @@ def main():
         parser.print_help()
         success = False
 
-    if not success:
-        sys.exit(1)
+    # This file is a short-lived CLI worker launched by ProcessRunner. Some browser/runtime
+    # libraries may leave non-daemon helper threads alive even after the command function has
+    # returned and profile teardown has completed. A normal sys.exit() then waits forever and
+    # lets the parent watchdog kill the process later, which can dirty the next profile reuse.
+    # Flush the terminal ACTION_RESULT first, then terminate the worker process boundary exactly.
+    _terminal_worker_exit(success)
 
 if __name__ == "__main__":
     main()
