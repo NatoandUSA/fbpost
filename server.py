@@ -67,6 +67,14 @@ except Exception as _jm_err:
     print(f"Warning: JobManager init error: {_jm_err}")
 
 try:
+    from api.jobs import auto_refill_controller
+    if str(os.getenv("FB_AUTO_REFILL_ENABLED", "0")).strip().lower() in {"1", "true", "yes", "on"}:
+        auto_refill_controller.start()
+        print("[AutoRefill] Enabled by FB_AUTO_REFILL_ENABLED.")
+except Exception as _refill_err:
+    print(f"Warning: Auto-refill initialization error: {_refill_err}")
+
+try:
     _queue_recovered = CampaignRepository().reconcile_processing_queue()
     if _queue_recovered:
         print(f"[PublicationQueue] Đã chuyển {_queue_recovered} mục processing bị gián đoạn sang chưa xác minh để đối soát; không tự retry.")

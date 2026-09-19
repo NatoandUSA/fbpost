@@ -102,6 +102,27 @@ class DeliveryShardingTests(unittest.TestCase):
         self.assertEqual(result['skipped_active_shards'], [sid])
         self.assertEqual(manager.submitted, [])
 
+    def test_inflight_items_and_profiles_are_reserved_before_executor_claim(self):
+        manager = _Manager(_capacity(2, 20))
+        items = _items(16)
+        manager.jobs = [{
+            'state':'queued',
+            'payload':{
+                'shardId':'older-shard',
+                'accountIds':['P1'],
+                'tasks':[{'queueItemId':f'I{i+1}'} for i in range(8)],
+            }
+        }]
+        with patch('services.delivery_sharding.CampaignRepository.list_queue', return_value=items):
+            plan = DeliveryShardingPlanner(manager).plan('C1', batch_size=8)
+        self.assertEqual(plan['active_shard_item_ids'], [f'I{i+1}' for i in range(8)])
+        self.assertEqual(plan['active_shard_profile_ids'], ['P1'])
+        self.assertEqual([s['profileId'] for s in plan['shards']], ['P2'])
+        planned_ids = [t['queueItemId'] for s in plan['shards'] for t in s['tasks']]
+        self.assertEqual(planned_ids, [f'I{i+1}' for i in range(8,16)])
+        reasons = [x['reason'] for x in plan['skipped']]
+        self.assertEqual(reasons.count('ALREADY_IN_FLIGHT'), 8)
+
     def test_dispatch_payload_is_profile_specific(self):
         manager = _Manager(_capacity(2, 20))
         with patch('services.delivery_sharding.CampaignRepository.list_queue', return_value=_items(16)):
