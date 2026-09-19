@@ -39,21 +39,30 @@ def list_jobs():
         return jsonify({"success": False, "error": "limit must be an integer"}), 400
     state = request.args.get("state")
     jobs = job_manager.list_jobs(limit=limit, state=state)
+    capacity = job_manager.capacity_snapshot()
     return jsonify({
         "success": True,
         "jobs": jobs,
         "total": len(jobs),
         "active_job_id": job_manager.get_active_job_id(),
+        "active_job_ids": capacity["active_job_ids"],
+        "capacity": capacity,
     })
 
 
 @jobs_bp.route("/api/jobs/active", methods=["GET"])
 def get_active_job():
-    active_id = job_manager.get_active_job_id()
-    if not active_id:
-        return jsonify({"success": True, "active": False, "job": None})
-    job = job_manager.get_job(active_id)
-    return jsonify({"success": True, "active": True, "job": job})
+    active_ids = job_manager.get_active_job_ids()
+    if not active_ids:
+        return jsonify({"success": True, "active": False, "job": None, "jobs": []})
+    jobs = [job_manager.get_job(job_id) for job_id in active_ids]
+    jobs = [job for job in jobs if job]
+    return jsonify({"success": True, "active": True, "job": jobs[0] if jobs else None, "jobs": jobs})
+
+
+@jobs_bp.route("/api/capacity", methods=["GET"])
+def get_capacity():
+    return jsonify({"success": True, **job_manager.capacity_snapshot()})
 
 
 import re
@@ -114,14 +123,14 @@ def cancel_job(job_id):
 
 @jobs_bp.route("/api/cancel", methods=["POST"])
 def cancel_active():
-    cancelled = job_manager.cancel_active_job()
+    cancelled = job_manager.cancel_active_jobs()
     try:
         reconcile_cancelled = ReconcileRepository().cancel_pending()
     except Exception:
         reconcile_cancelled = 0
     if cancelled or reconcile_cancelled:
-        return jsonify({"success": True, "reconcile_cancelled": reconcile_cancelled, "message": "Đã gửi tín hiệu dừng tiến trình đang chạy."})
-    return jsonify({"success": False, "message": "Hiện không có tiến trình nào đang hoạt động."})
+        return jsonify({"success": True, "active_cancelled": cancelled, "reconcile_cancelled": reconcile_cancelled, "message": "Đã gửi tín hiệu dừng cho các tiến trình đang chạy."})
+    return jsonify({"success": False, "active_cancelled": 0, "message": "Hiện không có tiến trình nào đang hoạt động."})
 
 
 @jobs_bp.route("/api/run", methods=["POST"])

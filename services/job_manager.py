@@ -30,23 +30,39 @@ class JobManager:
                 cls._instance._initialized = False
             return cls._instance
 
-    def __init__(self, job_repo: Optional[JobRepository] = None, process_runner: Optional[ProcessRunner] = None):
+    def __init__(self, job_repo: Optional[JobRepository] = None, process_runner: Optional[ProcessRunner] = None, max_workers: Optional[int] = None):
         if getattr(self, "_initialized", False):
             return
         self.job_repo = job_repo or JobRepository()
         self.process_runner = process_runner or ProcessRunner()
         self._job_queues: Dict[str, queue.Queue] = {}
         self._raw_payloads: Dict[str, Dict[str, Any]] = {}
-        self._active_job_id: Optional[str] = None
+        configured = max_workers if max_workers is not None else os.getenv("FB_JOB_MAX_WORKERS", "1")
+        try:
+            configured = int(configured)
+        except (TypeError, ValueError):
+            configured = 1
+        self.max_workers = max(1, min(configured, 32))
+        self._active_job_ids: set[str] = set()
         self._lock = threading.Lock()
         self._work_queue: queue.Queue = queue.Queue()
-        self._worker_thread = threading.Thread(target=self._queue_worker, daemon=True)
-        self._worker_thread.start()
+        self._worker_threads = [threading.Thread(target=self._queue_worker, name=f"fb-job-worker-{idx+1}", daemon=True) for idx in range(self.max_workers)]
+        for worker in self._worker_threads:
+            worker.start()
         self._initialized = True
 
-    def get_active_job_id(self) -> Optional[str]:
+    def get_active_job_ids(self) -> List[str]:
         with self._lock:
-            return self._active_job_id
+            return sorted(self._active_job_ids)
+
+    def get_active_job_id(self) -> Optional[str]:
+        """Backward-compatible single active job view."""
+        active = self.get_active_job_ids()
+        return active[0] if active else None
+
+    def capacity_snapshot(self) -> Dict[str, Any]:
+        active = self.get_active_job_ids()
+        return {"worker_max": self.max_workers, "worker_active": len(active), "worker_available": max(0, self.max_workers-len(active)), "queue_depth": self._work_queue.qsize(), "active_job_ids": active}
 
     def reconcile_on_startup(self) -> int:
         """Mark abandoned running jobs as interrupted, and requeue queued jobs."""
@@ -96,7 +112,7 @@ class JobManager:
 
         with self._lock:
             self._raw_payloads.pop(job_id, None)
-            is_active = (self._active_job_id == job_id)
+            is_active = (job_id in self._active_job_ids)
 
         self.process_runner.cancel(job_id)
         self.job_repo.mark_finished(
@@ -123,9 +139,14 @@ class JobManager:
 
     def cancel_active_job(self) -> bool:
         active_id = self.get_active_job_id()
-        if active_id:
-            return self.cancel_job(active_id)
-        return False
+        return self.cancel_job(active_id) if active_id else False
+
+    def cancel_active_jobs(self) -> int:
+        cancelled = 0
+        for job_id in self.get_active_job_ids():
+            if self.cancel_job(job_id):
+                cancelled += 1
+        return cancelled
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         return self.job_repo.get_job(job_id)
@@ -211,7 +232,7 @@ class JobManager:
                 if job_id is None:
                     break
                 with self._lock:
-                    self._active_job_id = job_id
+                    self._active_job_ids.add(job_id)
                 self._execute_job(job_id)
             except Exception as e:
                 import traceback
@@ -225,8 +246,7 @@ class JobManager:
             finally:
                 if job_id:
                     with self._lock:
-                        if self._active_job_id == job_id:
-                            self._active_job_id = None
+                        self._active_job_ids.discard(job_id)
                     self._emit_line(job_id, None)
                     self._work_queue.task_done()
 
