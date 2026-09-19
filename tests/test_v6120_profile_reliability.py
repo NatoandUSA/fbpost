@@ -164,6 +164,31 @@ class ProfileReliabilityTests(unittest.TestCase):
         self.assertIn("[role='alert'], [aria-live='assertive']", source)
         self.assertNotIn('if any(err_kw in dlg_text', source)
 
+    def test_profile_round_consumes_each_eligible_profile_once(self):
+        from services.job_executor import _take_profile_round
+        accounts = [{"id": "M6"}, {"id": "M21"}, {"id": "M30"}]
+        queue = ["M6", "M21", "M30"]
+        first = _take_profile_round(queue, accounts, excluded={"M6"}, scores={"M30": 5})
+        second = _take_profile_round(queue, accounts, excluded=set(), scores={"M30": 5})
+        third = _take_profile_round(queue, accounts, excluded=set(), scores={})
+        self.assertEqual(first["id"], "M30")
+        self.assertEqual(second["id"], "M21")
+        self.assertEqual(third["id"], "M6")
+
+    def test_campaign_quality_is_concise(self):
+        short = "Tìm homestay Huế cho lịch trình gọn nhẹ?\n\nUMEE Homestay có thông tin rõ ràng để bạn cân nhắc.\n\nNhắn UMEE Homestay để kiểm tra lựa chọn phù hợp."
+        verbose = short + ("\n\nThông tin tham khảo." * 80)
+        self.assertTrue(ai_spinner._campaign_quality_accepts(short, "UMEE Homestay"))
+        self.assertFalse(ai_spinner._campaign_quality_accepts(verbose, "UMEE Homestay"))
+
+    def test_comment_contract_rejects_group_root(self):
+        from fb_comment import _canonicalize_comment_url
+        self.assertEqual(_canonicalize_comment_url("https://www.facebook.com/groups/123"), "")
+        self.assertEqual(
+            _canonicalize_comment_url("https://www.facebook.com/groups/123/posts/456"),
+            "https://www.facebook.com/groups/123/posts/456",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

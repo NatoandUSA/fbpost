@@ -103,6 +103,30 @@ class WorkflowRepository(BaseRepository):
         finally:
             conn.close()
 
+    def profile_group_scores(self, target_url: str):
+        """Evidence score for profile × group; membership mismatch is a hard exclusion elsewhere."""
+        from utils import normalize_target_url
+        wanted = normalize_target_url(target_url or "")
+        if not wanted:
+            return {}
+        conn = self.get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT profile_id,target_url,state,error_code FROM workflow_tasks
+                   WHERE action='group' AND profile_id IS NOT NULL AND profile_id!=''"""
+            ).fetchall()
+            scores = {}
+            weights = {"published": 4, "pending": 2, "unverified": -1, "failed": -2}
+            for row in rows:
+                if normalize_target_url(row["target_url"] or "") != wanted:
+                    continue
+                profile_id = str(row["profile_id"])
+                delta = -6 if str(row["error_code"] or "") == "GROUP_MEMBERSHIP_UNVERIFIED" else weights.get(str(row["state"] or ""), 0)
+                scores[profile_id] = scores.get(profile_id, 0) + delta
+            return scores
+        finally:
+            conn.close()
+
     def system_posting_summary(self):
         """Authoritative persisted totals for dashboard audit/operations."""
         conn = self.get_conn()
