@@ -132,6 +132,35 @@ def mention_commit_evidence(editor, brand_key):
     entity = page_entity(brand_key)
     return _semantic_commit_evidence(editor, entity) if entity else {}
 
+
+def _insert_multiline_suffix(page, editor, value):
+    """Append suffix after a committed mention without replacing the rich-text entity.
+
+    Facebook Lexical editors can drop/truncate newlines when a long multiline suffix is sent
+    through one keyboard.insert_text() call. Insert line-by-line and create explicit soft line
+    breaks so hashtags/signature blocks survive intact.
+    """
+    suffix = str(value or "")
+    if not suffix:
+        return
+    try:
+        editor.focus(timeout=2000)
+    except Exception:
+        pass
+    keyboard = getattr(page, "keyboard", None)
+    if not keyboard:
+        raise RuntimeError("KEYBOARD_UNAVAILABLE_FOR_MENTION_SUFFIX")
+    lines = suffix.split("\n")
+    for idx, line in enumerate(lines):
+        if line:
+            for pos in range(0, len(line), 80):
+                keyboard.insert_text(line[pos:pos + 80])
+                time.sleep(0.03)
+        if idx < len(lines) - 1:
+            keyboard.press("Shift+Enter")
+            time.sleep(0.05)
+
+
 def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
     entity = page_entity(brand_key)
     value = str(text or "")
@@ -169,7 +198,7 @@ def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
             raise RuntimeError("PAGE_ENTITY_NOT_COMMITTED")
         result.committed = True
         result.evidence["commit"] = commit
-        page.keyboard.insert_text(suffix)
+        _insert_multiline_suffix(page, editor, suffix)
         time.sleep(0.4)
         retained = _semantic_commit_evidence(editor, entity)
         if not retained:

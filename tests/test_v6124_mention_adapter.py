@@ -1,11 +1,12 @@
-﻿"""Focused tests for isolated Facebook mention adapter."""
+"""Focused tests for isolated Facebook mention adapter."""
 import unittest
 from unittest.mock import patch
-from adapters.facebook_mention import _rank_candidate, MentionResult
+from adapters.facebook_mention import _rank_candidate, MentionResult, _insert_multiline_suffix
 
 class FakeHandle: pass
 class FakeEditor:
     def element_handle(self): return FakeHandle()
+    def focus(self, timeout=0): return None
 class FakeLinks:
     def __init__(self, hrefs): self.hrefs=hrefs
     def count(self): return len(self.hrefs)
@@ -19,6 +20,12 @@ class FakeRow:
     def evaluate(self,script,handle): return self.inside
     def inner_text(self,timeout=0): return self.text
     def locator(self,sel): return FakeLinks(self.hrefs)
+class FakeKeyboard:
+    def __init__(self): self.events=[]
+    def insert_text(self, text): self.events.append(('insert', text))
+    def press(self, key): self.events.append(('press', key))
+class FakePage:
+    def __init__(self): self.keyboard=FakeKeyboard()
 
 class MentionAdapterTests(unittest.TestCase):
     def setUp(self):
@@ -36,5 +43,19 @@ class MentionAdapterTests(unittest.TestCase):
     def test_canonical_href_is_strongest(self, _):
         info=_rank_candidate(FakeRow('UMEE Homestay', ['https://facebook.com/umeehomestay']), self.entity, self.editor)
         self.assertGreaterEqual(info['score'], 200)
+    @patch('adapters.facebook_mention.time.sleep', return_value=None)
+    def test_multiline_suffix_preserves_line_boundaries_without_single_multiline_insert(self, _):
+        page=FakePage()
+        suffix=' first line\n\n#UMEEHomestay #LacasaHomestay\n' + ('x'*170)
+        _insert_multiline_suffix(page, self.editor, suffix)
+        inserts=[value for kind,value in page.keyboard.events if kind=='insert']
+        presses=[value for kind,value in page.keyboard.events if kind=='press']
+        self.assertTrue(inserts)
+        self.assertTrue(all('\n' not in value for value in inserts))
+        self.assertEqual(presses, ['Shift+Enter','Shift+Enter','Shift+Enter'])
+        self.assertTrue(all(len(value) <= 80 for value in inserts))
+        rebuilt=''.join(inserts)
+        self.assertIn('#UMEEHomestay #LacasaHomestay', rebuilt)
+        self.assertIn('x'*80, rebuilt)
 
 if __name__ == '__main__': unittest.main()
