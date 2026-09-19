@@ -942,9 +942,9 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
-            from content_studio import similarity_gate
-            comparable_content = prepare_linkless_post(task_content)
-            comparable_history = [prepare_linkless_post(item) for item in published_content_history]
+            from content_studio import similarity_gate, similarity_projection
+            comparable_content = similarity_projection(task_content)
+            comparable_history = [similarity_projection(item) for item in published_content_history]
             similarity_result = similarity_gate(comparable_content, comparable_history, threshold=0.82)
             if not similarity_result["pass"]:
                 batch_failed = True

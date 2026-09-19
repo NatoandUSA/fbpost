@@ -24,6 +24,31 @@ def normalize_text(text):
 def similarity(a, b):
     return round(SequenceMatcher(None, normalize_text(a), normalize_text(b)).ratio(), 4)
 
+def similarity_projection(text):
+    """Project a post to its variable semantic body for duplicate-content comparison.
+
+    Canonical signatures, CTA blocks and hashtags are intentionally excluded because they are
+    required/controlled boilerplate. This keeps the existing similarity threshold meaningful
+    without allowing identical bodies through merely by changing a footer.
+    """
+    from brand_profiles import prepare_linkless_post
+    from composer_guard import CTA_RE, TAG_RE
+
+    clean = prepare_linkless_post(text or "")
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", clean) if b.strip()]
+    variable_blocks = []
+    for block in blocks:
+        if CTA_RE.search(block):
+            continue
+        stripped = TAG_RE.sub("", block).strip()
+        if stripped:
+            variable_blocks.append(stripped)
+    projected = "\n\n".join(variable_blocks)
+    projected = re.sub(r"[ \t]+\n", "\n", projected)
+    projected = re.sub(r"\n{3,}", "\n\n", projected)
+    return projected.strip()
+
+
 def similarity_gate(candidate, history, threshold=0.82):
     scores = [similarity(candidate, old) for old in (history or []) if old]
     peak = max(scores, default=0.0)
