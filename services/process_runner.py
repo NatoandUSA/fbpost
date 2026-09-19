@@ -76,7 +76,13 @@ class ProcessRunner:
         env: Optional[Dict[str, str]] = None,
         timeout_seconds: Optional[float] = None,
     ) -> int:
-        """Run a command synchronously in the calling thread, streaming output line by line."""
+        """Run a child process with process-exit authority and file-backed log streaming.
+
+        Browser descendants can inherit stdout handles. A PIPE therefore cannot be used as the
+        completion boundary because EOF may arrive long after the CLI worker exits. Child output
+        is written directly to the durable job log while a daemon tailer mirrors new lines to
+        callbacks/listeners. The worker process itself is the only lifecycle authority.
+        """
         if self.is_cancelled(job_id):
             return -1
 
@@ -85,99 +91,121 @@ class ProcessRunner:
             **os.environ,
             "PYTHONUTF8": "1",
             "PYTHONIOENCODING": "utf-8",
+            "PYTHONUNBUFFERED": "1",
             **(env or {}),
         }
-
-        creationflags = 0
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-
-        log_file = open(log_path, "a", encoding="utf-8", errors="replace")
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0
+        start_offset = log_path.stat().st_size if log_path.exists() else 0
+        log_file = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
         proc = None
-        timeout_hit = threading.Event()
-        process_done = threading.Event()
+        tailer_done = threading.Event()
+        process_finished = threading.Event()
         try:
             proc = subprocess.Popen(
                 cmd_args,
-                stdout=subprocess.PIPE,
+                stdout=log_file,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
                 env=process_env,
                 cwd=cwd,
                 creationflags=creationflags,
             )
-
             with self._lock:
                 self._active_processes[job_id] = proc
                 if self._cancellation_requested.get(job_id, False):
-                    # Job was cancelled before/during process creation
                     proc.kill()
                     return -1
                 if job_id not in self._cancellation_requested:
                     self._cancellation_requested[job_id] = False
 
-            if timeout_seconds:
-                def _watchdog():
-                    if process_done.wait(max(1.0, float(timeout_seconds))):
-                        return
-                    timeout_hit.set()
-                    if sys.platform == "win32" and proc and proc.pid:
-                        try:
-                            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=5)
-                        except Exception:
-                            pass
+            def _emit(line: str) -> None:
+                if on_line:
                     try:
-                        if proc and proc.poll() is None:
-                            proc.kill()
+                        on_line(line)
                     except Exception:
                         pass
-                threading.Thread(target=_watchdog, daemon=True).start()
+                with self._lock:
+                    subs = list(self._listeners.get(job_id, []))
+                for sub in subs:
+                    try:
+                        sub(line)
+                    except Exception:
+                        pass
 
-            if proc.stdout:
-                for raw_line in iter(proc.stdout.readline, ""):
-                    if not raw_line:
-                        break
-                    line = raw_line
-                    log_file.write(line)
-                    log_file.flush()
+            def _tail_log():
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="replace") as reader:
+                        reader.seek(start_offset)
+                        quiet_after_exit = 0
+                        while True:
+                            line = reader.readline()
+                            if line:
+                                quiet_after_exit = 0
+                                _emit(line)
+                                continue
+                            if process_finished.is_set():
+                                quiet_after_exit += 1
+                                if quiet_after_exit >= 4:  # ~200 ms grace to drain final buffered line(s)
+                                    break
+                            time.sleep(0.05)
+                finally:
+                    tailer_done.set()
 
-                    if on_line:
-                        try:
-                            on_line(line)
-                        except Exception:
-                            pass
+            # Local import avoids changing module API and keeps the tail loop cheap.
+            import time
+            threading.Thread(target=_tail_log, name=f"job-log-tail-{job_id}", daemon=True).start()
 
-                    with self._lock:
-                        subs = list(self._listeners.get(job_id, []))
-                    for sub in subs:
-                        try:
-                            sub(line)
-                        except Exception:
-                            pass
+            timeout_hit = False
+            try:
+                returncode = proc.wait(timeout=max(1.0, float(timeout_seconds))) if timeout_seconds else proc.wait()
+            except subprocess.TimeoutExpired:
+                timeout_hit = True
+                if sys.platform == "win32" and proc.pid:
+                    try:
+                        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=5)
+                    except Exception:
+                        pass
+                try:
+                    if proc.poll() is None:
+                        proc.kill()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
+                returncode = -2
 
-            returncode = proc.wait()
-            process_done.set()
-            if timeout_hit.is_set():
-                msg = f"❌ [TARGET_TIMEOUT] Tiến trình vượt quá {int(float(timeout_seconds))}s; đã dừng process tree để chuyển target tiếp theo.\n"
-                log_file.write(msg); log_file.flush()
-                if on_line:
-                    on_line(msg)
+            process_finished.set()
+            # Process exit is authoritative. Tailer is allowed only a short drain window.
+            tailer_done.wait(1.0)
+            if timeout_hit:
+                msg = f"[TARGET_TIMEOUT] Process exceeded {int(float(timeout_seconds))}s; process tree terminated before advancing.\n"
+                try:
+                    log_file.write(msg); log_file.flush()
+                except Exception:
+                    pass
+                _emit(msg)
                 return -2
             return returncode
 
         except Exception as err:
-            err_msg = f"❌ [ProcessRunner] Lỗi thực thi tiến trình: {err}\n"
-            log_file.write(err_msg)
-            log_file.flush()
+            err_msg = f"[ProcessRunner] Execution error: {err}\n"
+            try:
+                log_file.write(err_msg); log_file.flush()
+            except Exception:
+                pass
             if on_line:
-                on_line(err_msg)
+                try:
+                    on_line(err_msg)
+                except Exception:
+                    pass
             return -1
         finally:
-            process_done.set()
-            log_file.close()
+            process_finished.set()
+            try:
+                log_file.close()
+            except Exception:
+                pass
             with self._lock:
                 self._active_processes.pop(job_id, None)
 
