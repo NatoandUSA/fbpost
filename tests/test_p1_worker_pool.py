@@ -62,7 +62,9 @@ class WorkerPoolTests(unittest.TestCase):
     def test_same_profile_jobs_are_serialized(self):
         jm = self._manager(2)
         release = threading.Event()
+        emitted = []
         jm._execute_job = lambda job_id: release.wait(2)
+        jm._emit_line = lambda job_id, line: emitted.append((job_id, line))
         self._queue(jm, 'a', 'P1')
         self._queue(jm, 'b', 'P1')
         deadline = time.time() + 1
@@ -70,6 +72,7 @@ class WorkerPoolTests(unittest.TestCase):
             time.sleep(0.01)
         self.assertEqual(len(jm.get_active_job_ids()), 1)
         self.assertGreaterEqual(jm.capacity_snapshot()['queue_depth'], 1)
+        self.assertNotIn(('b', None), emitted)
         release.set()
         deadline = time.time() + 2
         while time.time() < deadline and jm._work_queue.unfinished_tasks:

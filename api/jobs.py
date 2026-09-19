@@ -62,7 +62,7 @@ def get_active_job():
 
 @jobs_bp.route("/api/capacity", methods=["GET"])
 def get_capacity():
-    return jsonify({"success": True, **job_manager.capacity_snapshot()})
+    return jsonify({"success": True, **job_manager.full_capacity_snapshot()})
 
 
 import re

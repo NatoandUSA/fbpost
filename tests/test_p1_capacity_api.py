@@ -18,7 +18,7 @@ class CapacityApiTests(unittest.TestCase):
             'reserved_profile_ids': ['P1', 'P2'],
             'profile_reservations': {'a': ['P1'], 'b': ['P2']},
         }
-        with patch.object(jobs_api.job_manager, 'capacity_snapshot', return_value=snapshot):
+        with patch.object(jobs_api.job_manager, 'full_capacity_snapshot', return_value=snapshot):
             res = self.client.get('/api/capacity')
         self.assertEqual(res.status_code, 200)
         data = res.get_json()

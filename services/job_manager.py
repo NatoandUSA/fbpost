@@ -73,6 +73,20 @@ class JobManager:
         snapshot.update(self.profile_capacity.snapshot())
         return snapshot
 
+    def full_capacity_snapshot(self) -> Dict[str, Any]:
+        snapshot = self.capacity_snapshot()
+        try:
+            from services.capacity_intelligence import CapacityIntelligence
+            intelligence = CapacityIntelligence(self.profile_capacity).snapshot(snapshot)
+            state_keys = ("READY", "BUSY", "COOLDOWN", "DEGRADED", "AUTH_REQUIRED", "ERROR")
+            snapshot.update({k: v for k, v in intelligence.items() if k not in state_keys})
+            snapshot["profile_state_counts"] = {k: int(intelligence.get(k, 0)) for k in state_keys}
+            snapshot["capacity_intelligence_ok"] = True
+        except Exception as exc:
+            snapshot["capacity_intelligence_ok"] = False
+            snapshot["capacity_intelligence_error"] = str(exc)[:240]
+        return snapshot
+
     def reconcile_on_startup(self) -> int:
         """Mark abandoned running jobs as interrupted, and requeue queued jobs."""
         interrupted = self.job_repo.reconcile_running_jobs()
@@ -232,6 +246,7 @@ class JobManager:
     def _queue_worker(self):
         while True:
             job_id = None
+            deferred = False
             try:
                 try:
                     job_id = self._work_queue.get(timeout=5.0)
@@ -248,6 +263,7 @@ class JobManager:
                 payload = raw_payload if raw_payload is not None else (job.get("payload") or {})
                 command = str(job.get("command") or payload.get("command") or "")
                 if not self.profile_capacity.try_reserve(job_id, command, payload):
+                    deferred = True
                     self._work_queue.put(job_id)
                     time.sleep(0.25)
                     continue
@@ -265,10 +281,11 @@ class JobManager:
                     pass
             finally:
                 if job_id:
-                    with self._lock:
-                        self._active_job_ids.discard(job_id)
-                    self.profile_capacity.release(job_id)
-                    self._emit_line(job_id, None)
+                    if not deferred:
+                        with self._lock:
+                            self._active_job_ids.discard(job_id)
+                        self.profile_capacity.release(job_id)
+                        self._emit_line(job_id, None)
                     self._work_queue.task_done()
 
     def _execute_job(self, job_id: str):
