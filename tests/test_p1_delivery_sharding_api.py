@@ -23,6 +23,23 @@ class DeliveryShardingApiTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.get_json()['success'])
 
+    def test_plan_passes_explicit_queue_item_selector(self):
+        preview = {'campaign_id':'C1','shards':[],'approved_items':3,'eligible_items':2}
+        captured = {}
+        def fake_plan(_self, campaign_id, **kwargs):
+            captured.update(kwargs)
+            return preview
+        with patch('api.jobs.CampaignRepository.list_campaigns', return_value=[self.campaign]), \
+             patch('api.jobs.DeliveryShardingPlanner.plan', new=fake_plan):
+            res = self.client.post('/api/delivery/shards/plan', json={'campaignId':'C1','queueItemIds':['I2','I1']})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(captured['queue_item_ids'], ['I2','I1'])
+
+    def test_plan_rejects_invalid_queue_item_selector(self):
+        with patch('api.jobs.CampaignRepository.list_campaigns', return_value=[self.campaign]):
+            res = self.client.post('/api/delivery/shards/plan', json={'campaignId':'C1','queueItemIds':'I1'})
+        self.assertEqual(res.status_code, 400)
+
     def test_dispatch_whitelists_payload_options(self):
         captured = {}
         def fake_dispatch(_self, campaign_id, **kwargs):

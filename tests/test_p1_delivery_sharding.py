@@ -123,6 +123,18 @@ class DeliveryShardingTests(unittest.TestCase):
         reasons = [x['reason'] for x in plan['skipped']]
         self.assertEqual(reasons.count('ALREADY_IN_FLIGHT'), 8)
 
+    def test_explicit_queue_item_selector_limits_wave_exactly(self):
+        manager = _Manager(_capacity(2, 30))
+        items = _items(12)
+        selected = ['I7', 'I2', 'I11', 'I4']
+        with patch('services.delivery_sharding.CampaignRepository.list_queue', return_value=items):
+            plan = DeliveryShardingPlanner(manager).plan('C1', batch_size=8, queue_item_ids=selected)
+        self.assertEqual(plan['requested_item_ids'], selected)
+        self.assertEqual(plan['selected_approved_items'], 4)
+        planned_ids = [t['queueItemId'] for s in plan['shards'] for t in s['tasks']]
+        self.assertEqual(planned_ids, selected)
+        self.assertNotIn('I1', planned_ids)
+
     def test_dispatch_payload_is_profile_specific(self):
         manager = _Manager(_capacity(2, 20))
         with patch('services.delivery_sharding.CampaignRepository.list_queue', return_value=_items(16)):

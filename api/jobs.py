@@ -93,7 +93,13 @@ def plan_delivery_shards():
         max_shards = int(max_shards) if max_shards is not None else None
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "batchSize/maxShards must be integers"}), 400
-    plan = DeliveryShardingPlanner(job_manager).plan(campaign_id, batch_size=batch_size, max_shards=max_shards)
+    queue_item_ids = data.get("queueItemIds")
+    if queue_item_ids is not None:
+        if not isinstance(queue_item_ids, list) or len(queue_item_ids) > 200 or not all(isinstance(x, str) for x in queue_item_ids):
+            return jsonify({"success": False, "error": "queueItemIds must be an array of strings (max 200)"}), 400
+    plan = DeliveryShardingPlanner(job_manager).plan(
+        campaign_id, batch_size=batch_size, max_shards=max_shards, queue_item_ids=queue_item_ids
+    )
     return jsonify({"success": True, **plan})
 
 
@@ -140,6 +146,10 @@ def dispatch_delivery_shards():
         max_shards = int(max_shards) if max_shards is not None else None
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "batchSize/maxShards must be integers"}), 400
+    queue_item_ids = data.get("queueItemIds")
+    if queue_item_ids is not None:
+        if not isinstance(queue_item_ids, list) or len(queue_item_ids) > 200 or not all(isinstance(x, str) for x in queue_item_ids):
+            return jsonify({"success": False, "error": "queueItemIds must be an array of strings (max 200)"}), 400
     allowed_options = (
         "brandKey", "autoSpin", "photoFolder", "photoFolders", "photoCountMode",
         "skipDuplicate24h", "skipDuplicateHours", "cleanExif", "antiHashText",
@@ -149,7 +159,8 @@ def dispatch_delivery_shards():
     if "brandKey" not in base_payload and campaign.get("brand"):
         base_payload["brandKey"] = campaign.get("brand")
     result = DeliveryShardingPlanner(job_manager).dispatch(
-        campaign_id, batch_size=batch_size, max_shards=max_shards, base_payload=base_payload
+        campaign_id, batch_size=batch_size, max_shards=max_shards,
+        base_payload=base_payload, queue_item_ids=queue_item_ids
     )
     return jsonify({"success": True, "deferred": result.get("dispatched_shards", 0) == 0, **result}), 202 if result.get("dispatched_shards", 0) else 200
 

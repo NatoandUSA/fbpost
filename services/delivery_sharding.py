@@ -34,7 +34,7 @@ class DeliveryShardingPlanner:
         raw = f"{campaign_id}|{profile_id}|{'|'.join(item_ids)}"
         return 'shard-' + hashlib.sha256(raw.encode('utf-8')).hexdigest()[:12]
 
-    def plan(self, campaign_id: str, *, batch_size: int = 10, max_shards: int | None = None) -> Dict:
+    def plan(self, campaign_id: str, *, batch_size: int = 10, max_shards: int | None = None, queue_item_ids: List[str] | None = None) -> Dict:
         batch_size = max(8, min(int(batch_size or 10), 12))
         capacity = self.job_manager.full_capacity_snapshot()
         effective = int(capacity.get('effective_parallelism') or 0)
@@ -63,15 +63,30 @@ class DeliveryShardingPlanner:
         profiles = sorted(profiles, key=self._profile_rank)
         shard_slots = min(effective, len(profiles))
 
-        items = [i for i in CampaignRepository().list_queue()
-                 if str(i.get('campaign_id') or '') == str(campaign_id)
-                 and str(i.get('state') or '').lower() == 'approved']
+        all_items = [i for i in CampaignRepository().list_queue()
+                     if str(i.get('campaign_id') or '') == str(campaign_id)
+                     and str(i.get('state') or '').lower() == 'approved']
+        requested_item_ids = None
+        missing_requested_item_ids = []
+        if queue_item_ids is not None:
+            requested_item_ids = []
+            seen_requested = set()
+            for raw_id in queue_item_ids:
+                item_id = str(raw_id or '').strip()
+                if item_id and item_id not in seen_requested:
+                    requested_item_ids.append(item_id)
+                    seen_requested.add(item_id)
+            by_id = {str(item.get('id') or ''): item for item in all_items}
+            items = [by_id[item_id] for item_id in requested_item_ids if item_id in by_id]
+            missing_requested_item_ids = [item_id for item_id in requested_item_ids if item_id not in by_id]
+        else:
+            items = all_items
         blocked = {normalize_target_url(k): v for k, v in (capacity.get('group_block_reasons') or {}).items() if normalize_target_url(k)}
         approved_targets = {normalize_target_url(t) for t in (capacity.get('group_approved_targets') or []) if normalize_target_url(t)}
         eligible_targets = {normalize_target_url(t) for t in (capacity.get('group_eligible_targets') or []) if normalize_target_url(t)}
         seen_targets = set()
         eligible = []
-        skipped = []
+        skipped = [{'id': item_id, 'reason': 'REQUESTED_ITEM_NOT_APPROVED'} for item_id in missing_requested_item_ids]
         for item in items:
             if str(item.get('id') or '') in active_item_ids:
                 skipped.append({'id': item.get('id'), 'reason': 'ALREADY_IN_FLIGHT'})
@@ -131,7 +146,9 @@ class DeliveryShardingPlanner:
             'active_shard_jobs': len(active_shard_jobs),
             'active_shard_item_ids': sorted(active_item_ids),
             'active_shard_profile_ids': sorted(active_profile_ids),
-            'approved_items': len(items),
+            'approved_items': len(all_items),
+            'selected_approved_items': len(items),
+            'requested_item_ids': requested_item_ids,
             'eligible_items': len(eligible),
             'wave_items': len(wave_items),
             'remaining_after_wave': max(0, len(eligible) - len(wave_items)),
@@ -144,9 +161,9 @@ class DeliveryShardingPlanner:
             },
         }
 
-    def dispatch(self, campaign_id: str, *, batch_size: int = 10, max_shards: int | None = None, base_payload: dict | None = None) -> Dict:
+    def dispatch(self, campaign_id: str, *, batch_size: int = 10, max_shards: int | None = None, base_payload: dict | None = None, queue_item_ids: List[str] | None = None) -> Dict:
         with _DISPATCH_LOCK:
-            plan = self.plan(campaign_id, batch_size=batch_size, max_shards=max_shards)
+            plan = self.plan(campaign_id, batch_size=batch_size, max_shards=max_shards, queue_item_ids=queue_item_ids)
             base = dict(base_payload or {})
             active_shards = set()
             for job in self.job_manager.list_jobs(limit=1000):
