@@ -399,6 +399,12 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
             mention_verified = human_type_with_page_mention(page, textbox, content, brand_key=brand_key)
             time.sleep(0.6)
             if not verify_entered_content(textbox, content):
+                try:
+                    from utils import entered_content_diagnostics
+                    diag = entered_content_diagnostics(textbox, content)
+                    print("[Composer Verify Diagnostic] " + json.dumps(diag, ensure_ascii=False))
+                except Exception as diag_err:
+                    print(f"[Composer Verify Diagnostic] unavailable: {diag_err}")
                 print("❌ Nội dung composer thiếu chữ ký/hashtag bắt buộc; dừng trước khi submit.")
                 return ActionResult(success=False, code="CONTENT_ENTRY_INCOMPLETE", message="Nội dung composer không khớp nội dung chuẩn bị đăng.", target_url=group_url)
             print(f"✅ Đã xác minh nội dung composer: {len(content)} ký tự · chữ ký/hashtag đầy đủ.")

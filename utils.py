@@ -162,7 +162,7 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
     result = type_with_page_mention(page, locator, text, brand_key=brand_key, plain_type=human_type)
     return bool(result.verified)
 
-def verify_entered_content(locator, expected):
+def entered_content_diagnostics(locator, expected):
     try:
         actual = (locator.inner_text() or locator.text_content() or "").strip()
         if not actual and hasattr(locator, "input_value"):
@@ -170,16 +170,14 @@ def verify_entered_content(locator, expected):
                 actual = (locator.input_value() or "").strip()
             except Exception:
                 pass
-    except Exception:
-        return False
-    expected=str(expected or "").strip()
-    required=[t for t in ("#UMEEHomestay", "#LacasaHomestay") if t.casefold() in expected.casefold()]
+    except Exception as exc:
+        return {"error": type(exc).__name__, "expected_len": len(str(expected or "")), "actual_len": 0, "missing": []}
+    expected = str(expected or "").strip()
+    required = [t for t in ("#UMEEHomestay", "#LacasaHomestay") if t.casefold() in expected.casefold()]
     signature_part = ""
     for separator in ("━━━━━━━━━━━━━━━━━━━━", "-------------------"):
         if separator in expected:
             required.append(separator)
-            # Canonical signatures are wrapped by the separator; validate every
-            # non-empty line between the first and final separator.
             parts = expected.split(separator)
             if len(parts) >= 3:
                 signature_part = separator.join(parts[1:-1])
@@ -188,9 +186,23 @@ def verify_entered_content(locator, expected):
             break
     if signature_part:
         required.extend([line.strip() for line in signature_part.splitlines() if line.strip()])
-    if not required:
-        return True
-    return all(t.casefold() in actual.casefold() for t in required) and len(actual) >= min(20,len(expected))
+    missing = [token for token in required if token.casefold() not in actual.casefold()]
+    return {
+        "expected_len": len(expected),
+        "actual_len": len(actual),
+        "missing": missing,
+        "actual_head": actual[:180],
+        "actual_tail": actual[-260:],
+    }
+
+
+def verify_entered_content(locator, expected):
+    diag = entered_content_diagnostics(locator, expected)
+    if diag.get("error"):
+        return False
+    actual_len = int(diag.get("actual_len") or 0)
+    expected = str(expected or "").strip()
+    return not diag.get("missing") and actual_len >= min(20, len(expected))
 
 
 def navigate_facebook_surface(page, target_url, *, prewarm=True, rounds=3, timeout=45000, label="Facebook"):
