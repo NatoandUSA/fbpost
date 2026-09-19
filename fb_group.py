@@ -402,7 +402,7 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 try:
                     from utils import entered_content_diagnostics
                     diag = entered_content_diagnostics(textbox, content)
-                    print("[Composer Verify Diagnostic] " + json.dumps(diag, ensure_ascii=False))
+                    print(f"[Composer Verify Diagnostic] {diag!r}")
                 except Exception as diag_err:
                     print(f"[Composer Verify Diagnostic] unavailable: {diag_err}")
                 print("❌ Nội dung composer thiếu chữ ký/hashtag bắt buộc; dừng trước khi submit.")
