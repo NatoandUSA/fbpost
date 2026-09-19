@@ -17,6 +17,7 @@ from paths import JOBS_LOG_DIR, BASE_DIR
 from repositories.job_repo import JobRepository
 from repositories.reconcile_repo import ReconcileRepository
 from services.process_runner import ProcessRunner
+from services.profile_capacity import ProfileCapacityManager
 
 
 class JobManager:
@@ -37,6 +38,7 @@ class JobManager:
         self.process_runner = process_runner or ProcessRunner()
         self._job_queues: Dict[str, queue.Queue] = {}
         self._raw_payloads: Dict[str, Dict[str, Any]] = {}
+        self.profile_capacity = ProfileCapacityManager(self._load_accounts_for_capacity)
         configured = max_workers if max_workers is not None else os.getenv("FB_JOB_MAX_WORKERS", "1")
         try:
             configured = int(configured)
@@ -51,6 +53,11 @@ class JobManager:
             worker.start()
         self._initialized = True
 
+    @staticmethod
+    def _load_accounts_for_capacity():
+        from utils import load_accounts
+        return load_accounts()
+
     def get_active_job_ids(self) -> List[str]:
         with self._lock:
             return sorted(self._active_job_ids)
@@ -62,7 +69,9 @@ class JobManager:
 
     def capacity_snapshot(self) -> Dict[str, Any]:
         active = self.get_active_job_ids()
-        return {"worker_max": self.max_workers, "worker_active": len(active), "worker_available": max(0, self.max_workers-len(active)), "queue_depth": self._work_queue.qsize(), "active_job_ids": active}
+        snapshot = {"worker_max": self.max_workers, "worker_active": len(active), "worker_available": max(0, self.max_workers-len(active)), "queue_depth": self._work_queue.qsize(), "active_job_ids": active}
+        snapshot.update(self.profile_capacity.snapshot())
+        return snapshot
 
     def reconcile_on_startup(self) -> int:
         """Mark abandoned running jobs as interrupted, and requeue queued jobs."""
@@ -231,6 +240,17 @@ class JobManager:
                     continue
                 if job_id is None:
                     break
+                job = self.job_repo.get_job(job_id)
+                if not job:
+                    continue
+                with self._lock:
+                    raw_payload = self._raw_payloads.get(job_id)
+                payload = raw_payload if raw_payload is not None else (job.get("payload") or {})
+                command = str(job.get("command") or payload.get("command") or "")
+                if not self.profile_capacity.try_reserve(job_id, command, payload):
+                    self._work_queue.put(job_id)
+                    time.sleep(0.25)
+                    continue
                 with self._lock:
                     self._active_job_ids.add(job_id)
                 self._execute_job(job_id)
@@ -247,6 +267,7 @@ class JobManager:
                 if job_id:
                     with self._lock:
                         self._active_job_ids.discard(job_id)
+                    self.profile_capacity.release(job_id)
                     self._emit_line(job_id, None)
                     self._work_queue.task_done()
 
