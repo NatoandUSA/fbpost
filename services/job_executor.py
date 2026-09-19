@@ -19,6 +19,7 @@ from utils import (
     is_recently_posted,
     normalize_target_url,
     pick_random_photos,
+    canonical_facebook_post_url,
 )
 from services.process_runner import ProcessRunner
 from repositories.job_repo import JobRepository
@@ -1101,6 +1102,21 @@ def execute_automation_task(
 
         action_state = str(structured_result.get("state") or "")
         action_code = str(structured_result.get("code") or "")
+        if action_state == "published":
+            canonical_post_url = canonical_facebook_post_url(structured_result.get("result_url") or "")
+            if canonical_post_url:
+                structured_result["result_url"] = canonical_post_url
+            else:
+                on_line("[POST_IDENTITY_CONTRACT] Reject published state without a concrete post permalink; downgrade to submitted_unverified.\n")
+                structured_result.update({
+                    "success": False,
+                    "state": "submitted_unverified",
+                    "code": "POST_IDENTITY_NOT_FOUND",
+                    "message": "Facebook submit detected but concrete post permalink is not verified.",
+                    "result_url": "",
+                })
+                action_state = "submitted_unverified"
+                action_code = "POST_IDENTITY_NOT_FOUND"
         submit_was_triggered = is_submit_uncertain(structured_result)
         deferred_comment = None
         if cmd == "reconcile-post" and action_state == "published":
@@ -1129,12 +1145,12 @@ def execute_automation_task(
             )
             if should_first_comment:
                 from brand_profiles import get_first_comment_text
-                post_permalink = str(structured_result.get("result_url") or "").strip()
+                post_permalink = canonical_facebook_post_url(structured_result.get("result_url") or "")
                 comment_brand_key = str((deferred_comment or {}).get("brand_key") or brand_key).strip().lower()
                 # Always regenerate from the current safe templates. This also prevents
                 # old deferred rows containing a multi-link comment from being posted.
                 first_comment_text = get_first_comment_text(comment_brand_key, variant_seed=target)
-                if first_comment_text and post_permalink and ("/posts/" in post_permalink or "/permalink/" in post_permalink or "/share/" in post_permalink):
+                if first_comment_text and post_permalink:
                     cooldown = ModerationRepository().comment_cooldown(target)
                     if cooldown:
                         on_line(f"🛑 [First Comment] Group đang cooldown đến {cooldown.get('cooldown_until')}; không gửi lại bình luận đã từng bị từ chối.\n")

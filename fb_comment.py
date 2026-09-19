@@ -7,7 +7,7 @@ try:
     from playwright.sync_api import sync_playwright
 except ImportError:
     sync_playwright = None
-from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult
+from utils import process_spintax, human_type, load_accounts, resolve_account, launch_browser, close_browser, safe_mouse_wheel, ActionResult, canonical_facebook_post_url
 from paths import DATA_DIR
 
 STATE_FILE = str(DATA_DIR / "state.json")
@@ -39,25 +39,8 @@ def _rejected_comment_visible(scope, marker):
     return False
 
 def _canonicalize_comment_url(url):
-    """Return a canonical Facebook post URL, or empty when the input is not a post identity."""
-    value = (url or "").strip()
-    m = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.IGNORECASE)
-    if m:
-        return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
-    m = re.search(r"facebook\.com/groups/([^/?#]+)/(?:posts|permalink)/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
-    if m:
-        return f"https://www.facebook.com/groups/{m.group(1)}/posts/{m.group(2)}"
-    m = re.search(r"facebook\.com/share/([pv])/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
-    if m:
-        return f"https://www.facebook.com/share/{m.group(1).lower()}/{m.group(2)}"
-    m = re.search(r"facebook\.com/reel/([a-zA-Z0-9_-]+)", value, re.IGNORECASE)
-    if m:
-        return f"https://www.facebook.com/reel/{m.group(1)}"
-    if re.search(r"facebook\.com/.+/(?:posts|videos)/[a-zA-Z0-9_-]+", value, re.IGNORECASE):
-        return value.split("?", 1)[0]
-    if re.search(r"facebook\.com/(?:story\.php|permalink\.php)\?.*(?:story_fbid|fbid)=\d+", value, re.IGNORECASE):
-        return value
-    return ""
+    """Comment contract: accept only one concrete Facebook post identity."""
+    return canonical_facebook_post_url(url)
 
 def _post_identity(url):
     value = (url or "").strip()

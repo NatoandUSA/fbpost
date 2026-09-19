@@ -2036,6 +2036,33 @@ def clean_facebook_post_url(href: str) -> str:
     # Đối với các URL dạng /posts/123, /permalink/123, /videos/123, /groups/xyz/permalink/123
     return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
+def canonical_facebook_post_url(href: str) -> str:
+    """Return a canonical URL only when href identifies one concrete Facebook post."""
+    value = (href or "").strip()
+    multi = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.I)
+    if multi:
+        return f"https://www.facebook.com/groups/{multi.group(1)}/posts/{multi.group(2)}"
+    clean = clean_facebook_post_url(value)
+    if not clean:
+        return ""
+    parsed = urllib.parse.urlparse(clean)
+    if not re.search(r"(^|\.)facebook\.com$", parsed.netloc, re.I):
+        return ""
+    path = parsed.path or ""
+    if re.search(r"/groups/[^/]+/(?:posts|permalink)/[A-Za-z0-9_-]+/?$", path, re.I):
+        return clean.rstrip("/")
+    if re.search(r"/[^/]+/(?:posts|videos)/[A-Za-z0-9_-]+/?$", path, re.I):
+        return clean.rstrip("/")
+    if re.search(r"/share/[pv]/[A-Za-z0-9_-]+/?$", path, re.I):
+        return clean.rstrip("/")
+    if re.search(r"/reel/[A-Za-z0-9_-]+/?$", path, re.I):
+        return clean.rstrip("/")
+    qs = urllib.parse.parse_qs(parsed.query)
+    if path.lower().endswith(("/permalink.php", "/story.php")) and any(qs.get(k) for k in ("story_fbid", "fbid", "post_id")):
+        return clean
+    return ""
+
+
 def text_similarity_match(needle: str, haystack: str) -> bool:
     """Match post content with word checkpoints resilient to FB truncation/DOM wrapping."""
     def norm(s):
@@ -2084,7 +2111,7 @@ def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> s
                     continue
                 for link in container.locator(selectors).all():
                     href = link.get_attribute("href") or ""
-                    clean = clean_facebook_post_url(href)
+                    clean = canonical_facebook_post_url(href)
                     if clean and (not target_group or _group_key_from_url(clean) in ("", target_group)):
                         return clean
             except Exception:
@@ -2105,7 +2132,7 @@ def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> s
                     href = link.get_attribute("href") or ""
                     if not href or any(x in href for x in ["/groups/user/", "/comment/", "reaction"]):
                         continue
-                    clean = clean_facebook_post_url(href)
+                    clean = canonical_facebook_post_url(href)
                     if not clean:
                         continue
                     candidate_group = _group_key_from_url(clean)
@@ -2206,7 +2233,7 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
         time.sleep(0.4)
         copied = page.evaluate("async () => await navigator.clipboard.readText()") or ""
         print(f"[Permalink Resolver] native_share:clipboard={'1' if copied.strip() else '0'}")
-        clean = clean_facebook_post_url(copied.strip())
+        clean = canonical_facebook_post_url(copied.strip())
         if not clean:
             print("[Permalink Resolver] native_share:canonical=0")
             return ""
@@ -2269,6 +2296,11 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
     target_type = "group" if "/groups/" in fallback_url else ("page" if fallback_url else "unknown")
 
     def _published(clean_href, message):
+        clean_href = canonical_facebook_post_url(clean_href)
+        if not clean_href:
+            return ActionResult(False, "POST_IDENTITY_NOT_FOUND",
+                                "Facebook submit detected but no concrete post permalink was verified.",
+                                state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
         print(f"POSTED_LINK:{clean_href}")
         record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id,
                            url_type="post", publish_state="published")
