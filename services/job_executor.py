@@ -120,6 +120,35 @@ def _resume_rotation_after_last_post(accounts_pool):
     return accounts_pool
 
 
+def _take_profile_round(round_queue, accounts_pool, excluded=None, scores=None):
+    """Consume every configured profile slot once per round; exclusions consume their slot."""
+    excluded = {str(value) for value in (excluded or set())}
+    scores = scores or {}
+    by_id = {str(account.get("id") or ""): account for account in accounts_pool}
+    for _ in range(2):
+        if not round_queue:
+            round_queue.extend(str(account.get("id") or "") for account in accounts_pool)
+        round_queue[:] = [profile_id for profile_id in round_queue if profile_id and profile_id not in excluded]
+        if round_queue:
+            order = {profile_id: index for index, profile_id in enumerate(round_queue)}
+            chosen_id = max(round_queue, key=lambda profile_id: (float(scores.get(profile_id, 0)), -order[profile_id]))
+            round_queue.remove(chosen_id)
+            return by_id.get(chosen_id)
+        round_queue.clear()
+    return None
+
+
+def _published_content_history(limit=200):
+    try:
+        return [
+            str(row.get("content") or "").strip()
+            for row in ActivityRepository().list_posted_links(limit=limit)
+            if str(row.get("publish_state") or "").lower() == "published" and str(row.get("content") or "").strip()
+        ]
+    except Exception:
+        return []
+
+
 def execute_automation_task(
     job_id: str,
     cmd: str,
@@ -788,6 +817,8 @@ def execute_automation_task(
     moderation_skipped_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
+    profile_round_queue = [str(account.get("id") or "") for account in accounts_pool] if rotate_accounts else []
+    published_content_history = _published_content_history(200) if cmd in ("group", "page") else []
     if job_repo:
         job_repo.update_job(job_id, progress_total=total)
 
@@ -903,7 +934,7 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
-            from brand_profiles import validate_brand_signature
+            from brand_profiles import validate_brand_signature, prepare_linkless_post
             sig_ok, sig_missing = validate_brand_signature(task_content, brand_key, mode=sig_mode)
             if brand_key and not sig_ok:
                 batch_failed = True
@@ -911,6 +942,20 @@ def execute_automation_task(
                 if job_repo:
                     job_repo.update_job(job_id, progress_current=i + 1)
                 continue
+            from content_studio import similarity_gate
+            comparable_content = prepare_linkless_post(task_content)
+            comparable_history = [prepare_linkless_post(item) for item in published_content_history]
+            similarity_result = similarity_gate(comparable_content, comparable_history, threshold=0.82)
+            if not similarity_result["pass"]:
+                batch_failed = True
+                on_line(
+                    f"🛑 [CROSS_POST_SIMILARITY_REJECTED] similarity={similarity_result['max_similarity']:.3f} "
+                    f">= {similarity_result['threshold']:.2f}; dừng trước khi mở Facebook.\n"
+                )
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
+            published_content_history.append(task_content)
             has_sig="yes" if ("━━━━━━━━━━━━━━━━━━━━" in task_content or "-------------------" in task_content) else "no"
             has_tags="yes" if all(t.lower() in task_content.lower() for t in ("#UMEEHomestay","#LacasaHomestay")) else "no"
             preview=re.sub(r"\s+"," ",task_content).strip()[:120]
@@ -925,25 +970,31 @@ def execute_automation_task(
                 on_line(f"📁 [Luân phiên ảnh] Folder {(i % len(photo_folders))+1}/{len(photo_folders)}: {selected_photo_folder} · đã chọn {len(task_images)} ảnh.\n")
 
         if rotate_accounts and accounts_pool:
-            # Do not repeatedly assign a Group to a profile already proven not to be
-            # a member of that exact Group. Preserve LRU order and round-robin fairness
-            # among the remaining eligible profiles.
-            eligible_pool = accounts_pool
             excluded_membership = set()
+            profile_scores = {}
             if cmd == "group":
                 try:
                     from repositories.workflow_repo import WorkflowRepository
-                    excluded_membership = WorkflowRepository().membership_ineligible_profiles(target)
-                    candidates = [a for a in accounts_pool if str(a.get("id") or "") not in excluded_membership]
-                    if candidates:
-                        eligible_pool = candidates
+                    workflow_repo = WorkflowRepository()
+                    excluded_membership = workflow_repo.membership_ineligible_profiles(target)
+                    profile_scores = workflow_repo.profile_group_scores(target)
                 except Exception as membership_history_err:
                     on_line(f"[Profile Eligibility] history unavailable: {membership_history_err}\n")
-            curr_acc = eligible_pool[i % len(eligible_pool)]
+            curr_acc = _take_profile_round(
+                profile_round_queue, accounts_pool,
+                excluded=excluded_membership, scores=profile_scores,
+            )
+            if not curr_acc:
+                batch_failed = True
+                on_line("🛑 [Profile Eligibility] Không còn profile hợp lệ trong vòng hiện tại; dừng trước khi mở Facebook.\n")
+                if job_repo:
+                    job_repo.update_job(job_id, progress_current=i + 1)
+                continue
             curr_acc_id = curr_acc.get("id")
             if excluded_membership:
                 on_line(f"🧭 [Profile Eligibility] Bỏ {len(excluded_membership)} profile đã xác minh không phải member của Group này.\n")
-            on_line(f"🔄 [Luân phiên Profile GPM] Sử dụng: {curr_acc.get('name', curr_acc_id)} cho bài đăng {i+1}/{total}\n")
+            score = profile_scores.get(str(curr_acc_id), 0)
+            on_line(f"🔄 [Profile Round] Sử dụng: {curr_acc.get('name', curr_acc_id)} · group-score={score} · còn {len(profile_round_queue)} slot trong vòng.\n")
         else:
             curr_acc_id = account_id
 
@@ -1051,6 +1102,22 @@ def execute_automation_task(
 
         action_state = str(structured_result.get("state") or "")
         action_code = str(structured_result.get("code") or "")
+        if cmd in ("group", "page", "reconcile-post") and action_state == "published":
+            from fb_comment import _canonicalize_comment_url
+            canonical_post_url = _canonicalize_comment_url(structured_result.get("result_url") or "")
+            if canonical_post_url:
+                structured_result["result_url"] = canonical_post_url
+            else:
+                on_line("🛑 [POST_IDENTITY_CONTRACT] Published bị hạ xuống unverified vì result_url không phải permalink bài viết cụ thể.\n")
+                structured_result.update({
+                    "success": False,
+                    "state": "submitted_unverified",
+                    "code": "POST_IDENTITY_NOT_FOUND",
+                    "message": "Facebook đã nhận submit nhưng chưa có permalink bài viết cụ thể.",
+                    "result_url": "",
+                })
+                action_state = "submitted_unverified"
+                action_code = "POST_IDENTITY_NOT_FOUND"
         submit_was_triggered = is_submit_uncertain(structured_result)
         deferred_comment = None
         if cmd == "reconcile-post" and action_state == "published":
