@@ -2219,10 +2219,34 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
             share_button.evaluate("el => el.click()")
         except Exception:
             share_button.click(force=True, timeout=1800)
-        time.sleep(0.8)
+        time.sleep(1.5)
         dialog = page.locator("[role='dialog']").last
-        copy_button = dialog.get_by_text(re.compile("^(Sao ch\u00e9p li\u00ean k\u1ebft|Copy link)$", re.I), exact=True).first
-        if not copy_button.count() or not copy_button.is_visible(timeout=1800):
+        copy_button = None
+        copy_re = re.compile(r"(Sao ch\u00e9p li\u00ean k\u1ebft|Copy link)", re.I)
+        scopes = [dialog, page]
+        for scope in scopes:
+            candidates = [
+                scope.get_by_text(copy_re, exact=False),
+                scope.locator("[role='button'], [role='menuitem'], button").filter(has_text=copy_re),
+                scope.locator("[aria-label*='Copy link' i], [aria-label*='Sao ch\u00e9p li\u00ean k\u1ebft' i], [title*='Copy link' i]"),
+            ]
+            for locator in candidates:
+                try:
+                    items = locator.all()[:12]
+                except (AttributeError, TypeError):
+                    items = [locator.nth(i) for i in range(min(locator.count(), 12))]
+                for item in items:
+                    try:
+                        if item.is_visible(timeout=500):
+                            copy_button = item
+                            break
+                    except Exception:
+                        continue
+                if copy_button is not None:
+                    break
+            if copy_button is not None:
+                break
+        if copy_button is None:
             print("[Permalink Resolver] native_share:copy_link=0")
             return ""
         print("[Permalink Resolver] native_share:copy_link=1")
