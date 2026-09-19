@@ -8,12 +8,12 @@ def _iso(dt): return dt.isoformat(timespec="seconds")
 class ReconcileRepository(BaseRepository):
     DELAYS=(30,120,600)
     MODERATION_DELAYS=(600,1800,7200,21600,43200,86400)
-    def enqueue(self,target_url,content,account_id=None,queue_item_id=None,delay_seconds=30,reconcile_kind='uncertain'):
+    def enqueue(self,target_url,content,account_id=None,queue_item_id=None,delay_seconds=30,reconcile_kind='uncertain',origin_job_id=None):
         now=_now(); rid=uuid.uuid4().hex
         with self.transaction() as conn:
             existing=conn.execute("SELECT id FROM reconciliation_queue WHERE target_url=? AND COALESCE(account_id,'')=COALESCE(?,'') AND content=? AND status IN ('pending','running') LIMIT 1",(target_url,account_id,content)).fetchone()
             if existing: return existing["id"]
-            conn.execute("INSERT INTO reconciliation_queue(id,target_url,content,account_id,queue_item_id,attempt,next_reconcile_at,status,created_at,updated_at,reconcile_kind) VALUES(?,?,?,?,?,0,?,'pending',?,?,?)",(rid,target_url,content,account_id,queue_item_id,_iso(now+timedelta(seconds=delay_seconds)),_iso(now),_iso(now),reconcile_kind))
+            conn.execute("INSERT INTO reconciliation_queue(id,target_url,content,account_id,queue_item_id,attempt,next_reconcile_at,status,created_at,updated_at,reconcile_kind,origin_job_id) VALUES(?,?,?,?,?,0,?,'pending',?,?,?,?)",(rid,target_url,content,account_id,queue_item_id,_iso(now+timedelta(seconds=delay_seconds)),_iso(now),_iso(now),reconcile_kind,origin_job_id))
         return rid
     def claim_due(self,limit=5):
         now=_iso(_now()); out=[]
@@ -51,6 +51,23 @@ class ReconcileRepository(BaseRepository):
             return dict(row) if row else None
         finally:
             conn.close()
+    def count_active(self, origin_job_id=None):
+        conn=self.get_conn()
+        try:
+            if origin_job_id:
+                row=conn.execute("SELECT COUNT(*) AS n FROM reconciliation_queue WHERE origin_job_id=? AND status IN ('pending','running')",(origin_job_id,)).fetchone()
+            else:
+                row=conn.execute("SELECT COUNT(*) AS n FROM reconciliation_queue WHERE status IN ('pending','running')").fetchone()
+            return int(row["n"] or 0)
+        finally: conn.close()
+    def cancel_pending(self, origin_job_id=None):
+        now=_iso(_now())
+        with self.transaction() as conn:
+            if origin_job_id:
+                cur=conn.execute("UPDATE reconciliation_queue SET status='cancelled',next_reconcile_at=NULL,last_error='Cancelled by user',updated_at=? WHERE origin_job_id=? AND status='pending'",(now,origin_job_id))
+            else:
+                cur=conn.execute("UPDATE reconciliation_queue SET status='cancelled',next_reconcile_at=NULL,last_error='Cancelled by user',updated_at=? WHERE status='pending'",(now,))
+            return cur.rowcount
     def list_items(self,status=None,limit=200):
         conn=self.get_conn()
         try:

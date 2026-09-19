@@ -4,6 +4,7 @@ Decouples subprocess lifecycle from HTTP connection.
 
 from flask import Blueprint, jsonify, request, Response
 from services.job_manager import JobManager
+from repositories.reconcile_repo import ReconcileRepository
 
 jobs_bp = Blueprint("jobs", __name__)
 job_manager = JobManager()
@@ -114,8 +115,12 @@ def cancel_job(job_id):
 @jobs_bp.route("/api/cancel", methods=["POST"])
 def cancel_active():
     cancelled = job_manager.cancel_active_job()
-    if cancelled:
-        return jsonify({"success": True, "message": "Đã gửi tín hiệu dừng tiến trình đang chạy."})
+    try:
+        reconcile_cancelled = ReconcileRepository().cancel_pending()
+    except Exception:
+        reconcile_cancelled = 0
+    if cancelled or reconcile_cancelled:
+        return jsonify({"success": True, "reconcile_cancelled": reconcile_cancelled, "message": "Đã gửi tín hiệu dừng tiến trình đang chạy."})
     return jsonify({"success": False, "message": "Hiện không có tiến trình nào đang hoạt động."})
 
 

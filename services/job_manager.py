@@ -187,12 +187,15 @@ class JobManager:
                 "command": "reconcile-post",
                 "accountId": row.get("account_id"),
                 "reconcileRecordId": row.get("id"),
+                "originJobId": row.get("origin_job_id"),
                 "tasks": [{"target": row.get("target_url"), "content": row.get("content")}],
             }
             job_id = self.create_job("reconcile-post", payload, account_id=row.get("account_id"))
             self.process_runner.prepare_job(job_id)
             with self._lock:
                 self._job_queues.setdefault(job_id, queue.Queue())
+            origin = str(row.get("origin_job_id") or "").strip()
+            print(f"[Background Reconcile] origin={origin or '-'} reconcile={str(row.get('id') or '')[:10]} child_job={job_id} profile={row.get('account_id') or '-'} attempt={int(row.get('attempt') or 0)+1} READ_ONLY_NO_REPOST")
             self._work_queue.put(job_id)
         return len(rows)
 
@@ -265,6 +268,13 @@ class JobManager:
             final_state = "success" if success else "failed"
             if self.process_runner.is_cancelled(job_id):
                 final_state = "cancelled"
+            if command != "reconcile-post":
+                try:
+                    bg_count = ReconcileRepository().count_active(origin_job_id=job_id)
+                except Exception:
+                    bg_count = 0
+                if bg_count:
+                    self._emit_line(job_id, f"[Lifecycle] Posting finished; {bg_count} background reconcile item(s) remain active. READ-ONLY / NO REPOST.\n")
             self.job_repo.mark_finished(job_id, state=final_state)
             self._emit_line(job_id, f"[JobManager] Hoàn tất tiến trình với trạng thái: {final_state}\n")
         except Exception as ex:

@@ -1156,7 +1156,7 @@ def execute_automation_task(
                         )
                         ReconcileRepository().enqueue(
                             target, task_content, curr_acc_id, queue_item_id or None,
-                            delay_seconds=600, reconcile_kind="moderation"
+                            delay_seconds=600, reconcile_kind="moderation", origin_job_id=job_id
                         )
                         on_line("🕒 [First Comment] Đã lưu first comment dạng text; sẽ đăng sau khi bài được duyệt và có permalink.\n")
                 except Exception as moderation_err:
@@ -1172,7 +1172,7 @@ def execute_automation_task(
         # Durable reconciliation is created only after a real post submit becomes uncertain.
         if cmd in ("group", "page") and submit_was_triggered:
             try:
-                rid = ReconcileRepository().enqueue(target, task_content, curr_acc_id, queue_item_id or None, delay_seconds=30)
+                rid = ReconcileRepository().enqueue(target, task_content, curr_acc_id, queue_item_id or None, delay_seconds=30, origin_job_id=job_id)
                 on_line(f"🕒 [Durable Reconcile] Đã lên lịch 30s → 2m → 10m · id={rid[:10]}. Không repost.\n")
             except Exception as recon_err:
                 on_line(f"⚠️ [Durable Reconcile] Không thể ghi lịch đối soát: {recon_err}\n")
