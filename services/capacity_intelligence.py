@@ -95,22 +95,30 @@ class CapacityIntelligence:
                     recent.add(target)
         approved_active = 0; pending_blocked = 0; recent_blocked = 0; eligible = 0
         reasons = {}
+        approved_targets = []
+        eligible_targets = []
         for group in groups:
             if str(group.get('status') or '').lower() != 'approved' or group.get('is_active', True) is False:
                 continue
             approved_active += 1
             target = normalize_target_url(group.get('url') or '')
+            if target:
+                approved_targets.append(target)
             mod = moderated.get(target) or {}
             if int(mod.get('pending_count') or 0) >= int(mod.get('skip_threshold') or 2):
                 pending_blocked += 1; reasons[target] = 'PENDING_LIMIT'; continue
             if target in recent:
                 recent_blocked += 1; reasons[target] = 'RECENT_POST'; continue
             eligible += 1
+            if target:
+                eligible_targets.append(target)
         return {
             'groups_total': len(groups), 'groups_approved_active': approved_active,
             'groups_eligible': eligible, 'groups_pending_blocked': pending_blocked,
             'groups_recent_blocked': recent_blocked, 'group_cooldown_hours': cooldown_hours,
             'group_block_reasons': reasons,
+            'group_approved_targets': approved_targets,
+            'group_eligible_targets': eligible_targets,
         }
 
     def snapshot(self, worker_snapshot: Dict) -> Dict:
