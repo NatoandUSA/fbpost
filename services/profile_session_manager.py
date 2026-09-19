@@ -165,6 +165,13 @@ def release_profile(profile_id: str) -> None:
         lease = _active_leases.pop(key, None)
         _runtime.pop(key, None)
     if lease:
+        # release_profile is called only after verified teardown (or before a browser was started).
+        # Clear the persisted CDP endpoint before unlocking so a later lease cannot be blocked by
+        # stale metadata or an unrelated service reusing the old TCP port.
+        try:
+            lease._write_meta(endpoint="")
+        except Exception:
+            pass
         lease.release()
 
 
