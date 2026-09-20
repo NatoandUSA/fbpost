@@ -424,6 +424,7 @@ class AuditV582RegressionTests(unittest.TestCase):
              patch("fb_group.navigate_facebook_surface", return_value=True), \
              patch("fb_group._ensure_group_membership", return_value="joined"), \
              patch("fb_group.attach_image_to_composer", return_value=False), \
+             patch("fb_group.verify_entered_content", return_value=True), \
              patch("fb_group.safe_mouse_wheel"), \
              patch("time.sleep", return_value=None):
             mock_p = mock_pw.return_value.__enter__.return_value
