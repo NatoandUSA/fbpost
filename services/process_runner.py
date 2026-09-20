@@ -93,6 +93,14 @@ class ProcessRunner:
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
 
         log_file = open(log_path, "a", encoding="utf-8", errors="replace")
+        marker = f"JOB_LOG_IDENTITY:{job_id}|path={log_path.resolve()}\n"
+        log_file.write(marker)
+        log_file.flush()
+        if on_line:
+            try:
+                on_line(marker)
+            except Exception:
+                pass
         proc = None
         timeout_hit = threading.Event()
         process_done = threading.Event()

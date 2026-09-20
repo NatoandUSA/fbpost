@@ -2147,6 +2147,69 @@ def _scan_post_permalink_once(page, target="", content="", max_articles=10) -> s
 
 
 
+def _search_group_post_by_content(page, target="", content="") -> str:
+    """Read-only fallback: use Facebook group search to locate a submitted post by content fingerprint."""
+    group_key = _group_key_from_url(target)
+    if not group_key or not content:
+        return ""
+    words = re.sub(r"\s+", " ", content).strip().split()
+    query = " ".join(words[:10]).strip()
+    if len(query) < 12:
+        return ""
+    search_url = f"https://www.facebook.com/groups/{group_key}/search/?q={urllib.parse.quote(query)}"
+    try:
+        print(f"[PublicationIdentity] group_search:start group={group_key}")
+        page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        for _ in range(4):
+            found = _scan_post_permalink_once(page, target=target, content=content, max_articles=40)
+            if found:
+                print(f"[PublicationIdentity] group_search:match=1 url={found}")
+                return found
+            try:
+                page.mouse.wheel(0, 1800)
+            except Exception:
+                pass
+            time.sleep(1.5)
+        print("[PublicationIdentity] group_search:match=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] group_search:error={exc}")
+    return ""
+
+
+def _resolve_share_reference_to_group_post(page, reference="", target="", content="") -> str:
+    """Resolve a Facebook share reference to a concrete group post without mutating publication state."""
+    ref = canonical_facebook_post_url(reference)
+    if not ref or "/share/" not in urllib.parse.urlparse(ref).path.lower():
+        return ""
+    try:
+        print(f"[PublicationIdentity] share_resolve:start ref={ref}")
+        page.goto(ref, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        target_group = _group_key_from_url(target)
+        selectors = "a[href*='/groups/'][href*='/posts/'], a[href*='/groups/'][href*='/permalink/']"
+        for a in page.locator(selectors).all()[:80]:
+            try:
+                href = canonical_facebook_post_url(a.get_attribute("href") or "")
+                if not href:
+                    continue
+                g = _group_key_from_url(href)
+                if target_group and g != target_group:
+                    continue
+                print(f"[PublicationIdentity] share_resolve:canonical=1 url={href}")
+                return href
+            except Exception:
+                continue
+        found = _scan_post_permalink_once(page, target=target, content=content, max_articles=30)
+        if found and "/share/" not in urllib.parse.urlparse(found).path.lower():
+            print(f"[PublicationIdentity] share_resolve:canonical=1 url={found}")
+            return found
+        print("[PublicationIdentity] share_resolve:canonical=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] share_resolve:error={exc}")
+    return ""
+
+
 def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
     """Resolve a post permalink using Facebook's native Share -> Copy link action."""
     if not content:
@@ -2162,48 +2225,60 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
             fragments.append(" ".join(words[:8])[:70])
             mid = max(0, len(words) // 2 - 3)
             fragments.append(" ".join(words[mid:mid + 7])[:70])
-        node = None
-        for fragment in fragments:
-            if len(fragment) < 12:
-                continue
-            candidates = page.get_by_text(fragment, exact=False)
-            for idx in range(min(candidates.count(), 8)):
-                candidate = candidates.nth(idx)
+        # Search feed articles directly. Global text search can match the still-open
+        # composer and must never be used as post identity evidence.
+        article = None
+        try:
+            articles = page.locator("div[role='article']")
+            for idx in range(min(articles.count(), 12)):
+                candidate = articles.nth(idx)
                 try:
-                    if candidate.is_visible(timeout=700):
-                        node = candidate
+                    if not candidate.is_visible(timeout=500):
+                        continue
+                    article_text = candidate.inner_text(timeout=800) or ""
+                    if text_similarity_match(content, article_text):
+                        article = candidate
                         break
                 except Exception:
-                    pass
-            if node is not None:
-                break
-        if node is None:
+                    continue
+        except Exception:
+            article = None
+        if article is None:
             print("[Permalink Resolver] native_share:text_match=0")
+            print("[Permalink Resolver] native_share:post_root=0")
             return ""
         print("[Permalink Resolver] native_share:text_match=1")
+        print("[Permalink Resolver] native_share:post_root=1")
         try:
-            node.scroll_into_view_if_needed(timeout=2500)
+            article.scroll_into_view_if_needed(timeout=2500)
         except Exception:
             pass
-        current = node
-        for _ in range(16):
-            current = current.locator("xpath=..")
+
+        # If Create Post is still visible, the feed cannot prove identity of the
+        # just-submitted post. Fail closed rather than borrowing another post.
+        try:
+            composer = page.locator("[role='dialog'][aria-label*='Tạo bài viết' i], [role='dialog'][aria-label*='Create post' i]")
+            if composer.count() and composer.first.is_visible(timeout=400):
+                print("[Permalink Resolver] native_share:composer_open=1")
+                return ""
+        except Exception:
+            pass
+        print("[Permalink Resolver] native_share:composer_open=0")
+
+        direct = _scan_post_permalink_once(page, target=target, content=content, max_articles=10)
+        if direct:
+            print(f"[Permalink Resolver] native_share:direct_permalink=1 url={direct}")
+            return direct
+
+        buttons = article.locator("[role='button'], button")
+        for idx in range(min(buttons.count(), 50)):
+            candidate = buttons.nth(idx)
             try:
-                current_text = current.inner_text(timeout=800) or ""
-                current_norm = re.sub(r"\s+", " ", current_text).strip().casefold()
-                if not any(fragment.casefold() in current_norm for fragment in fragments if fragment):
-                    continue
-                buttons = current.locator("[role='button'], button")
-                for idx in range(min(buttons.count(), 50)):
-                    candidate = buttons.nth(idx)
-                    label = (candidate.get_attribute("aria-label") or "").lower()
-                    if ("g\u1eedi n\u1ed9i dung n\u00e0y cho b\u1ea1n b\u00e8" in label or
-                            "send this to friends" in label or
-                            "share this content" in label or
-                            "chia s\u1ebb" in label or label.strip() == "share"):
-                        share_button = candidate
-                        break
-                if share_button:
+                label = (candidate.get_attribute("aria-label") or "").strip().casefold()
+                if ("g\u1eedi n\u1ed9i dung n\u00e0y cho b\u1ea1n b\u00e8" in label or
+                        "send this to friends" in label or
+                        "share this content" in label):
+                    share_button = candidate
                     break
             except Exception:
                 continue
@@ -2248,6 +2323,25 @@ def _copy_post_permalink_via_share_sheet(page, target="", content="") -> str:
                 break
         if copy_button is None:
             print("[Permalink Resolver] native_share:copy_link=0")
+            # Fail-closed diagnostics: capture the actual Facebook share surface
+            # without guessing another selector or mutating the UI further.
+            try:
+                surface = page.evaluate("""() => Array.from(document.querySelectorAll(
+                    '[role=dialog], [role=menu], [role=menuitem], [role=button], a'
+                )).filter(el => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                }).slice(-120).map(el => ({
+                    tag: el.tagName,
+                    role: el.getAttribute('role') || '',
+                    aria: el.getAttribute('aria-label') || '',
+                    title: el.getAttribute('title') || '',
+                    text: (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 240),
+                    href: el.href || ''
+                }))""")
+                print("[Permalink Resolver] native_share:surface=" + json.dumps(surface, ensure_ascii=False))
+            except Exception as diag_exc:
+                print(f"[Permalink Resolver] native_share:surface_diag_error={diag_exc}")
             return ""
         print("[Permalink Resolver] native_share:copy_link=1")
         try:
@@ -2349,6 +2443,13 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
                 print("✅ Facebook đã xác nhận submit; tiếp tục lấy permalink canonical...")
             if attempt < 2:
                 time.sleep(2.0)
+
+        # Feed ranking is not publication identity. For groups, use Facebook's
+        # own read-only group search before declaring the submitted post unverified.
+        if target_type == "group":
+            clean_href = _search_group_post_by_content(page, target=target, content=content)
+            if clean_href:
+                return _published(clean_href, "Đã tìm thấy bài bằng group-search và xác minh permalink.")
 
         if target_type in ("group", "page"):
             print(f"🔄 Chưa thấy permalink; refresh {target_type.title()} một lần rồi tiếp tục native resolver...")
