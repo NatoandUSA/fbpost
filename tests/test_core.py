@@ -1250,6 +1250,7 @@ class AuditV582RegressionTests(unittest.TestCase):
              patch("fb_group.navigate_facebook_surface", return_value=True), \
              patch("fb_group._ensure_group_membership", return_value="joined"), \
              patch("fb_group.attach_image_to_composer", return_value=False), \
+             patch("fb_group.verify_entered_content", return_value=True), \
              patch("fb_group.is_recently_posted", return_value=(False, 0, None)), \
              patch("time.sleep", return_value=None):
             mock_sp.return_value.__enter__.return_value = mock_p
@@ -2028,6 +2029,10 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         self.assertTrue(verify_entered_content(Fake(expected), expected))
         broken = expected.replace("https://www.lacasahomestay.com/", "")
         self.assertFalse(verify_entered_content(Fake(broken), expected))
+        mojibake = expected.replace("Nội dung thử", "N?i dung th?")
+        self.assertFalse(verify_entered_content(Fake(mojibake), expected))
+        nfd = __import__("unicodedata").normalize("NFD", expected)
+        self.assertTrue(verify_entered_content(Fake(nfd), expected))
 
 class V618QueueVisibilityAndArchiveTests(unittest.TestCase):
     def test_queue_loads_all_supported_rows_and_reports_visible_count(self):

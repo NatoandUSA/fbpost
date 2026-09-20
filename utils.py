@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import random
 import time
 import os
@@ -162,35 +163,30 @@ def human_type_with_page_mention(page, locator, text, brand_key=None):
     result = type_with_page_mention(page, locator, text, brand_key=brand_key, plain_type=human_type)
     return bool(result.verified)
 
+def _normalize_content_integrity_text(value):
+    value = unicodedata.normalize("NFC", str(value or ""))
+    value = value.replace("\u200b", "").replace("\u200c", "").replace("\u200d", "")
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    value = re.sub(r"[ \t]+", " ", value)
+    value = re.sub(r" *\n *", "\n", value)
+    return value.strip()
+
 def verify_entered_content(locator, expected):
+    """Fail closed unless the composer preserves the complete Unicode payload."""
     try:
-        actual = (locator.inner_text() or locator.text_content() or "").strip()
-        if not actual and hasattr(locator, "input_value"):
+        actual = locator.inner_text() or locator.text_content() or ""
+        if not str(actual).strip() and hasattr(locator, "input_value"):
             try:
-                actual = (locator.input_value() or "").strip()
+                actual = locator.input_value() or ""
             except Exception:
                 pass
     except Exception:
         return False
-    expected=str(expected or "").strip()
-    required=[t for t in ("#UMEEHomestay", "#LacasaHomestay") if t.casefold() in expected.casefold()]
-    signature_part = ""
-    for separator in ("━━━━━━━━━━━━━━━━━━━━", "-------------------"):
-        if separator in expected:
-            required.append(separator)
-            # Canonical signatures are wrapped by the separator; validate every
-            # non-empty line between the first and final separator.
-            parts = expected.split(separator)
-            if len(parts) >= 3:
-                signature_part = separator.join(parts[1:-1])
-            else:
-                signature_part = parts[-1]
-            break
-    if signature_part:
-        required.extend([line.strip() for line in signature_part.splitlines() if line.strip()])
-    if not required:
-        return True
-    return all(t.casefold() in actual.casefold() for t in required) and len(actual) >= min(20,len(expected))
+    expected_norm = _normalize_content_integrity_text(expected)
+    actual_norm = _normalize_content_integrity_text(actual)
+    if not expected_norm:
+        return not actual_norm
+    return expected_norm == actual_norm
 
 
 def navigate_facebook_surface(page, target_url, *, prewarm=True, rounds=3, timeout=45000, label="Facebook"):
@@ -2419,6 +2415,22 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
             return ActionResult(False, "POST_IDENTITY_NOT_FOUND",
                                 "Facebook submit detected but no concrete post permalink was verified.",
                                 state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
+        # A share URL is routing evidence, not terminal identity for a Group post.
+        if target_type == "group" and "/share/" in urllib.parse.urlparse(clean_href).path.lower():
+            resolved = _resolve_share_reference_to_group_post(page, clean_href, target=target, content=content)
+            if not resolved:
+                return ActionResult(False, "POST_IDENTITY_NOT_FOUND",
+                                    "Facebook submit detected but share reference did not resolve to the target Group post.",
+                                    state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
+            clean_href = resolved
+        if target_type == "group":
+            target_group = _group_key_from_url(target)
+            parsed_path = urllib.parse.urlparse(clean_href).path
+            if (_group_key_from_url(clean_href) != target_group or
+                    not re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", parsed_path, re.I)):
+                return ActionResult(False, "POST_IDENTITY_NOT_FOUND",
+                                    "Group publication requires an exact canonical Group post identity.",
+                                    state="submitted_unverified", target_url=target, result_url="", url_type=target_type)
         print(f"POSTED_LINK:{clean_href}")
         record_posted_link(target, clean_href, content, note="Đã xuất bản", account_id=account_id,
                            url_type="post", publish_state="published")

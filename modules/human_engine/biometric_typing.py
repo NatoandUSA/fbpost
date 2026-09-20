@@ -76,14 +76,12 @@ class BiometricTyping:
             except Exception:
                 pass
 
-        # Complex multi-byte unicode or Vietnamese compound characters
+        # Unicode/IME text must preserve exact code points. Playwright keyboard.type()
+        # synthesizes key events and is not a reliable fidelity boundary for Vietnamese.
         try:
-            keyboard.type(char)
+            keyboard.insert_text(char)
         except Exception:
-            try:
-                keyboard.insert_text(char)
-            except Exception:
-                pass
+            raise RuntimeError(f"unicode_input_failed:{ord(char):04x}")
 
     def type_text(
         self,

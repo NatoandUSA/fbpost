@@ -471,6 +471,16 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 human_type(page, comment_input, parsed_comment, multiline_key="Shift+Enter")
             time.sleep(random.uniform(1.0, 2.0))
 
+            # Content fidelity is a pre-submit invariant, not a post-submit heuristic.
+            from utils import verify_entered_content
+            if not verify_entered_content(comment_input, parsed_comment):
+                evidence = _save_comment_evidence(page, "COMMENT_CONTENT_INTEGRITY_FAILED")
+                return ActionResult(
+                    success=False, code="COMMENT_CONTENT_INTEGRITY_FAILED", state="blocked",
+                    message="Nội dung bình luận trong editor không khớp payload chuẩn bị gửi.",
+                    target_url=post_url, metadata={"evidence_path": evidence}
+                )
+
             # 4. Ưu tiên nút Gửi/Send rõ ràng; Enter chỉ là fallback.
             submitted_by_button = False
             for send_sel in [
