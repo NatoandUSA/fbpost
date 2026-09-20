@@ -44,9 +44,16 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                     and _normalize_target(row.get("target")) == expected_target
                     and _normalize_content(row.get("content")) == _normalize_content(content)
                     and row.get("url")):
-                return ActionResult(True, "RECONCILE_PUBLISHED", "?? x?c nh?n t? durable publication history.",
-                                    state="published", target_url=target_url, result_url=row["url"],
-                                    url_type="post", metadata={"evidence_source": "sqlite_posted_links"})
+                durable_url = row["url"]
+                # A /share/ URL is evidence that Facebook created an object, but for
+                # Group certification it is not terminal identity. Continue into the
+                # live read-only resolver to obtain /groups/.../posts|permalink/...
+                if "/groups/" not in target_url or "/share/" not in durable_url.lower():
+                    return ActionResult(True, "RECONCILE_PUBLISHED", "Đã xác nhận từ durable publication history.",
+                                        state="published", target_url=target_url, result_url=durable_url,
+                                        url_type="post", metadata={"evidence_source": "sqlite_posted_links"})
+                print(f"[PublicationIdentity] durable_share_reference={durable_url}; resolving canonical group identity")
+                durable_share_reference = durable_url
     except Exception as history_err:
         print(f"?? Durable reconcile lookup failed; ti?p t?c live resolver: {history_err}")
 
@@ -62,6 +69,19 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                 context = browser_obj.new_context()
                 page = context.new_page()
             page.set_default_timeout(20000)
+
+            share_ref = locals().get("durable_share_reference", "")
+            if share_ref:
+                permalink = resolve_share_reference(page, reference=share_ref, target=target_url, content=content)
+                if permalink:
+                    record_posted_link(
+                        target_url, permalink, content, note="Đã xuất bản (share→canonical đối soát)",
+                        account_id=account_id or "default", url_type="post", publish_state="published"
+                    )
+                    return ActionResult(True, "RECONCILE_PUBLISHED", "Đã resolve share reference thành canonical group permalink.",
+                                        state="published", target_url=target_url, result_url=permalink, url_type="post",
+                                        metadata={"evidence_source": "share_reference_resolution"})
+
             page.goto(target_url, wait_until="domcontentloaded")
             time.sleep(2.5)
 
