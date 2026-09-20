@@ -2011,6 +2011,17 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         self.assertTrue("lacasa" in lacasa.lower())
         self.assertTrue("umee" in umee.lower())
 
+    def test_composer_verifier_tolerates_structured_mention_whitespace(self):
+        from utils import verify_entered_content
+        class Fake:
+            def __init__(self, text): self.text = text
+            def inner_text(self): return self.text
+            def text_content(self): return self.text
+        from brand_profiles import apply_brand_signature
+        expected = apply_brand_signature("Nội dung thử", "umee", True, mode="linkless")
+        actual = expected.replace("UMEE HOMESTAY ×", "UMEE Homestay  ×")
+        self.assertTrue(verify_entered_content(Fake(actual), expected))
+
     def test_v609_assets_are_cache_busted_to_current_release(self):
         html = (Path(__file__).resolve().parents[1] / "static" / "index.html").read_text(encoding="utf-8")
         self.assertIn('styles.css?v=6.1.30', html)

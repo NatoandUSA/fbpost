@@ -6,7 +6,7 @@ PAGE_ENTITIES = {
     "lacasa": {"name": "Lacasa Homestay", "handle": "lacasahomestayinvietnam", "url": "https://www.facebook.com/lacasahomestayinvietnam"},
 }
 URL_RE = re.compile(r"(?i)\b(?:https?://|www\.|fb\.com/|zalo\.me/|maps\.app\.goo\.gl/)[^\s]+")
-CTA_RE = re.compile(r"(?i)(?:inbox|nh[aậ]n|li[eê]n\s+h[eệ]|t[iì]m).{0,120}(?:umee|lacasa|homestay|facebook|page|ph[oò]ng)")
+CTA_RE = re.compile(r"(?i)\b(?:inbox|nhắn(?:\s+tin)?|nhan(?:\s+tin)?|liên\s+hệ|lien\s+he|tìm|tim)\b.{0,120}\b(?:umee|lacasa|homestay|facebook|page|phòng|phong)\b")
 TAG_RE = re.compile(r"(?<!\w)#[^\s#]+", re.UNICODE)
 
 def _norm(value):

@@ -1,5 +1,6 @@
 import unittest
-from composer_guard import audit_final_content, dedupe_content_blocks, page_entity
+from composer_guard import audit_final_content, dedupe_content_blocks, normalize_single_cta, page_entity
+from brand_profiles import apply_brand_signature
 
 class ComposerTransactionTests(unittest.TestCase):
     def test_page_registry_is_canonical_for_both_projects(self):
@@ -32,6 +33,20 @@ class ComposerTransactionTests(unittest.TestCase):
             "umee",
         )
         self.assertIn("CTA_COUNT:2", two["issues"])
+
+    def test_receive_room_phrase_is_not_misclassified_as_cta(self):
+        base = (
+            "UMEE phù hợp khách đi ô tô đến Huế: có chỗ đỗ xe trước nhà, tự check-in "
+            "và có thể nhận phòng riêng tư mà không cần chờ lễ tân. Một số phòng có "
+            "máy chiếu lớn để xem phim buổi tối."
+        )
+        signed = apply_brand_signature(base, "umee", True, mode="linkless")
+        normalized = normalize_single_cta(signed, "umee")
+        self.assertIn("nhận phòng riêng tư", normalized)
+        self.assertIn("máy chiếu lớn", normalized)
+        result = audit_final_content(normalized, "umee", linkless=True)
+        self.assertTrue(result["pass"], result)
+        self.assertEqual(result["cta_count"], 1)
 
     def test_group_and_page_use_same_resolver_and_gate(self):
         from pathlib import Path

@@ -190,7 +190,17 @@ def verify_entered_content(locator, expected):
         required.extend([line.strip() for line in signature_part.splitlines() if line.strip()])
     if not required:
         return True
-    return all(t.casefold() in actual.casefold() for t in required) and len(actual) >= min(20,len(expected))
+    # Structured Facebook mentions can preserve the same visible words while
+    # inserting extra DOM/text-node whitespace around the committed entity.
+    # Compare required semantic tokens with collapsed whitespace and casefolding
+    # instead of requiring the raw text-node spacing to be byte-identical.
+    actual_semantic = re.sub(r"\s+", " ", actual).strip().casefold()
+    required_semantic = [
+        re.sub(r"\s+", " ", token).strip().casefold()
+        for token in required
+        if str(token or "").strip()
+    ]
+    return all(token in actual_semantic for token in required_semantic) and len(actual) >= min(20, len(expected))
 
 
 def navigate_facebook_surface(page, target_url, *, prewarm=True, rounds=3, timeout=45000, label="Facebook"):
