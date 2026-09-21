@@ -15,6 +15,7 @@ COMMENT_REJECTION_RE = re.compile(
     r"Bị từ chối|Declined|Rejected|Xem ý kiến đóng góp|See feedback",
     re.IGNORECASE,
 )
+COMMENT_REJECTION_STRONG_RE = re.compile(r"Bị từ chối|Declined|Rejected", re.IGNORECASE)
 
 
 def _rejected_comment_visible(scope, marker):
@@ -28,7 +29,10 @@ def _rejected_comment_visible(scope, marker):
             try:
                 if not article.is_visible(timeout=400):
                     continue
-                labels = article.get_by_text(COMMENT_REJECTION_RE)
+                # Treat moderation feedback as rejection only when the matched
+                # comment article contains an explicit rejected/declined state.
+                # "See feedback" alone is supporting UI, not terminal evidence.
+                labels = article.get_by_text(COMMENT_REJECTION_STRONG_RE)
                 for label_idx in range(min(labels.count(), 8)):
                     if labels.nth(label_idx).is_visible(timeout=300):
                         return True
@@ -117,6 +121,28 @@ def _locate_target_post_article(page, canonical_url):
                 except Exception:
                     continue
             if visible_dialogs:
+                # Facebook can expose the same permalink modal twice because the
+                # inner aria-modal dialog is nested inside a generic role=dialog shell.
+                # Collapse strict ancestor duplicates before scoring; this is DOM
+                # identity de-duplication only and does not weaken exact-post checks.
+                deduped = []
+                for candidate in visible_dialogs:
+                    nested_duplicate = False
+                    for other in visible_dialogs:
+                        if candidate is other:
+                            continue
+                        try:
+                            handle = candidate.element_handle()
+                            if handle and other.evaluate("(outer, inner) => outer !== inner && outer.contains(inner)", handle):
+                                nested_duplicate = True
+                                break
+                        except Exception:
+                            continue
+                    if not nested_duplicate:
+                        deduped.append(candidate)
+                if deduped and len(deduped) != len(visible_dialogs):
+                    print(f"[Comment Resolver] nested_dialogs_collapsed={len(visible_dialogs)}->{len(deduped)}")
+                    visible_dialogs = deduped
                 ranked = []
                 for dialog_idx, dialog in enumerate(visible_dialogs):
                     try:
