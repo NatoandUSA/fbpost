@@ -169,6 +169,12 @@ def _normalize_content_integrity_text(value):
     value = value.replace("\r\n", "\n").replace("\r", "\n")
     value = re.sub(r"[ \t]+", " ", value)
     value = re.sub(r" *\n *", "\n", value)
+    # Facebook renders committed Page mentions using the Page's display casing,
+    # which may differ from the source signature (for example UMEE HOMESTAY ->
+    # UMEE Homestay). Canonicalize only known mention entity names; prose remains
+    # byte-for-byte Unicode strict after NFC/whitespace normalization.
+    for entity_name in ("UMEE Homestay", "Lacasa Homestay"):
+        value = re.sub(re.escape(entity_name), entity_name.casefold(), value, flags=re.I)
     return value.strip()
 
 def verify_entered_content(locator, expected):
@@ -186,7 +192,19 @@ def verify_entered_content(locator, expected):
     actual_norm = _normalize_content_integrity_text(actual)
     if not expected_norm:
         return not actual_norm
-    return expected_norm == actual_norm
+    matched = expected_norm == actual_norm
+    if not matched:
+        import hashlib
+        def _digest(value):
+            return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+        def _codes(value):
+            return " ".join(f"U+{ord(ch):04X}" for ch in value[:240])
+        print(f"[ContentIntegrity] MISMATCH expected_len={len(expected_norm)} actual_len={len(actual_norm)} expected_sha={_digest(expected_norm)} actual_sha={_digest(actual_norm)}")
+        print(f"[ContentIntegrity] EXPECTED_REPR={expected_norm!r}")
+        print(f"[ContentIntegrity] ACTUAL_REPR={actual_norm!r}")
+        print(f"[ContentIntegrity] EXPECTED_CODEPOINTS={_codes(expected_norm)}")
+        print(f"[ContentIntegrity] ACTUAL_CODEPOINTS={_codes(actual_norm)}")
+    return matched
 
 
 def navigate_facebook_surface(page, target_url, *, prewarm=True, rounds=3, timeout=45000, label="Facebook"):
@@ -2035,7 +2053,10 @@ def clean_facebook_post_url(href: str) -> str:
 def canonical_facebook_post_url(href: str) -> str:
     """Return a canonical URL only when href identifies one concrete Facebook post."""
     value = (href or "").strip()
-    multi = re.search(r"facebook\.com/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.I)
+    # Facebook's "Your content" surface exposes "View in group" as a relative
+    # /groups/<gid>/?multi_permalinks=<postid> link. Treat that as a concrete
+    # canonical post identity before clean_facebook_post_url strips the query.
+    multi = re.search(r"(?:https?://(?:www\.)?facebook\.com)?/groups/([^/?#]+)/\?multi_permalinks=(\d+)", value, re.I)
     if multi:
         return f"https://www.facebook.com/groups/{multi.group(1)}/posts/{multi.group(2)}"
     clean = clean_facebook_post_url(value)
@@ -2149,7 +2170,10 @@ def _search_group_post_by_content(page, target="", content="") -> str:
     if not group_key or not content:
         return ""
     words = re.sub(r"\s+", " ", content).strip().split()
-    query = " ".join(words[:10]).strip()
+    # Facebook group search becomes unreliable with sentence-sized queries.
+    # Use a short leading fingerprint, then verify the full candidate content before
+    # accepting any permalink.
+    query = " ".join(words[:5]).strip()
     if len(query) < 12:
         return ""
     search_url = f"https://www.facebook.com/groups/{group_key}/search/?q={urllib.parse.quote(query)}"
@@ -2157,11 +2181,55 @@ def _search_group_post_by_content(page, target="", content="") -> str:
         print(f"[PublicationIdentity] group_search:start group={group_key}")
         page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
         time.sleep(2.5)
-        for _ in range(4):
+        for round_idx in range(4):
+            try:
+                articles = page.locator("div[role='article']")
+                article_count = min(articles.count(), 40)
+                excerpts = []
+                for idx in range(min(article_count, 8)):
+                    try:
+                        excerpts.append(re.sub(r"\\s+", " ", articles.nth(idx).inner_text(timeout=800) or "").strip()[:180])
+                    except Exception:
+                        continue
+                print(f"[PublicationIdentity] group_search:round={round_idx + 1} articles={article_count} excerpts={json.dumps(excerpts, ensure_ascii=False)}")
+            except Exception as diag_exc:
+                print(f"[PublicationIdentity] group_search:diag_error={diag_exc}")
             found = _scan_post_permalink_once(page, target=target, content=content, max_articles=40)
             if found:
                 print(f"[PublicationIdentity] group_search:match=1 url={found}")
                 return found
+            # Search-result layouts do not always expose role=article. Collect only
+            # exact canonical links for the target group, then verify the full post
+            # content on a read-only candidate page before accepting identity.
+            try:
+                candidates = []
+                for anchor in page.locator("a[href*='/groups/'][href*='/posts/'], a[href*='/groups/'][href*='/permalink/']").all()[:80]:
+                    href = canonical_facebook_post_url(anchor.get_attribute("href") or "")
+                    if (href and _group_key_from_url(href) == group_key and
+                            re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", urllib.parse.urlparse(href).path, re.I)
+                            and href not in candidates):
+                        candidates.append(href)
+                print(f"[PublicationIdentity] group_search:candidates={len(candidates)}")
+                for candidate_url in candidates[:20]:
+                    probe = None
+                    try:
+                        probe = page.context.new_page()
+                        probe.goto(candidate_url, wait_until="domcontentloaded", timeout=20000)
+                        time.sleep(1.2)
+                        candidate_text = probe.locator("body").inner_text(timeout=4000) or ""
+                        if text_similarity_match(content, candidate_text):
+                            print(f"[PublicationIdentity] group_search:candidate_verified=1 url={candidate_url}")
+                            return candidate_url
+                    except Exception:
+                        continue
+                    finally:
+                        if probe is not None:
+                            try:
+                                probe.close()
+                            except Exception:
+                                pass
+            except Exception as candidate_exc:
+                print(f"[PublicationIdentity] group_search:candidate_error={candidate_exc}")
             try:
                 page.mouse.wheel(0, 1800)
             except Exception:
@@ -2171,6 +2239,83 @@ def _search_group_post_by_content(page, target="", content="") -> str:
     except Exception as exc:
         print(f"[PublicationIdentity] group_search:error={exc}")
     return ""
+
+
+def _search_group_my_posted_by_content(page, target="", content="") -> str:
+    """Resolve the current profile's own published Group post from Facebook's My Content surface."""
+    group_key = _group_key_from_url(target)
+    if not group_key or not content:
+        return ""
+    posted_url = f"https://www.facebook.com/groups/{group_key}/my_posted_content/"
+    try:
+        print(f"[PublicationIdentity] my_posted_search:start group={group_key}")
+        page.goto(posted_url, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        articles = page.locator("div[role='article']")
+        for idx in range(min(articles.count(), 30)):
+            article = articles.nth(idx)
+            article_text = article.inner_text(timeout=1200) or ""
+            if not text_similarity_match(content, article_text):
+                continue
+            for anchor in article.locator("a").all()[:80]:
+                href = canonical_facebook_post_url(anchor.get_attribute("href") or "")
+                if (href and _group_key_from_url(href) == group_key and
+                        re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", urllib.parse.urlparse(href).path, re.I)):
+                    print(f"[PublicationIdentity] my_posted_search:match=1 url={href}")
+                    return href
+        # Facebook My Content may not expose post cards as role=article.
+        # The read-only "Xem trong nhóm" anchor carries ?multi_permalinks=<post_id>.
+        # Accept it only when a bounded ancestor also matches the expected content.
+        view_links = page.get_by_text("Xem trong nhóm", exact=True)
+        for idx in range(min(view_links.count(), 30)):
+            link = view_links.nth(idx)
+            anchor = link.locator("xpath=ancestor::a[1]")
+            if not anchor.count():
+                continue
+            href = canonical_facebook_post_url(anchor.first.get_attribute("href") or "")
+            if not href or _group_key_from_url(href) != group_key:
+                continue
+            for depth in range(1, 11):
+                try:
+                    candidate_text = link.locator("xpath=" + "/.." * depth).inner_text(timeout=800) or ""
+                except Exception:
+                    continue
+                if text_similarity_match(content, candidate_text):
+                    print(f"[PublicationIdentity] my_posted_search:match=1 source=view_in_group url={href}")
+                    return href
+        print("[PublicationIdentity] my_posted_search:match=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] my_posted_search:error={exc}")
+    return ""
+
+
+def _search_group_pending_by_content(page, target="", content="") -> bool:
+    """Read-only proof that the submitted content is in this Group's moderation queue."""
+    group_key = _group_key_from_url(target)
+    if not group_key or not content:
+        return False
+    pending_url = f"https://www.facebook.com/groups/{group_key}/my_pending_content/"
+    try:
+        print(f"[PublicationIdentity] pending_search:start group={group_key}")
+        page.goto(pending_url, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        body_text = page.locator("body").inner_text(timeout=4000) or ""
+        if text_similarity_match(content, body_text):
+            print("[PublicationIdentity] pending_search:match=1 source=body")
+            return True
+        try:
+            articles = page.locator("div[role='article']")
+            for idx in range(min(articles.count(), 30)):
+                article_text = articles.nth(idx).inner_text(timeout=800) or ""
+                if text_similarity_match(content, article_text):
+                    print(f"[PublicationIdentity] pending_search:match=1 source=article index={idx}")
+                    return True
+        except Exception:
+            pass
+        print("[PublicationIdentity] pending_search:match=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] pending_search:error={exc}")
+    return False
 
 
 def _resolve_share_reference_to_group_post(page, reference="", target="", content="") -> str:
@@ -2456,9 +2601,19 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
             if attempt < 2:
                 time.sleep(2.0)
 
-        # Feed ranking is not publication identity. For groups, use Facebook's
-        # own read-only group search before declaring the submitted post unverified.
+        # Prefer the current profile's own "Your content" surfaces over feed
+        # ranking/search indexing. Published still requires an exact canonical Group
+        # permalink; pending is a separate terminal state and never enables comments.
         if target_type == "group":
+            clean_href = _search_group_my_posted_by_content(page, target=target, content=content)
+            if clean_href:
+                return _published(clean_href, "Đã tìm thấy bài trong Nội dung của bạn / Đã đăng.")
+            if _search_group_pending_by_content(page, target=target, content=content):
+                record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt (pending-content match)",
+                                   account_id=account_id, url_type="group", publish_state="pending")
+                return ActionResult(True, "POST_PENDING", "Bài đăng đang chờ admin duyệt.", state="pending",
+                                    target_url=target, url_type="group",
+                                    metadata={"evidence_source": "facebook_my_pending_content"})
             clean_href = _search_group_post_by_content(page, target=target, content=content)
             if clean_href:
                 return _published(clean_href, "Đã tìm thấy bài bằng group-search và xác minh permalink.")

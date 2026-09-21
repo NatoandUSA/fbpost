@@ -8,7 +8,8 @@ from utils import (
     process_spintax, human_type, load_accounts, resolve_account, launch_browser,
     close_browser, add_feeling, add_checkin, scrape_post_link,
     attach_image_to_composer, pick_random_photos, is_recently_posted,
-    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox, navigate_facebook_surface
+    click_post_publish_button, safe_mouse_wheel, ActionResult, verify_entered_content, find_post_composer_textbox, navigate_facebook_surface,
+    record_posted_link
 )
 from ai_spinner import generate_unique_variant
 from paths import DATA_DIR
@@ -508,6 +509,26 @@ def post_to_group(group_url, content, image_path=None, account_id=None, gpm_api_
                 print("⏳ Bài viết đã gửi và đang chờ Quản trị viên duyệt.")
             else:
                 print(f"⚠️ Bài đã được gửi nhưng chưa xác minh được permalink ({action_res.code}). Không tự động đăng lại.")
+                # A moderation queue has no public permalink yet. Compare the same
+                # group's pending count before/after submit so this terminal state is
+                # not mislabeled as a publication-identity failure.
+                try:
+                    if navigate_facebook_surface(page, group_url, prewarm=False, rounds=2, timeout=30000, label="Group moderation reconcile"):
+                        pending_after_submit = _pending_admin_posts_count(page)
+                        print(f"[Moderation Reconcile] pending_before={pending_admin_posts} pending_after={pending_after_submit}")
+                        if pending_after_submit > pending_admin_posts:
+                            record_posted_link(
+                                group_url, group_url, content, note="Đang chờ admin duyệt (pending-count delta)",
+                                account_id=account_id or "default", url_type="group", publish_state="pending"
+                            )
+                            action_res = ActionResult(
+                                True, "POST_PENDING", "Bài đăng đã vào hàng chờ quản trị viên duyệt.",
+                                state="pending", target_url=group_url, url_type="group",
+                                metadata={"pending_before": pending_admin_posts, "pending_after": pending_after_submit,
+                                          "evidence_source": "pending_count_delta"}
+                            )
+                except Exception as pending_exc:
+                    print(f"[Moderation Reconcile] unavailable={pending_exc}")
 
             # Keep the group open briefly and browse after submission before closing the profile.
             _browse_group_context(page, "after-post")

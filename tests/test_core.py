@@ -1300,6 +1300,69 @@ class AuditV582RegressionTests(unittest.TestCase):
             self.assertFalse(res.success)
             self.assertIn(res.code, {"POST_IDENTITY_NOT_FOUND", "COMMENT_UNVERIFIED"})
 
+    def test_comment_nested_dialogs_collapse_to_inner_exact_post_scope(self):
+        from unittest.mock import MagicMock, patch
+        from fb_comment import _locate_target_post_article
+
+        outer = MagicMock(name="outer_dialog")
+        inner = MagicMock(name="inner_dialog")
+        outer.is_visible.return_value = True
+        inner.is_visible.return_value = True
+        outer.element_handle.return_value = "OUTER"
+        inner.element_handle.return_value = "INNER"
+        outer.evaluate.return_value = False
+        inner.evaluate.side_effect = lambda expr, handle=None: handle == "INNER"
+        outer.inner_text.return_value = "outer shell"
+        inner.inner_text.return_value = "inner exact post content " * 8
+
+        def loc_for(dialog, selector):
+            q = MagicMock()
+            if "a[href*=" in selector:
+                q.count.return_value = 0
+            elif "div[role='article']" in selector:
+                q.count.return_value = 1 if dialog is inner else 0
+            else:
+                q.count.return_value = 0
+            return q
+        outer.locator.side_effect = lambda selector: loc_for(outer, selector)
+        inner.locator.side_effect = lambda selector: loc_for(inner, selector)
+
+        dialogs = MagicMock()
+        dialogs.count.return_value = 2
+        dialogs.nth.side_effect = [outer, inner]
+        empty = MagicMock(); empty.count.return_value = 0
+        page = MagicMock()
+        page.url = "https://www.facebook.com/groups/1/posts/2"
+        page.locator.side_effect = lambda selector: dialogs if selector == "div[role='dialog']" else empty
+
+        with patch("fb_comment.time.sleep", return_value=None):
+            resolved = _locate_target_post_article(page, page.url)
+        self.assertIs(resolved, inner)
+
+    def test_comment_rejection_requires_strong_state_on_matched_comment_article(self):
+        from unittest.mock import MagicMock
+        from fb_comment import _rejected_comment_visible
+
+        def build_root(strong_count):
+            root = MagicMock()
+            articles = MagicMock()
+            article = MagicMock()
+            articles.count.return_value = 1
+            articles.nth.return_value = article
+            base = MagicMock()
+            base.filter.return_value = articles
+            root.locator.return_value = base
+            article.is_visible.return_value = True
+            labels = MagicMock()
+            labels.count.return_value = strong_count
+            label = MagicMock(); label.is_visible.return_value = True
+            labels.nth.return_value = label
+            article.get_by_text.return_value = labels
+            return root
+
+        self.assertFalse(_rejected_comment_visible(build_root(0), "UMEE Homestay"))
+        self.assertTrue(_rejected_comment_visible(build_root(1), "UMEE Homestay"))
+
     def test_comment_on_list_returns_aggregate_action_result(self):
         from fb_comment import comment_on_list
         from utils import ActionResult
@@ -2029,10 +2092,80 @@ class V608UiAndContentRegressionTests(unittest.TestCase):
         self.assertTrue(verify_entered_content(Fake(expected), expected))
         broken = expected.replace("https://www.lacasahomestay.com/", "")
         self.assertFalse(verify_entered_content(Fake(broken), expected))
-        mojibake = expected.replace("Nội dung thử", "N?i dung th?")
-        self.assertFalse(verify_entered_content(Fake(mojibake), expected))
+
+    def test_composer_verifier_accepts_only_known_mention_display_casing(self):
+        from utils import verify_entered_content
+        class Fake:
+            def __init__(self, text): self.text = text
+            def inner_text(self): return self.text
+            def text_content(self): return self.text
+        expected = "Huế nguyên vẹn\n🏡 UMEE HOMESTAY × LACASA HOMESTAY"
+        rendered = "Huế nguyên vẹn\n🏡 UMEE Homestay × Lacasa Homestay"
+        self.assertTrue(verify_entered_content(Fake(rendered), expected))
+        self.assertFalse(verify_entered_content(Fake(rendered.replace("Huế", "HuÃ©")), expected))
         nfd = __import__("unicodedata").normalize("NFD", expected)
         self.assertTrue(verify_entered_content(Fake(nfd), expected))
+
+    def test_canonical_group_multi_permalink_relative_url(self):
+        from utils import canonical_facebook_post_url
+        href = "/groups/867344417570720/?multi_permalinks=1964907117814439&__tn__=-R"
+        self.assertEqual(
+            canonical_facebook_post_url(href),
+            "https://www.facebook.com/groups/867344417570720/posts/1964907117814439"
+        )
+
+    def test_group_my_posted_requires_content_and_canonical_group_identity(self):
+        from utils import _search_group_my_posted_by_content
+        class Anchor:
+            def __init__(self, href): self.href = href
+            def get_attribute(self, name): return self.href if name == "href" else ""
+        class Article:
+            def __init__(self, text, href): self.text = text; self.href = href
+            def inner_text(self, *a, **kw): return self.text
+            def locator(self, selector): return self
+            def all(self): return [Anchor(self.href)]
+        class Articles:
+            def __init__(self, article): self.article = article
+            def count(self): return 1
+            def nth(self, idx): return self.article
+        class FakePage:
+            def __init__(self, article): self.article = article; self.visited = ""
+            def goto(self, url, **kw): self.visited = url
+            def locator(self, selector): return Articles(self.article)
+        expected = "Kiểm tra Unicode v30.1 tại Huế phòng riêng tư Trường Tiền"
+        good = Article(expected, "https://www.facebook.com/groups/1384618231608931/posts/123456789/")
+        with patch("utils.time.sleep", return_value=None):
+            page = FakePage(good)
+            self.assertEqual(
+                _search_group_my_posted_by_content(page, "https://facebook.com/groups/1384618231608931", expected),
+                "https://www.facebook.com/groups/1384618231608931/posts/123456789"
+            )
+            self.assertIn("/my_posted_content/", page.visited)
+            wrong_group = Article(expected, "https://www.facebook.com/groups/999/posts/123456789/")
+            self.assertFalse(_search_group_my_posted_by_content(
+                FakePage(wrong_group), "https://facebook.com/groups/1384618231608931", expected))
+
+    def test_group_pending_content_requires_content_fingerprint(self):
+        from utils import _search_group_pending_by_content
+        class Body:
+            def __init__(self, text): self.text = text
+            def inner_text(self, *a, **kw): return self.text
+        class Articles:
+            def count(self): return 0
+        class FakePage:
+            def __init__(self, text): self.text = text; self.visited = ""
+            def goto(self, url, **kw): self.visited = url
+            def locator(self, selector):
+                return Body(self.text) if selector == "body" else Articles()
+        expected = "Kiểm tra Unicode v30.1 tại Huế phòng riêng tư Trường Tiền"
+        with patch("utils.time.sleep", return_value=None):
+            matched = FakePage("Đang chờ quản trị viên phê duyệt\n" + expected)
+            self.assertTrue(_search_group_pending_by_content(
+                matched, "https://facebook.com/groups/1384618231608931", expected))
+            self.assertIn("/my_pending_content/", matched.visited)
+            unrelated = FakePage("Đang chờ quản trị viên phê duyệt\nMột bài hoàn toàn khác")
+            self.assertFalse(_search_group_pending_by_content(
+                unrelated, "https://facebook.com/groups/1384618231608931", expected))
 
 class V618QueueVisibilityAndArchiveTests(unittest.TestCase):
     def test_queue_loads_all_supported_rows_and_reports_visible_count(self):
