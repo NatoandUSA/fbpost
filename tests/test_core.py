@@ -1701,7 +1701,9 @@ class V604ArchitectureInvariantTests(unittest.TestCase):
             db_file = str(Path(directory) / 'queue.db')
             init_db(db_file)
             repo = CampaignRepository(db_file=db_file)
-            item = {'id':'q1','target':'https://facebook.com/groups/x','content':'hello valid content','state':'approved','created_at':'2026-09-07T00:00:00+00:00','audit':[]}
+            # Atomic single-claim invariant is independent of the E5 Group
+            # certification gate; use a non-Group target for this legacy test.
+            item = {'id':'q1','target':'https://facebook.com/examplepage','content':'hello valid content','state':'approved','created_at':'2026-09-07T00:00:00+00:00','audit':[]}
             self.assertTrue(repo.insert_queue_item(item))
             first = repo.transition_queue_item('q1', ('approved',), 'processing', {}, 'processing')
             second = repo.transition_queue_item('q1', ('approved',), 'processing', {}, 'processing')

@@ -816,6 +816,8 @@ def create_queue_item():
     content = data.get("content", "").strip()
     image_url = data.get("image_url", "").strip()
     campaign_id = data.get("campaign_id", "").strip()
+    # Certification authority is internal evidence, never client-authored queue input.
+    certification_authority = None
     allow_duplicate = bool(data.get("allow_duplicate", False))
     if not target or not content:
         return jsonify({"error": "Target và nội dung là bắt buộc."}), 400
@@ -846,6 +848,7 @@ def create_queue_item():
         "content": content,
         "image_url": image_url,
         "campaign_id": campaign_id or None,
+        "certification_authority": certification_authority,
         "state": "draft",
         "created_at": now_iso(),
         "updated_at": now_iso(),

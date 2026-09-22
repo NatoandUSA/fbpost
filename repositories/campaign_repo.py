@@ -102,6 +102,26 @@ class CampaignRepository(BaseRepository):
             )
         return True
 
+    def bind_certification_authority(self, item_id: str, authority: Dict[str, Any]):
+        """Persist certification evidence once; client/UI paths must not author it."""
+        from certification.publication_authority import validate_publication_authority
+        with self.transaction() as conn:
+            row = conn.execute("SELECT raw_json, state FROM publication_jobs WHERE id = ?", (item_id,)).fetchone()
+            if not row or row["state"] not in ("draft", "approved"):
+                return None
+            item = self.loads(row["raw_json"], {}) or {}
+            if item.get("certification_authority") is not None:
+                return None
+            authority_ok, _ = validate_publication_authority(item.get("target") or "", authority)
+            if not authority_ok:
+                return None
+            now = datetime.now().isoformat()
+            item["certification_authority"] = dict(authority)
+            item["updated_at"] = now
+            item.setdefault("audit", []).append({"at": now, "event": "certification_authority_bound", "state": row["state"]})
+            conn.execute("UPDATE publication_jobs SET raw_json=? WHERE id=?", (self.dumps(item), item_id))
+            return item
+
     def transition_queue_item(self, item_id: str, from_states, to_state: str, updates=None, audit_event: str = "state_transition"):
         updates = dict(updates or {})
         allowed_from = tuple(from_states or ())
@@ -110,6 +130,17 @@ class CampaignRepository(BaseRepository):
             if not row or (allowed_from and row["state"] not in allowed_from):
                 return None
             item = self.loads(row["raw_json"], {}) or {}
+            if "certification_authority" in updates:
+                return None
+            # Human approval is not Facebook mutation authority. Any Group
+            # transition into processing requires E5 certification authority.
+            if to_state == "processing" and row["state"] == "approved":
+                from certification.publication_authority import validate_publication_authority
+                authority_ok, _ = validate_publication_authority(
+                    item.get("target") or "", item.get("certification_authority")
+                )
+                if not authority_ok:
+                    return None
             item.update(updates)
             item["state"] = to_state
             item["updated_at"] = datetime.now().isoformat()
