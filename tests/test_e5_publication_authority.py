@@ -5,6 +5,13 @@ from unittest.mock import patch
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("e5_enforce_mode")
+
+@pytest.fixture
+def e5_enforce_mode():
+    with patch.dict("os.environ", {"FB_GROUP_AUTHORITY_ROLLOUT_MODE": "ENFORCE"}):
+        yield
+
 from certification.publication_authority import (
     AUTHORITY_VERSION,
     compute_receipt_ref,

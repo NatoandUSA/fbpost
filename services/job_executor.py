@@ -1001,33 +1001,48 @@ def execute_automation_task(
         on_line(f"\n========== [Target {i+1}/{total}] ==========\n")
         on_line(f"Posting to: {target}\n")
 
-        # E5 last-line authority gate. Human approval and legacy moderation
-        # knowledge cannot authorize Facebook mutation. Queue-backed tasks use
-        # only the immutable receipt persisted in the authoritative DB. Direct
-        # Group payloads cannot self-assert certification authority.
+        # E6 rollout: LEGACY preserves publication behavior; SHADOW observes E5
+        # without influencing queue/publication; ENFORCE applies exact E5 gate.
         if cmd == "group":
-            from certification.publication_authority import validate_publication_authority
+            from certification.rollout import RolloutMode, evaluate_shadow, resolve_rollout_mode
+            rollout_mode = resolve_rollout_mode()
             certification_authority = None
-            if not queue_item_id:
-                batch_failed = True
-                on_line("[E5_AUTHORITY_REJECT] certification_queue_identity_missing; stop before processing/Facebook.\n")
-                if job_repo:
-                    job_repo.update_job(job_id, progress_current=i + 1)
-                continue
-            try:
-                from repositories.campaign_repo import CampaignRepository
-                authority_item = CampaignRepository().get_queue_item(queue_item_id) or {}
-                certification_authority = authority_item.get("certification_authority")
-            except Exception as authority_err:
-                on_line(f"[E5_AUTHORITY_REJECT] Cannot read certification authority: {authority_err}\n")
-                certification_authority = None
-            authority_ok, authority_reason = validate_publication_authority(target, certification_authority)
-            if not authority_ok:
-                batch_failed = True
-                on_line(f"[E5_AUTHORITY_REJECT] {authority_reason}; stop before processing/Facebook.\n")
-                if job_repo:
-                    job_repo.update_job(job_id, progress_current=i + 1)
-                continue
+            authority_read_error = ""
+            if rollout_mode is not RolloutMode.LEGACY:
+                if queue_item_id:
+                    try:
+                        from repositories.campaign_repo import CampaignRepository
+                        authority_item = CampaignRepository().get_queue_item(queue_item_id) or {}
+                        certification_authority = authority_item.get("certification_authority")
+                    except Exception as authority_err:
+                        authority_read_error = f"authority_read_failure:{type(authority_err).__name__}"
+                elif rollout_mode is RolloutMode.ENFORCE:
+                    batch_failed = True
+                    on_line("[E5_AUTHORITY_REJECT] certification_queue_identity_missing; stop before processing/Facebook.\n")
+                    if job_repo:
+                        job_repo.update_job(job_id, progress_current=i + 1)
+                    continue
+
+            if rollout_mode is RolloutMode.SHADOW:
+                try:
+                    shadow = evaluate_shadow(queue_item_id or "", target, certification_authority).as_dict()
+                    if authority_read_error:
+                        shadow["would_allow"] = False
+                        shadow["reason"] = authority_read_error
+                    on_line(f"[E6_SHADOW] {json.dumps(shadow, ensure_ascii=False, sort_keys=True)}\n")
+                except Exception as shadow_err:
+                    on_line(f"[E6_SHADOW_ERROR] {type(shadow_err).__name__}: {shadow_err}; publication unchanged.\n")
+            elif rollout_mode is RolloutMode.ENFORCE:
+                from certification.publication_authority import validate_publication_authority
+                authority_ok, authority_reason = validate_publication_authority(target, certification_authority)
+                if authority_read_error:
+                    authority_ok, authority_reason = False, authority_read_error
+                if not authority_ok:
+                    batch_failed = True
+                    on_line(f"[E5_AUTHORITY_REJECT] {authority_reason}; stop before processing/Facebook.\n")
+                    if job_repo:
+                        job_repo.update_job(job_id, progress_current=i + 1)
+                    continue
 
         if queue_item_id:
             try:

@@ -132,15 +132,17 @@ class CampaignRepository(BaseRepository):
             item = self.loads(row["raw_json"], {}) or {}
             if "certification_authority" in updates:
                 return None
-            # Human approval is not Facebook mutation authority. Any Group
-            # transition into processing requires E5 certification authority.
+            # Human approval is not Facebook mutation authority. E5 becomes
+            # transition authority only in explicit ENFORCE rollout mode.
             if to_state == "processing" and row["state"] == "approved":
-                from certification.publication_authority import validate_publication_authority
-                authority_ok, _ = validate_publication_authority(
-                    item.get("target") or "", item.get("certification_authority")
-                )
-                if not authority_ok:
-                    return None
+                from certification.rollout import RolloutMode, resolve_rollout_mode
+                if resolve_rollout_mode() is RolloutMode.ENFORCE:
+                    from certification.publication_authority import validate_publication_authority
+                    authority_ok, _ = validate_publication_authority(
+                        item.get("target") or "", item.get("certification_authority")
+                    )
+                    if not authority_ok:
+                        return None
             item.update(updates)
             item["state"] = to_state
             item["updated_at"] = datetime.now().isoformat()
