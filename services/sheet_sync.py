@@ -6,7 +6,9 @@ from live Google Sheets (public or shared CSV export) into the FB Automation reg
 
 import csv
 import io
+import os
 import re
+import time
 import urllib.parse
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
@@ -360,14 +362,29 @@ def sync_to_group_registry(groups: List[Dict[str, Any]]) -> Dict[str, Any]:
     if repo is not None:
         repo.save_groups(merged_list)
 
-    temp_file = groups_file.with_suffix(".json.tmp")
+    temp_file = groups_file.with_suffix(f".json.{os.getpid()}.tmp")
     try:
         with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(merged_list, f, ensure_ascii=False, indent=2)
-        temp_file.replace(groups_file)
+            f.flush()
+            os.fsync(f.fileno())
+        last_replace_error = None
+        for delay in (0.05, 0.10, 0.25, 0.50, 1.00):
+            try:
+                os.replace(temp_file, groups_file)
+                last_replace_error = None
+                break
+            except PermissionError as exc:
+                last_replace_error = exc
+                time.sleep(delay)
+        if last_replace_error is not None:
+            raise OSError(f"GROUP_REGISTRY_PERSIST_FAILED: {last_replace_error}") from last_replace_error
     finally:
         if temp_file.exists():
-            temp_file.unlink()
+            try:
+                temp_file.unlink()
+            except OSError:
+                pass
 
     return {
         "saved_count": len(groups),

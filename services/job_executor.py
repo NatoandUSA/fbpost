@@ -839,9 +839,11 @@ def execute_automation_task(
     published_count = 0
     pending_count = 0
     moderation_skipped_count = 0
+    content_exhausted_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
     profile_round_queue = [str(a.get("id") or "") for a in accounts_pool] if rotate_accounts else []
+    profile_runtime_quarantine = set()
     published_content_history = _published_content_history(200) if cmd in ("group", "page") else []
     batch_attempted_content = []
     if job_repo:
@@ -1000,6 +1002,7 @@ def execute_automation_task(
                         )
                         break
             if not similarity_result["pass"]:
+                content_exhausted_count += 1
                 batch_failed = True
                 on_line(
                     f"[CONTENT_VARIATION_EXHAUSTED] tried=8 similarity={similarity_result['max_similarity']:.3f} "
@@ -1033,7 +1036,10 @@ def execute_automation_task(
                     profile_scores = workflow_repo.profile_group_scores(target)
                 except Exception as membership_history_err:
                     on_line(f"[Profile Eligibility] history unavailable: {membership_history_err}\n")
-            curr_acc = _take_profile_round(profile_round_queue, accounts_pool, excluded_membership, profile_scores)
+            curr_acc = _take_profile_round(
+                profile_round_queue, accounts_pool,
+                excluded_membership | profile_runtime_quarantine, profile_scores
+            )
             if not curr_acc:
                 batch_failed = True
                 on_line("[Profile Eligibility] No eligible unused profile remains in this round for target; skip before Facebook.\n")
@@ -1157,6 +1163,19 @@ def execute_automation_task(
 
         action_state = str(structured_result.get("state") or "")
         action_code = str(structured_result.get("code") or "")
+        action_message = str(structured_result.get("message") or "")
+        if rotate_accounts and curr_acc_id:
+            runtime_failure_markers = (
+                "GPM_PROCESS_NOT_READY", "GPM_PROCESS_SINGLETON_FAILED",
+                "GPM_DEBUG_PORT_NOT_READY", "GPM_CDP_ATTACH_FAILED",
+                "GPM Login v4 CDP connection failed",
+            )
+            if any(marker in action_message or marker == action_code for marker in runtime_failure_markers):
+                profile_runtime_quarantine.add(str(curr_acc_id))
+                on_line(
+                    f"[Profile Runtime Quarantine] {curr_acc.get('name', curr_acc_id)} excluded for the rest "
+                    f"of this batch after startup failure: {action_code or action_message[:120]}.\n"
+                )
         if action_state == "published":
             canonical_post_url = canonical_facebook_post_url(structured_result.get("result_url") or "")
             if canonical_post_url:
@@ -1405,9 +1424,10 @@ def execute_automation_task(
                 return False
 
     on_line(
-        f"📊 [Batch Summary] Tổng {total} · Published {published_count} · Pending {pending_count} · "
+        f"📊 [Batch Summary] Total {total} · Published {published_count} · Pending {pending_count} · "
         f"Submitted/Need Reconcile {unverified_count} · Retry Locked {skipped_duplicates} · "
-        f"Failed Before Submit {failed_before_submit_count}.\n"
+        f"Failed Before Submit {failed_before_submit_count} · Safe Moderation Skip {moderation_skipped_count} · "
+        f"Content Exhausted {content_exhausted_count} · Runtime Quarantined {len(profile_runtime_quarantine)}.\n"
     )
     on_line(f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n")
     if batch_failed:
