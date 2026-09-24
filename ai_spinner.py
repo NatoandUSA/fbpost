@@ -213,7 +213,7 @@ def spin_content_local(content: str) -> str:
 
 
 def spin_content_hub_local(content: str, brand_key: str, variant_seed: str = "") -> str:
-    """Create useful quota-free copy from source plus two audited Content Hub facts."""
+    """Create deterministic, truth-safe quota-free copy with bounded structural diversity."""
     key = str(brand_key or "").strip().lower()
     reference = load_content_reference()
     brand = reference.get(key) or {}
@@ -227,21 +227,44 @@ def spin_content_hub_local(content: str, brand_key: str, variant_seed: str = "")
     display_name = brand_name(key) or key.upper()
     digest = hashlib.sha256(f"{key}|{variant_seed}|{content}".encode("utf-8")).digest()
     start = int.from_bytes(digest[:4], "big") % len(facts)
-    chosen = [facts[start], facts[(start + 3) % len(facts)]] if len(facts) > 3 else facts[:2]
+    stride = 1 + (digest[4] % max(1, len(facts) - 1))
+    chosen = []
+    for offset in range(len(facts)):
+        fact = facts[(start + offset * stride) % len(facts)]
+        if fact not in chosen:
+            chosen.append(fact)
+        if len(chosen) >= 2 + (digest[5] % 2):
+            break
     hooks = (
-        f"Đang tìm một homestay Huế vừa dễ chủ động lịch trình, vừa có thông tin rõ ràng? 🌿",
-        f"Một chuyến Huế thoải mái thường bắt đầu từ nơi nghỉ hợp đúng nhu cầu của bạn 🏡",
-        f"Bạn ưu tiên điều gì khi chọn homestay Huế: sự riêng tư, tiện nghi hay lịch nhận phòng linh hoạt? ✨",
+        "Đang tìm homestay Huế và muốn kiểm tra thông tin rõ ràng trước khi chọn? 🌿",
+        "Một chuyến Huế thoải mái thường bắt đầu từ nơi nghỉ hợp đúng nhu cầu của bạn 🏡",
+        "Khi chọn homestay Huế, điều gì quan trọng hơn với bạn: riêng tư, tiện nghi hay sự chủ động? ✨",
+        "Nếu đang lên lịch ở Huế, đây là vài thông tin đã được xác nhận để bạn dễ đối chiếu.",
+        "Muốn chọn nơi nghỉ ở Huế mà không phải đoán tiện nghi? Có thể bắt đầu từ các thông tin đã xác nhận dưới đây.",
+        "Đang cân nhắc một homestay Huế cho chuyến đi sắp tới? Mình tóm tắt vài điểm có thể kiểm chứng.",
     )
-    hook = hooks[digest[4] % len(hooks)]
+    intros = (
+        f"{display_name} gửi bạn một vài thông tin đã được xác nhận để dễ cân nhắc:",
+        f"Một số thông tin đã được xác nhận của {display_name}:",
+        f"Bạn có thể tham khảo các thông tin đã được xác nhận sau từ {display_name}:",
+        f"Đây là các thông tin đã được xác nhận về {display_name}:",
+    )
+    ctas = (
+        f"Nếu cần kiểm tra loại phòng phù hợp với lịch trình, hãy inbox {display_name}. 📩",
+        f"Bạn muốn xem hình ảnh hoặc hỏi loại phòng phù hợp? Hãy nhắn {display_name}. 📩",
+        f"Nếu cần đối chiếu thêm thông tin trước khi đặt, bạn có thể nhắn {display_name}.",
+        f"Cần kiểm tra thông tin thực tế cho ngày bạn dự định ở Huế? Hãy inbox {display_name}.",
+        f"Bạn đang ưu tiên tiện nghi nào? Có thể nhắn {display_name} để kiểm tra đúng loại phòng.",
+    )
+    hook = hooks[digest[6] % len(hooks)]
+    intro = intros[digest[7] % len(intros)]
+    cta = ctas[digest[8] % len(ctas)]
     source = spin_content_local(content).strip()
-    return (
-        f"{hook}\n\n"
-        f"{display_name} gửi bạn một vài thông tin đã được xác nhận để dễ cân nhắc:\n\n"
-        + "\n".join(f"✨ {fact}." for fact in chosen)
-        + f"\n\n{source}\n\n"
-        f"Bạn muốn xem hình ảnh hoặc hỏi loại phòng phù hợp? Hãy inbox {display_name} nhé! 📩"
-    ).strip()
+    fact_lines = "\n".join(f"✨ {fact}." for fact in chosen)
+    blocks = [hook, intro, fact_lines, source, cta]
+    if digest[9] % 2:
+        blocks[1], blocks[2] = blocks[2], blocks[1]
+    return "\n\n".join(block for block in blocks if block).strip()
 
 
 def _gemini_models():
