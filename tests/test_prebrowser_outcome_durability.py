@@ -1,4 +1,5 @@
-# Exact-head Windows regression coverage.\nimport json
+# Exact-head Windows regression coverage.
+import json
 import threading
 
 
