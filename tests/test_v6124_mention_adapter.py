@@ -5,11 +5,17 @@ from adapters.facebook_mention import _rank_candidate, type_with_page_mention, M
 
 class FakeHandle: pass
 class FakeEditor:
-    def __init__(self, events=None): self.events=events if events is not None else []
+    def __init__(self, events=None, trailing_space=False):
+        self.events=events if events is not None else []
+        self.trailing_space=trailing_space
     def element_handle(self): return FakeHandle()
     def fill(self, value): self.events.append(("fill", value))
     def focus(self, timeout=0): self.events.append(("focus", timeout))
-    def evaluate(self, script): self.events.append(("caret_end", script))
+    def evaluate(self, script):
+        if "\\s$" in script:
+            self.events.append(("check_trailing_space", self.trailing_space))
+            return self.trailing_space
+        self.events.append(("caret_end", script))
 class FakeLinks:
     def __init__(self, hrefs): self.hrefs=hrefs
     def count(self): return len(self.hrefs)
@@ -35,6 +41,7 @@ class FakeKeyboard:
     def __init__(self, events): self.events=events
     def insert_text(self, value): self.events.append(("insert_text", value))
     def type(self, value, delay=0): self.events.append(("type", value))
+    def press(self, value): self.events.append(("press", value))
 class FakePage:
     def __init__(self, events): self.keyboard=FakeKeyboard(events)
 
@@ -74,5 +81,22 @@ class MentionAdapterTests(unittest.TestCase):
         self.assertLess(click_i,caret_i)
         self.assertLess(caret_i,suffix_i)
         self.assertEqual(events[suffix_i],("insert_text",' — full caption suffix'))
+
+    @patch('adapters.facebook_mention.time.sleep', return_value=None)
+    @patch('adapters.facebook_mention._semantic_commit_evidence', side_effect=[{"kind":"structured_mention"},{"kind":"structured_mention"}])
+    @patch('adapters.facebook_mention._rank_candidate', return_value={"score":200,"evidence":["canonical_href"]})
+    @patch('adapters.facebook_mention._candidate_rows')
+    @patch('adapters.facebook_mention.page_entity')
+    def test_trailing_autocomplete_space_is_removed_before_punctuation_suffix(self, page_entity_mock, rows_mock, _rank, _evidence, _sleep):
+        events=[]
+        editor=FakeEditor(events,trailing_space=True)
+        page=FakePage(events)
+        page_entity_mock.return_value=self.entity
+        rows_mock.return_value=FakeRows(events)
+        result=type_with_page_mention(page,editor,'Hello UMEE Homestay, full caption suffix',brand_key='umee')
+        self.assertTrue(result.verified)
+        trim_i=events.index(("press","Backspace"))
+        suffix_i=events.index(("insert_text",', full caption suffix'))
+        self.assertLess(trim_i,suffix_i)
 
 if __name__ == '__main__': unittest.main()

@@ -149,6 +149,24 @@ def _focus_caret_end(editor):
     )
 
 
+def _trim_autocomplete_separator_before_punctuation(page, editor, suffix):
+    """Remove Facebook's single trailing mention separator before punctuation."""
+    if not suffix or suffix[0] not in ",.;:!?)]}":
+        return False
+    try:
+        has_trailing_space = bool(
+            editor.evaluate(
+                r"""e => /\s$/.test((e.innerText || e.textContent || ''))"""
+            )
+        )
+        if not has_trailing_space:
+            return False
+        page.keyboard.press("Backspace")
+        return True
+    except Exception:
+        return False
+
+
 def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
     entity = page_entity(brand_key)
     value = str(text or "")
@@ -190,6 +208,7 @@ def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
         # surface. Restore the composer caret explicitly before appending the
         # remaining caption, otherwise only the mention may survive in the body.
         _focus_caret_end(editor)
+        _trim_autocomplete_separator_before_punctuation(page, editor, suffix)
         page.keyboard.insert_text(suffix)
         time.sleep(0.4)
         retained = _semantic_commit_evidence(editor, entity)
