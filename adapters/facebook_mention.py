@@ -132,6 +132,23 @@ def mention_commit_evidence(editor, brand_key):
     entity = page_entity(brand_key)
     return _semantic_commit_evidence(editor, entity) if entity else {}
 
+
+def _focus_caret_end(editor):
+    """Restore composer focus after autocomplete click without destroying mention nodes."""
+    editor.focus(timeout=2000)
+    editor.evaluate(
+        """e => {
+            e.focus();
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(e);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }"""
+    )
+
+
 def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
     entity = page_entity(brand_key)
     value = str(text or "")
@@ -169,6 +186,10 @@ def type_with_page_mention(page, editor, text, brand_key=None, plain_type=None):
             raise RuntimeError("PAGE_ENTITY_NOT_COMMITTED")
         result.committed = True
         result.evidence["commit"] = commit
+        # Clicking a mention candidate can move focus/caret into the autocomplete
+        # surface. Restore the composer caret explicitly before appending the
+        # remaining caption, otherwise only the mention may survive in the body.
+        _focus_caret_end(editor)
         page.keyboard.insert_text(suffix)
         time.sleep(0.4)
         retained = _semantic_commit_evidence(editor, entity)

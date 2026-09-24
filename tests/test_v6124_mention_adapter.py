@@ -1,11 +1,15 @@
 ﻿"""Focused tests for isolated Facebook mention adapter."""
 import unittest
 from unittest.mock import patch
-from adapters.facebook_mention import _rank_candidate, MentionResult
+from adapters.facebook_mention import _rank_candidate, type_with_page_mention, MentionResult
 
 class FakeHandle: pass
 class FakeEditor:
+    def __init__(self, events=None): self.events=events if events is not None else []
     def element_handle(self): return FakeHandle()
+    def fill(self, value): self.events.append(("fill", value))
+    def focus(self, timeout=0): self.events.append(("focus", timeout))
+    def evaluate(self, script): self.events.append(("caret_end", script))
 class FakeLinks:
     def __init__(self, hrefs): self.hrefs=hrefs
     def count(self): return len(self.hrefs)
@@ -19,6 +23,20 @@ class FakeRow:
     def evaluate(self,script,handle): return self.inside
     def inner_text(self,timeout=0): return self.text
     def locator(self,sel): return FakeLinks(self.hrefs)
+
+class FakeCandidate:
+    def __init__(self, events): self.events=events
+    def click(self, force=False, timeout=0): self.events.append(("candidate_click", None))
+class FakeRows:
+    def __init__(self, events): self.row=FakeCandidate(events)
+    def count(self): return 1
+    def nth(self, i): return self.row
+class FakeKeyboard:
+    def __init__(self, events): self.events=events
+    def insert_text(self, value): self.events.append(("insert_text", value))
+    def type(self, value, delay=0): self.events.append(("type", value))
+class FakePage:
+    def __init__(self, events): self.keyboard=FakeKeyboard(events)
 
 class MentionAdapterTests(unittest.TestCase):
     def setUp(self):
@@ -36,5 +54,25 @@ class MentionAdapterTests(unittest.TestCase):
     def test_canonical_href_is_strongest(self, _):
         info=_rank_candidate(FakeRow('UMEE Homestay', ['https://facebook.com/umeehomestay']), self.entity, self.editor)
         self.assertGreaterEqual(info['score'], 200)
+
+    @patch('adapters.facebook_mention.time.sleep', return_value=None)
+    @patch('adapters.facebook_mention._semantic_commit_evidence', side_effect=[{"kind":"structured_mention"},{"kind":"structured_mention"}])
+    @patch('adapters.facebook_mention._rank_candidate', return_value={"score":200,"evidence":["canonical_href"]})
+    @patch('adapters.facebook_mention._candidate_rows')
+    @patch('adapters.facebook_mention.page_entity')
+    def test_suffix_is_appended_only_after_editor_focus_and_caret_restore(self, page_entity_mock, rows_mock, _rank, _evidence, _sleep):
+        events=[]
+        editor=FakeEditor(events)
+        page=FakePage(events)
+        page_entity_mock.return_value=self.entity
+        rows_mock.return_value=FakeRows(events)
+        result=type_with_page_mention(page,editor,'Hello UMEE Homestay — full caption suffix',brand_key='umee')
+        self.assertTrue(result.verified)
+        click_i=events.index(("candidate_click",None))
+        caret_i=next(i for i,e in enumerate(events) if e[0]=="caret_end")
+        suffix_i=events.index(("insert_text",' — full caption suffix'))
+        self.assertLess(click_i,caret_i)
+        self.assertLess(caret_i,suffix_i)
+        self.assertEqual(events[suffix_i],("insert_text",' — full caption suffix'))
 
 if __name__ == '__main__': unittest.main()
