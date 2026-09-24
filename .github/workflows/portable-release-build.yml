@@ -1,0 +1,60 @@
+name: Portable Release Build
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  portable-release:
+    if: startsWith(github.head_ref, 'release-build/')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Resolve immutable source
+        shell: pwsh
+        run: |
+          $sha = (Get-Content '.release-source-sha' -Raw).Trim()
+          if ($sha -notmatch '^[0-9a-f]{40}$') { throw "Invalid release source SHA: $sha" }
+          Write-Host "Requested source SHA: $sha"
+          git fetch origin $sha --depth=1
+          git checkout --force $sha
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne $sha) { throw "Release source mismatch: expected=$sha actual=$actual" }
+          $version = (Get-Content 'VERSION' -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid VERSION: $version" }
+          "RC_SOURCE_SHA=$sha" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RC_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Immutable source verified: $actual · v$version"
+
+      - name: Build canonical portable artifact
+        shell: pwsh
+        run: .\BUILD_PORTABLE.ps1
+
+      - name: Verify artifact SHA256
+        shell: pwsh
+        run: |
+          $zip = "release/artifacts/FB-Automation-Portable-v$env:RC_VERSION-Windows-x64.zip"
+          $shaFile = "$zip.sha256"
+          if (-not (Test-Path $zip)) { throw "Artifact missing: $zip" }
+          if (-not (Test-Path $shaFile)) { throw "SHA file missing: $shaFile" }
+          $expected = ((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToUpperInvariant()
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToUpperInvariant()
+          if ($actual -ne $expected) { throw "SHA256 mismatch expected=$expected actual=$actual" }
+          Write-Host "RC_SOURCE_SHA=$env:RC_SOURCE_SHA"
+          Write-Host "RC_VERSION=$env:RC_VERSION"
+          Write-Host "RC_ARTIFACT=$zip"
+          Write-Host "RC_SHA256=$actual"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FB-Automation-Portable-v${{ env.RC_VERSION }}-rc
+          path: |
+            release/artifacts/FB-Automation-Portable-v${{ env.RC_VERSION }}-Windows-x64.zip
+            release/artifacts/FB-Automation-Portable-v${{ env.RC_VERSION }}-Windows-x64.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
