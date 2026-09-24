@@ -1,0 +1,34 @@
+name: v6131 exact-head certification
+
+on:
+  push:
+    branches:
+      - cert/v6131-head-7c230c2
+
+jobs:
+  windows-cert:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Targeted recovery suite
+        run: >
+          python -m pytest -q
+          tests/test_v6131_runtime_recovery.py
+          tests/test_v6131_recovery.py
+          tests/test_v6120_profile_reliability.py
+          tests/test_v6124_mention_adapter.py
+          tests/test_submit_timeout_truth.py
+          tests/test_v6123_composer_transaction.py
+          tests/test_sheet_sync.py
+          tests/test_audit_v582.py
+          tests/test_v610_stability.py
+      - name: Full regression
+        run: python -m pytest -q
