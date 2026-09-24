@@ -1,9 +1,9 @@
 name: v6131 exact-head certification
 
 on:
-  push:
+  pull_request:
     branches:
-      - cert/v6131-head-7c230c2
+      - fix/v6131-stability-recovery
 
 jobs:
   windows-cert:
