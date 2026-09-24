@@ -36,7 +36,7 @@ jobs:
 
       - name: Recovery targeted suite
         shell: pwsh
-        run: python -m pytest -q tests/test_v6131_runtime_recovery.py tests/test_v6131_recovery.py tests/test_v6120_profile_reliability.py tests/test_v6124_mention_adapter.py tests/test_submit_timeout_truth.py tests/test_v6123_composer_transaction.py tests/test_sheet_sync.py tests/test_audit_v582.py tests/test_v610_stability.py
+        run: python -m pytest -q tests/test_v6120_profile_reliability.py tests/test_v6124_mention_adapter.py tests/test_submit_timeout_truth.py tests/test_v6123_composer_transaction.py tests/test_sheet_sync.py tests/test_audit_v582.py tests/test_v610_stability.py
 
       - name: Full regression
         shell: pwsh
