@@ -253,6 +253,19 @@ class JobManager:
         self._emit_line(job_id, f"▶ [JobManager] Bắt đầu thực thi Job ID: {job_id} (Command: {command})\n")
 
         def on_line(line: str):
+            # Persist typed terminal evidence emitted by pre-browser branches.
+            # Child-process output is already persisted by ProcessRunner; this
+            # fallback only creates a durable log when no child log exists yet.
+            if line and ("ACTION_RESULT:" in line or "RUN_RESULT:" in line):
+                try:
+                    log_path = self.process_runner.get_log_path(job_id)
+                    if not log_path.exists():
+                        log_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(log_path, "a", encoding="utf-8", errors="replace") as handle:
+                            handle.write(f"JOB_LOG_IDENTITY:{job_id}|path={log_path.resolve()}\n")
+                            handle.write(line)
+                except Exception:
+                    pass
             self._emit_line(job_id, line)
 
         try:
