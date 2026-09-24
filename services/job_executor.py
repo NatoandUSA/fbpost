@@ -32,6 +32,29 @@ from services.workflow_runtime import start_task as workflow_start_task, finish_
 DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
 SUBMIT_UNCERTAIN_CODES = frozenset(("POST_SUBMITTED_UNVERIFIED", "SUBMIT_TRIGGERED_UNVERIFIED"))
 POST_PENDING_CODES = frozenset(("POST_PENDING", "RECONCILE_PENDING"))
+SUBMIT_TRIGGERED_MARKER = "SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED"
+
+
+def line_confirms_submit_triggered(line: str) -> bool:
+    return SUBMIT_TRIGGERED_MARKER in str(line or "")
+
+
+def ensure_submit_uncertain_from_runtime_marker(result: Dict[str, Any], marker_seen: bool) -> bool:
+    """Promote trusted post-button evidence to typed uncertain truth when ACTION_RESULT was lost."""
+    if not marker_seen:
+        return False
+    state = str((result or {}).get("state") or "")
+    code = str((result or {}).get("code") or "")
+    if state or code:
+        return False
+    result.update({
+        "success": False,
+        "state": "submitted_unverified",
+        "code": "SUBMIT_TRIGGERED_UNVERIFIED",
+        "message": "Post button activation was observed but no terminal ACTION_RESULT arrived before timeout.",
+        "result_url": "",
+    })
+    return True
 
 
 def is_submit_uncertain(result: Dict[str, Any]) -> bool:
@@ -1050,9 +1073,12 @@ def execute_automation_task(
                 full_cmd.extend(["--brand-key", brand_key])
 
         structured_result = {}
+        submit_runtime_evidence = {"triggered": False}
         def _capture_post_line(line):
             on_line(line)
             clean = (line or "").strip()
+            if line_confirms_submit_triggered(clean):
+                submit_runtime_evidence["triggered"] = True
             if clean.startswith("ACTION_RESULT:"):
                 try:
                     structured_result.update(json.loads(clean[len("ACTION_RESULT:"):]))
@@ -1067,6 +1093,8 @@ def execute_automation_task(
             full_cmd, job_id=job_id, on_line=_capture_post_line, cwd=str(BASE_DIR),
             timeout_seconds=180 if cmd in ("group", "page") else 120,
         )
+        if ensure_submit_uncertain_from_runtime_marker(structured_result, submit_runtime_evidence["triggered"]):
+            on_line("ACTION_RESULT:" + json.dumps(structured_result, ensure_ascii=False) + "\n")
         if known_moderated and is_submit_uncertain(structured_result):
             structured_result.update({
                 "success": True, "state": "pending", "code": "POST_PENDING",

@@ -1454,6 +1454,7 @@ def click_post_publish_button(page, dialog=None):
             if isinstance(js_res, dict):
                 if js_res.get("clicked"):
                     print(f"🎯 Đã kích hoạt nút Đăng qua Native DOM Engine: '{js_res.get('text')}'!")
+                    print("SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED")
                     clicked_via_js = True
                     break
                 elif js_res.get("disabled"):
@@ -1511,6 +1512,7 @@ def click_post_publish_button(page, dialog=None):
                     tb.focus()
                     page.keyboard.press("Control+Enter")
                     print("⌨️ Đã bấm tổ hợp phím Ctrl+Enter để xuất bản bài viết!")
+                    print("SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED")
                     clicked_via_js = True
             except Exception:
                 pass
@@ -1547,12 +1549,14 @@ def click_post_publish_button(page, dialog=None):
             try:
                 target_btn.click(force=True, timeout=5000)
                 print("✅ Đã click nút Đăng bài viết qua Playwright!")
+                print("SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED")
                 clicked = True
             except Exception as e:
                 print(f"⚠️ Playwright click: {e}, chuyển sang Native DOM click...")
                 try:
                     target_btn.evaluate("(el) => el.click()")
                     print("✅ Đã kích hoạt Native DOM click cho nút Đăng!")
+                    print("SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED")
                     clicked = True
                 except Exception as e2:
                     print(f"❌ Lỗi click nút Đăng: {e2}")
