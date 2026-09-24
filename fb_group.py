@@ -62,7 +62,12 @@ def _ensure_group_membership(page, group_url):
 
     def _scan_state():
         try:
-            controls = page.locator('div[role="banner"] div[role="button"], div[role="main"] div[role="button"], button').all()
+            controls = page.locator(
+                'div[role="banner"] div[role="button"], '
+                'div[role="main"] div[role="button"], '
+                'a[role="button"], button, '
+                'div[aria-label][role="button"]'
+            ).all()
         except Exception:
             controls = []
         join_button = None
@@ -80,27 +85,6 @@ def _ensure_group_membership(page, group_url):
                         join_button = control
             except Exception:
                 continue
-        if join_button is None:
-            # A visible group post-composer launcher is membership capability evidence.
-            # Use it only when no Join/Request control was found; otherwise remain fail-closed.
-            composer_re = re.compile(
-                r"Bạn viết gì đi|Tạo bài viết công khai|Viết gì đó|Tạo bài viết|Tạo bài đăng|"
-                r"Bắt đầu cuộc thảo luận|Write something|Create a public post|What's on your mind|"
-                r"Start discussion|Create post",
-                re.I,
-            )
-            try:
-                composer_controls = page.locator('div[role="button"], button')
-                for ci in range(min(composer_controls.count(), 180)):
-                    control = composer_controls.nth(ci)
-                    if not control.is_visible(timeout=120):
-                        continue
-                    combined = f"{control.inner_text() or ''} {control.get_attribute('aria-label') or ''}".strip()
-                    if composer_re.search(combined):
-                        print("[Group Membership] joined evidence=post_composer_capability")
-                        return "joined", None
-            except Exception:
-                pass
         return "unknown", join_button
 
     for _ in range(3):
