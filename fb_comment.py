@@ -142,25 +142,25 @@ def _locate_target_post_article(page, canonical_url):
                 if len(visible_dialogs) == 1 and (top[2] or top[3] >= 80):
                     print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={top[3]}")
                     return top[5]
-                if len(visible_dialogs) == 1 and post_id in current_url:
-                    # Some Facebook permalink routes expose a small modal shell without
-                    # role=article or a self-link, while the exact route owns the only
-                    # comment control. Route identity + one visible dialog + comment
-                    # capability is sufficient exact-post evidence; never use page/root DOM.
+                if len(visible_dialogs) == 1 and post_id in current_url and top[3] < 80:
+                    # A small exact-route shell is not authoritative post identity.
+                    # Nudge only this route-bound dialog to hydrate, then keep waiting
+                    # for a concrete article/permalink anchor. Never return the shell.
                     try:
-                        route_controls = top[5].locator(
-                            "div[role='textbox'][contenteditable='true'], "
-                            "div[role='button'][aria-label*='comment' i], "
-                            "div[role='button'][aria-label*='bình luận' i]"
-                        ).count()
-                    except Exception:
-                        route_controls = 0
-                    if route_controls:
+                        top[5].evaluate("""root => {
+                            const nodes = [root, ...root.querySelectorAll('div')];
+                            for (const el of nodes) {
+                                if (el.scrollHeight > el.clientHeight + 40) {
+                                    el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + 240);
+                                }
+                            }
+                        }""")
                         print(
                             f"[Comment Resolver] post_identity={post_id} "
-                            f"scope=exact-route-comment-dialog controls={route_controls} chars={top[3]}"
+                            f"scope=exact-route-shell-nudge chars={top[3]}"
                         )
-                        return top[5]
+                    except Exception:
+                        pass
                 if len(visible_dialogs) > 1:
                     # A share route can open two sibling dialogs (post + share shell).
                     # Prefer the unique dialog that owns a visible article/comment control;
