@@ -839,9 +839,11 @@ def execute_automation_task(
     published_count = 0
     pending_count = 0
     moderation_skipped_count = 0
+    content_exhausted_count = 0
     unverified_count = 0
     failed_before_submit_count = 0
     profile_round_queue = [str(a.get("id") or "") for a in accounts_pool] if rotate_accounts else []
+    profile_runtime_quarantine = set()
     published_content_history = _published_content_history(200) if cmd in ("group", "page") else []
     batch_attempted_content = []
     if job_repo:
@@ -919,6 +921,7 @@ def execute_automation_task(
                 continue
 
         task_content = content
+        spin_result = None
         sig_mode = "linkless" if cmd in ("group", "page") else ("safe" if safe_signature else "canonical")
         if auto_spin and cmd in ("group", "page"):
             try:
@@ -972,10 +975,37 @@ def execute_automation_task(
             comparable_content = prepare_linkless_post(task_content)
             comparable_history = [prepare_linkless_post(item) for item in (published_content_history + batch_attempted_content)]
             similarity_result = similarity_gate(comparable_content, comparable_history, threshold=0.82)
+            if not similarity_result["pass"] and auto_spin and brand_key:
+                # Gemini outages must not collapse the batch into one repeated local template.
+                # Search a bounded deterministic fallback space; facts remain Content-Hub authored.
+                from ai_spinner import generate_unique_variant_with_evidence
+                for fallback_attempt in range(1, 9):
+                    candidate_result = generate_unique_variant_with_evidence(
+                        content, "", brand_key=brand_key, include_signature=include_signature,
+                        signature_mode=sig_mode, variant_seed=f"{target}|fallback-{fallback_attempt}",
+                    )
+                    candidate = normalize_single_cta(candidate_result["content"], brand_key)
+                    candidate_audit = audit_final_content(candidate, brand_key, linkless=(sig_mode == "linkless"))
+                    candidate_sig_ok, _ = validate_brand_signature(candidate, brand_key, mode=sig_mode)
+                    if not candidate_audit["pass"] or not candidate_sig_ok:
+                        continue
+                    candidate_comparable = prepare_linkless_post(candidate)
+                    candidate_similarity = similarity_gate(candidate_comparable, comparable_history, threshold=0.82)
+                    if candidate_similarity["pass"]:
+                        task_content = candidate
+                        comparable_content = candidate_comparable
+                        similarity_result = candidate_similarity
+                        spin_result = candidate_result
+                        on_line(
+                            f"[FALLBACK_VARIATION_SELECTED] attempt={fallback_attempt} "
+                            f"similarity={candidate_similarity['max_similarity']:.3f}.\n"
+                        )
+                        break
             if not similarity_result["pass"]:
+                content_exhausted_count += 1
                 batch_failed = True
                 on_line(
-                    f"[CROSS_POST_SIMILARITY_REJECTED] similarity={similarity_result['max_similarity']:.3f} "
+                    f"[CONTENT_VARIATION_EXHAUSTED] tried=8 similarity={similarity_result['max_similarity']:.3f} "
                     f">= {similarity_result['threshold']:.2f}; stop before Facebook.\n"
                 )
                 if job_repo:
@@ -1006,7 +1036,10 @@ def execute_automation_task(
                     profile_scores = workflow_repo.profile_group_scores(target)
                 except Exception as membership_history_err:
                     on_line(f"[Profile Eligibility] history unavailable: {membership_history_err}\n")
-            curr_acc = _take_profile_round(profile_round_queue, accounts_pool, excluded_membership, profile_scores)
+            curr_acc = _take_profile_round(
+                profile_round_queue, accounts_pool,
+                excluded_membership | profile_runtime_quarantine, profile_scores
+            )
             if not curr_acc:
                 batch_failed = True
                 on_line("[Profile Eligibility] No eligible unused profile remains in this round for target; skip before Facebook.\n")
@@ -1106,8 +1139,8 @@ def execute_automation_task(
         # before declaring the task unresolved; never resubmit the post here.
         submit_was_triggered = is_submit_uncertain(structured_result)
         if cmd in ("group", "page") and submit_was_triggered:
-            for reconcile_attempt, wait_seconds in enumerate((5, 15), 1):
-                on_line(f"🔎 [Auto Reconcile {reconcile_attempt}/2] Facebook đã nhận submit nhưng chưa có permalink; chờ {wait_seconds}s rồi đối soát read-only.\n")
+            for reconcile_attempt, wait_seconds in enumerate((5,), 1):
+                on_line(f"🔎 [Immediate Reconcile] Facebook đã nhận submit nhưng chưa có permalink; chờ {wait_seconds}s rồi đối soát read-only một lần.\n")
                 if not sleep_with_cancel(wait_seconds):
                     return False
                 reconcile_result = {}
@@ -1130,6 +1163,19 @@ def execute_automation_task(
 
         action_state = str(structured_result.get("state") or "")
         action_code = str(structured_result.get("code") or "")
+        action_message = str(structured_result.get("message") or "")
+        if rotate_accounts and curr_acc_id:
+            runtime_failure_markers = (
+                "GPM_PROCESS_NOT_READY", "GPM_PROCESS_SINGLETON_FAILED",
+                "GPM_DEBUG_PORT_NOT_READY", "GPM_CDP_ATTACH_FAILED",
+                "GPM Login v4 CDP connection failed",
+            )
+            if any(marker in action_message or marker == action_code for marker in runtime_failure_markers):
+                profile_runtime_quarantine.add(str(curr_acc_id))
+                on_line(
+                    f"[Profile Runtime Quarantine] {curr_acc.get('name', curr_acc_id)} excluded for the rest "
+                    f"of this batch after startup failure: {action_code or action_message[:120]}.\n"
+                )
         if action_state == "published":
             canonical_post_url = canonical_facebook_post_url(structured_result.get("result_url") or "")
             if canonical_post_url:
@@ -1258,6 +1304,10 @@ def execute_automation_task(
         elif submit_was_triggered:
             unverified_count += 1
             outcome = "submitted_unverified"
+        elif cmd == "reconcile-post" and action_code == "RECONCILE_NOT_FOUND":
+            unverified_count += 1
+            outcome = "reconcile_pending"
+            on_line("🧭 [Publication State] RECONCILE_NOT_FOUND remains RECONCILE_PENDING; publication is not failed and will not be reposted.\n")
         else:
             failed_before_submit_count += 1
             batch_failed = True
@@ -1296,8 +1346,9 @@ def execute_automation_task(
             except Exception as recon_err:
                 on_line(f"⚠️ [Durable Reconcile] Không thể cập nhật attempt/queue: {recon_err}\n")
                 batch_failed = True
-        elif cmd == "reconcile-post" and action_state not in ("published", "pending"):
-            # Manual reconcile must not surface a green success when nothing was verified.
+        elif cmd == "reconcile-post" and not reconcile_record_id and action_state not in ("published", "pending"):
+            # An explicit/manual reconcile may still report unresolved to its caller.
+            # Scheduled durable attempts remain non-terminal until their retry lifecycle is exhausted.
             batch_failed = True
         record_profile_activity(curr_acc_id, cmd, target=target, content=content, outcome=outcome)
 
@@ -1309,6 +1360,8 @@ def execute_automation_task(
             workflow_finish_task(wf_task_id, state="pending", submission_status="PENDING_APPROVAL", verification_status="PENDING_EVIDENCE", result_url=structured_result.get("result_url") or "")
         elif submit_was_triggered:
             workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="NO_PERMALINK", result_url=structured_result.get("result_url") or "", error_code=structured_result.get("code") or "SUBMITTED_NO_PERMALINK", error_message=structured_result.get("message") or "Submitted but permalink is not verified.")
+        elif cmd == "reconcile-post" and action_code == "RECONCILE_NOT_FOUND":
+            workflow_finish_task(wf_task_id, state="unverified", phase="VERIFYING", submission_status="SUBMIT_CONFIRMED", verification_status="RECONCILE_PENDING", error_code=action_code, error_message=structured_result.get("message") or "Identity remains unresolved; durable reconciliation continues.")
         else:
             workflow_finish_task(wf_task_id, state="failed", verification_status="FAILED", error_code=structured_result.get("code") or "FAILED_BEFORE_SUBMIT", error_message=structured_result.get("message") or "Task failed before verified submission.")
 
@@ -1371,9 +1424,10 @@ def execute_automation_task(
                 return False
 
     on_line(
-        f"📊 [Batch Summary] Tổng {total} · Published {published_count} · Pending {pending_count} · "
+        f"📊 [Batch Summary] Total {total} · Published {published_count} · Pending {pending_count} · "
         f"Submitted/Need Reconcile {unverified_count} · Retry Locked {skipped_duplicates} · "
-        f"Failed Before Submit {failed_before_submit_count}.\n"
+        f"Failed Before Submit {failed_before_submit_count} · Safe Moderation Skip {moderation_skipped_count} · "
+        f"Content Exhausted {content_exhausted_count} · Runtime Quarantined {len(profile_runtime_quarantine)}.\n"
     )
     on_line(f"RUN_RESULT:{'failed' if batch_failed else 'finished'}\n")
     if batch_failed:

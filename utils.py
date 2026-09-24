@@ -13,7 +13,7 @@ from datetime import datetime
 from paths import DATA_DIR
 from services.profile_session_manager import (
     acquire_profile, attach_runtime, release_profile, runtime_snapshot,
-    wait_endpoint_closed, ProfileLeaseError,
+    wait_endpoint_closed, ProfileLeaseError, _endpoint_open,
 )
 
 # GPM profiles with proxies/extensions can take longer than 15s to start.
@@ -435,23 +435,31 @@ def resolve_account(account_id, gpm_api_url=None):
 
 
 def connect_over_cdp_when_ready(playwright, cdp_url, timeout_seconds=30):
-    """Wait for a GPM-launched browser to expose its local CDP endpoint."""
+    """Wait for the CDP TCP endpoint before asking Playwright to attach."""
     deadline = time.monotonic() + timeout_seconds
     last_error = None
     attempt = 0
+    announced = False
     while time.monotonic() < deadline:
+        if not _endpoint_open(cdp_url):
+            if not announced:
+                print("[Profile Startup] API_STARTED; waiting for DEBUG_PORT_READY...")
+                announced = True
+            time.sleep(0.5)
+            continue
         attempt += 1
         try:
-            # Sử dụng timeout 8s cho mỗi lần thử để không block quá lâu và có thể retry
-            return playwright.chromium.connect_over_cdp(cdp_url, timeout=8000)
+            print(f"[Profile Startup] DEBUG_PORT_READY; CDP attach attempt={attempt}")
+            browser = playwright.chromium.connect_over_cdp(cdp_url, timeout=5000)
+            print("[Profile Startup] CDP_READY")
+            return browser
         except Exception as error:
             last_error = error
-            if attempt == 1:
-                print("GPM has started the profile; waiting for its debugging port to become ready...")
-            else:
-                print(f"⏳ Đang thử kết nối lại CDP lần {attempt}...")
-            time.sleep(1.0)
-    raise RuntimeError(f"GPM debugging port was not ready after {timeout_seconds} seconds: {last_error}")
+            if attempt <= 3:
+                print(f"[Profile Startup] CDP attach not ready attempt={attempt}: {error}")
+            time.sleep(0.75)
+    code = "GPM_DEBUG_PORT_NOT_READY" if not _endpoint_open(cdp_url) else "GPM_CDP_ATTACH_FAILED"
+    raise RuntimeError(f"{code}: endpoint={cdp_url} timeout={timeout_seconds}s last_error={last_error}")
 
 
 def _normalize_single_interactive_page(context, settle_seconds=10.0):

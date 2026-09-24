@@ -62,7 +62,12 @@ def _ensure_group_membership(page, group_url):
 
     def _scan_state():
         try:
-            controls = page.locator('div[role="banner"] div[role="button"], div[role="main"] div[role="button"], button').all()
+            controls = page.locator(
+                'div[role="banner"] div[role="button"], '
+                'div[role="main"] div[role="button"], '
+                'a[role="button"], button, '
+                'div[aria-label][role="button"]'
+            ).all()
         except Exception:
             controls = []
         join_button = None

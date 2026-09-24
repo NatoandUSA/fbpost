@@ -142,6 +142,25 @@ def _locate_target_post_article(page, canonical_url):
                 if len(visible_dialogs) == 1 and (top[2] or top[3] >= 80):
                     print(f"[Comment Resolver] post_identity={post_id} scope=exact-permalink-dialog ready=1 chars={top[3]}")
                     return top[5]
+                if len(visible_dialogs) == 1 and post_id in current_url and top[3] < 80:
+                    # A small exact-route shell is not authoritative post identity.
+                    # Nudge only this route-bound dialog to hydrate, then keep waiting
+                    # for a concrete article/permalink anchor. Never return the shell.
+                    try:
+                        top[5].evaluate("""root => {
+                            const nodes = [root, ...root.querySelectorAll('div')];
+                            for (const el of nodes) {
+                                if (el.scrollHeight > el.clientHeight + 40) {
+                                    el.scrollTop = Math.min(el.scrollHeight, el.scrollTop + 240);
+                                }
+                            }
+                        }""")
+                        print(
+                            f"[Comment Resolver] post_identity={post_id} "
+                            f"scope=exact-route-shell-nudge chars={top[3]}"
+                        )
+                    except Exception:
+                        pass
                 if len(visible_dialogs) > 1:
                     # A share route can open two sibling dialogs (post + share shell).
                     # Prefer the unique dialog that owns a visible article/comment control;
