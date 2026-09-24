@@ -10,6 +10,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify exact PR head
+        shell: pwsh
+        run: |
+          $expected = '${{ github.event.pull_request.head.sha }}'
+          $actual = git rev-parse HEAD
+          Write-Host "Expected HEAD: $expected"
+          Write-Host "Actual HEAD:   $actual"
+          if ($actual -ne $expected) { throw "Exact-head mismatch" }
 
       - uses: actions/setup-python@v5
         with:
