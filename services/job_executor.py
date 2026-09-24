@@ -29,7 +29,7 @@ from repositories.reconcile_repo import ReconcileRepository
 from repositories.moderation_repo import ModerationRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
-DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
+DUPLICATE_WINDOW_HOURS = (3, 4, 8, 12, 16, 24)
 SUBMIT_UNCERTAIN_CODES = frozenset(("POST_SUBMITTED_UNVERIFIED", "SUBMIT_TRIGGERED_UNVERIFIED"))
 POST_PENDING_CODES = frozenset(("POST_PENDING", "RECONCILE_PENDING"))
 SUBMIT_TRIGGERED_MARKER = "SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED"
