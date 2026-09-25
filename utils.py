@@ -2165,7 +2165,10 @@ def _search_group_post_by_content(page, target="", content="") -> str:
     if not group_key or not content:
         return ""
     words = re.sub(r"\s+", " ", content).strip().split()
-    query = " ".join(words[:10]).strip()
+    # Facebook group search becomes unreliable with sentence-sized queries.
+    # Use a short leading fingerprint, then verify the full candidate content before
+    # accepting any permalink.
+    query = " ".join(words[:5]).strip()
     if len(query) < 12:
         return ""
     search_url = f"https://www.facebook.com/groups/{group_key}/search/?q={urllib.parse.quote(query)}"
@@ -2173,11 +2176,55 @@ def _search_group_post_by_content(page, target="", content="") -> str:
         print(f"[PublicationIdentity] group_search:start group={group_key}")
         page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
         time.sleep(2.5)
-        for _ in range(4):
+        for round_idx in range(4):
+            try:
+                articles = page.locator("div[role='article']")
+                article_count = min(articles.count(), 40)
+                excerpts = []
+                for idx in range(min(article_count, 8)):
+                    try:
+                        excerpts.append(re.sub(r"\\s+", " ", articles.nth(idx).inner_text(timeout=800) or "").strip()[:180])
+                    except Exception:
+                        continue
+                print(f"[PublicationIdentity] group_search:round={round_idx + 1} articles={article_count} excerpts={json.dumps(excerpts, ensure_ascii=False)}")
+            except Exception as diag_exc:
+                print(f"[PublicationIdentity] group_search:diag_error={diag_exc}")
             found = _scan_post_permalink_once(page, target=target, content=content, max_articles=40)
             if found:
                 print(f"[PublicationIdentity] group_search:match=1 url={found}")
                 return found
+            # Search-result layouts do not always expose role=article. Collect only
+            # exact canonical links for the target group, then verify the full post
+            # content on a read-only candidate page before accepting identity.
+            try:
+                candidates = []
+                for anchor in page.locator("a[href*='/groups/'][href*='/posts/'], a[href*='/groups/'][href*='/permalink/']").all()[:80]:
+                    href = canonical_facebook_post_url(anchor.get_attribute("href") or "")
+                    if (href and _group_key_from_url(href) == group_key and
+                            re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", urllib.parse.urlparse(href).path, re.I)
+                            and href not in candidates):
+                        candidates.append(href)
+                print(f"[PublicationIdentity] group_search:candidates={len(candidates)}")
+                for candidate_url in candidates[:20]:
+                    probe = None
+                    try:
+                        probe = page.context.new_page()
+                        probe.goto(candidate_url, wait_until="domcontentloaded", timeout=20000)
+                        time.sleep(1.2)
+                        candidate_text = probe.locator("body").inner_text(timeout=4000) or ""
+                        if text_similarity_match(content, candidate_text):
+                            print(f"[PublicationIdentity] group_search:candidate_verified=1 url={candidate_url}")
+                            return candidate_url
+                    except Exception:
+                        continue
+                    finally:
+                        if probe is not None:
+                            try:
+                                probe.close()
+                            except Exception:
+                                pass
+            except Exception as candidate_exc:
+                print(f"[PublicationIdentity] group_search:candidate_error={candidate_exc}")
             try:
                 page.mouse.wheel(0, 1800)
             except Exception:
@@ -2187,7 +2234,6 @@ def _search_group_post_by_content(page, target="", content="") -> str:
     except Exception as exc:
         print(f"[PublicationIdentity] group_search:error={exc}")
     return ""
-
 
 def _search_group_my_posted_by_content(page, target="", content="") -> str:
     """Resolve the current profile's own published Group post from Facebook's My Content surface."""

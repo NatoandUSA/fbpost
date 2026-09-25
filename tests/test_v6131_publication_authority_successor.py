@@ -102,3 +102,73 @@ def test_reconcile_pending_never_grants_permalink_authority():
     assert result.metadata["evidence_source"] == "facebook_my_pending_content"
     pending.assert_called_once()
     group_search.assert_not_called()
+
+
+class _EmptyArticles:
+    def count(self): return 0
+    def nth(self, idx): raise AssertionError("no articles expected")
+
+
+class _Mouse:
+    def wheel(self, x, y): return None
+
+
+class _Anchor:
+    def __init__(self, href): self.href = href
+    def get_attribute(self, name): return self.href if name == "href" else ""
+
+
+class _AnchorList:
+    def __init__(self, href): self.href = href
+    def all(self): return [_Anchor(self.href)]
+
+
+class _Body:
+    def __init__(self, text): self.text = text
+    def inner_text(self, timeout=None): return self.text
+
+
+class _Probe:
+    def __init__(self, text): self.text = text
+    def goto(self, *args, **kwargs): return None
+    def locator(self, selector):
+        assert selector == "body"
+        return _Body(self.text)
+    def close(self): return None
+
+
+class _Context:
+    def __init__(self, text): self.text = text
+    def new_page(self): return _Probe(self.text)
+
+
+class _GroupSearchPage:
+    def __init__(self, candidate, candidate_text):
+        self.candidate = candidate
+        self.goto_url = ""
+        self.mouse = _Mouse()
+        self.context = _Context(candidate_text)
+    def goto(self, url, **kwargs): self.goto_url = url
+    def locator(self, selector):
+        if selector == "div[role='article']":
+            return _EmptyArticles()
+        if "a[href*='/groups/']" in selector:
+            return _AnchorList(self.candidate)
+        raise AssertionError(selector)
+
+
+def test_group_search_uses_short_fingerprint_query():
+    page = _GroupSearchPage(CANONICAL, CONTENT)
+    with patch.object(utils.time, "sleep", return_value=None), \
+         patch.object(utils, "_scan_post_permalink_once", return_value=CANONICAL):
+        result = utils._search_group_post_by_content(page, TARGET, CONTENT)
+    assert result == CANONICAL
+    assert "q=Unique%20certification%20content%20long%20enough" in page.goto_url
+
+
+def test_group_search_verifies_canonical_candidate_when_article_layout_missing():
+    page = _GroupSearchPage(CANONICAL, CONTENT)
+    with patch.object(utils.time, "sleep", return_value=None), \
+         patch.object(utils, "_scan_post_permalink_once", return_value=""):
+        result = utils._search_group_post_by_content(page, TARGET, CONTENT)
+    assert result == CANONICAL
