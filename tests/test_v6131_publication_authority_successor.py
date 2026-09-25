@@ -172,3 +172,18 @@ def test_group_search_verifies_canonical_candidate_when_article_layout_missing()
          patch.object(utils, "_scan_post_permalink_once", return_value=""):
         result = utils._search_group_post_by_content(page, TARGET, CONTENT)
     assert result == CANONICAL
+
+
+def test_multi_permalink_canonicalizes_only_expected_group():
+    raw = "/groups/rivewdulichtphue/?multi_permalinks=1391877076350479&__tn__=-R"
+    out = utils._canonical_group_multi_permalink_url(raw, "rivewdulichtphue")
+    assert out == "https://www.facebook.com/groups/rivewdulichtphue/posts/1391877076350479"
+
+
+def test_multi_permalink_rejects_wrong_group_or_invalid_id():
+    raw = "/groups/othergroup/?multi_permalinks=1391877076350479"
+    assert utils._canonical_group_multi_permalink_url(raw, "rivewdulichtphue") == ""
+    assert utils._canonical_group_multi_permalink_url(
+        "/groups/rivewdulichtphue/?multi_permalinks=not-a-post",
+        "rivewdulichtphue",
+    ) == ""

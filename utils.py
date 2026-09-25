@@ -2235,6 +2235,25 @@ def _search_group_post_by_content(page, target="", content="") -> str:
         print(f"[PublicationIdentity] group_search:error={exc}")
     return ""
 
+def _canonical_group_multi_permalink_url(raw_href="", expected_group="") -> str:
+    """Convert Facebook ?multi_permalinks=<post_id> evidence into a canonical group post URL."""
+    try:
+        absolute = urllib.parse.urljoin("https://www.facebook.com", str(raw_href or ""))
+        parsed = urllib.parse.urlparse(absolute)
+        group_key = _group_key_from_url(absolute)
+        expected = str(expected_group or "").strip().casefold()
+        if not group_key or (expected and group_key != expected):
+            return ""
+        values = urllib.parse.parse_qs(parsed.query).get("multi_permalinks") or []
+        for value in values:
+            for token in re.split(r"[,\s]+", str(value or "").strip()):
+                if re.fullmatch(r"\d{5,}", token):
+                    return f"https://www.facebook.com/groups/{group_key}/posts/{token}"
+    except Exception:
+        return ""
+    return ""
+
+
 def _search_group_my_posted_by_content(page, target="", content="") -> str:
     """Resolve the current profile's own published Group post from Facebook's My Content surface."""
     group_key = _group_key_from_url(target)
@@ -2257,9 +2276,27 @@ def _search_group_my_posted_by_content(page, target="", content="") -> str:
                         re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", urllib.parse.urlparse(href).path, re.I)):
                     print(f"[PublicationIdentity] my_posted_search:match=1 url={href}")
                     return href
-        # Facebook My Content may not expose post cards as role=article.
-        # The read-only "Xem trong nhóm" anchor carries ?multi_permalinks=<post_id>.
-        # Accept it only when a bounded ancestor also matches the expected content.
+        # Facebook My Content may expose group-root anchors carrying
+        # ?multi_permalinks=<post_id> instead of /posts/<id>. Accept only when a
+        # bounded ancestor also matches the expected submitted content.
+        multi_links = page.locator("a[href*='multi_permalinks=']")
+        for idx in range(min(multi_links.count(), 40)):
+            anchor = multi_links.nth(idx)
+            raw_href = anchor.get_attribute("href") or ""
+            canonical = _canonical_group_multi_permalink_url(raw_href, group_key)
+            if not canonical:
+                continue
+            for depth in range(0, 11):
+                try:
+                    node = anchor if depth == 0 else anchor.locator("xpath=" + "/.." * depth)
+                    candidate_text = node.inner_text(timeout=800) or ""
+                except Exception:
+                    continue
+                if text_similarity_match(content, candidate_text):
+                    print(f"[PublicationIdentity] my_posted_search:match=1 source=multi_permalinks url={canonical}")
+                    return canonical
+
+        # Retain the localized "Xem trong nhóm" fallback for older Facebook layouts.
         view_links = page.get_by_text("Xem trong nhóm", exact=True)
         for idx in range(min(view_links.count(), 30)):
             link = view_links.nth(idx)
