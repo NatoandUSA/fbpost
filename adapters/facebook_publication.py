@@ -4,6 +4,8 @@ from utils import (
     _copy_post_permalink_via_share_sheet as _legacy_copy,
     _has_pending_post_notice as _legacy_pending,
     _search_group_post_by_content as _legacy_group_search,
+    _search_group_my_posted_by_content as _legacy_my_posted,
+    _search_group_pending_by_content as _legacy_pending_content,
     _resolve_share_reference_to_group_post as _legacy_share_resolve,
 )
 
@@ -26,3 +28,10 @@ def search_group_post(page, target="", content=""):
 
 def resolve_share_reference(page, reference="", target="", content=""):
     return _legacy_share_resolve(page, reference=reference, target=target, content=content)
+
+def search_my_posted(page, target="", content=""):
+    return _legacy_my_posted(page, target=target, content=content)
+
+
+def search_pending(page, target="", content=""):
+    return _legacy_pending_content(page, target=target, content=content)

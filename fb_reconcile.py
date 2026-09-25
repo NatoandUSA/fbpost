@@ -3,7 +3,7 @@ import re
 
 from playwright.sync_api import sync_playwright
 
-from adapters.facebook_publication import scan_post_permalink, copy_post_permalink, has_pending_notice, search_group_post, resolve_share_reference
+from adapters.facebook_publication import scan_post_permalink, copy_post_permalink, has_pending_notice, search_group_post, search_my_posted, search_pending, resolve_share_reference
 # Compatibility patch points retained for stable tests/callers; implementation lives in adapter.
 _scan_post_permalink_once = scan_post_permalink
 _copy_post_permalink_via_share_sheet = copy_post_permalink
@@ -120,8 +120,26 @@ def reconcile_existing_post(target_url, content, account_id=None, gpm_api_url=No
                         print(f"⚠️ Reload timeout nhưng Facebook DOM vẫn còn ({body_chars} chars); tiếp tục native permalink resolver: {reload_err}")
                     time.sleep(2.5 + attempt * 2)
 
-            # Final read-only fallback is group search, independent of feed ranking.
+            # Current-profile content surfaces are stronger than feed ranking.
+            # Pending is terminal moderation evidence, never post/comment authority.
             if "/groups/" in target_url:
+                permalink = search_my_posted(page, target=target_url, content=content)
+                if permalink:
+                    record_posted_link(
+                        target_url, permalink, content, note="Đã xuất bản (my-posted đối soát)",
+                        account_id=account_id or "default", url_type="post", publish_state="published"
+                    )
+                    return ActionResult(True, "RECONCILE_PUBLISHED", "Đã tìm thấy bài trong Nội dung của bạn / Đã đăng.",
+                                        state="published", target_url=target_url, result_url=permalink, url_type="post",
+                                        metadata={"evidence_source": "facebook_my_posted_content"})
+                if search_pending(page, target=target_url, content=content):
+                    record_posted_link(
+                        target_url, target_url, content, note="Đang chờ admin duyệt (pending-content đối soát)",
+                        account_id=account_id or "default", url_type="group", publish_state="pending"
+                    )
+                    return ActionResult(True, "RECONCILE_PENDING", "Bài đang chờ duyệt.", state="pending",
+                                        target_url=target_url, result_url="", url_type="group",
+                                        metadata={"evidence_source": "facebook_my_pending_content"})
                 permalink = search_group_post(page, target=target_url, content=content)
                 if permalink:
                     record_posted_link(

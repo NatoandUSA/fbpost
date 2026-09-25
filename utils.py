@@ -2189,6 +2189,81 @@ def _search_group_post_by_content(page, target="", content="") -> str:
     return ""
 
 
+def _search_group_my_posted_by_content(page, target="", content="") -> str:
+    """Resolve the current profile's own published Group post from Facebook's My Content surface."""
+    group_key = _group_key_from_url(target)
+    if not group_key or not content:
+        return ""
+    posted_url = f"https://www.facebook.com/groups/{group_key}/my_posted_content/"
+    try:
+        print(f"[PublicationIdentity] my_posted_search:start group={group_key}")
+        page.goto(posted_url, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        articles = page.locator("div[role='article']")
+        for idx in range(min(articles.count(), 30)):
+            article = articles.nth(idx)
+            article_text = article.inner_text(timeout=1200) or ""
+            if not text_similarity_match(content, article_text):
+                continue
+            for anchor in article.locator("a").all()[:80]:
+                href = canonical_facebook_post_url(anchor.get_attribute("href") or "")
+                if (href and _group_key_from_url(href) == group_key and
+                        re.search(r"/groups/[^/]+/(?:posts|permalink)/[^/]+/?$", urllib.parse.urlparse(href).path, re.I)):
+                    print(f"[PublicationIdentity] my_posted_search:match=1 url={href}")
+                    return href
+        # Facebook My Content may not expose post cards as role=article.
+        # The read-only "Xem trong nhóm" anchor carries ?multi_permalinks=<post_id>.
+        # Accept it only when a bounded ancestor also matches the expected content.
+        view_links = page.get_by_text("Xem trong nhóm", exact=True)
+        for idx in range(min(view_links.count(), 30)):
+            link = view_links.nth(idx)
+            anchor = link.locator("xpath=ancestor::a[1]")
+            if not anchor.count():
+                continue
+            href = canonical_facebook_post_url(anchor.first.get_attribute("href") or "")
+            if not href or _group_key_from_url(href) != group_key:
+                continue
+            for depth in range(1, 11):
+                try:
+                    candidate_text = link.locator("xpath=" + "/.." * depth).inner_text(timeout=800) or ""
+                except Exception:
+                    continue
+                if text_similarity_match(content, candidate_text):
+                    print(f"[PublicationIdentity] my_posted_search:match=1 source=view_in_group url={href}")
+                    return href
+        print("[PublicationIdentity] my_posted_search:match=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] my_posted_search:error={exc}")
+    return ""
+
+def _search_group_pending_by_content(page, target="", content="") -> bool:
+    """Read-only proof that the submitted content is in this Group's moderation queue."""
+    group_key = _group_key_from_url(target)
+    if not group_key or not content:
+        return False
+    pending_url = f"https://www.facebook.com/groups/{group_key}/my_pending_content/"
+    try:
+        print(f"[PublicationIdentity] pending_search:start group={group_key}")
+        page.goto(pending_url, wait_until="domcontentloaded", timeout=20000)
+        time.sleep(2.5)
+        body_text = page.locator("body").inner_text(timeout=4000) or ""
+        if text_similarity_match(content, body_text):
+            print("[PublicationIdentity] pending_search:match=1 source=body")
+            return True
+        try:
+            articles = page.locator("div[role='article']")
+            for idx in range(min(articles.count(), 30)):
+                article_text = articles.nth(idx).inner_text(timeout=800) or ""
+                if text_similarity_match(content, article_text):
+                    print(f"[PublicationIdentity] pending_search:match=1 source=article index={idx}")
+                    return True
+        except Exception:
+            pass
+        print("[PublicationIdentity] pending_search:match=0")
+    except Exception as exc:
+        print(f"[PublicationIdentity] pending_search:error={exc}")
+    return False
+
 def _resolve_share_reference_to_group_post(page, reference="", target="", content="") -> str:
     """Resolve a Facebook share reference to a concrete group post without mutating publication state."""
     ref = canonical_facebook_post_url(reference)
@@ -2456,9 +2531,19 @@ def scrape_post_link(page, target="", content="", account_id="") -> ActionResult
             if attempt < 2:
                 time.sleep(2.0)
 
-        # Feed ranking is not publication identity. For groups, use Facebook's
-        # own read-only group search before declaring the submitted post unverified.
+        # Prefer the current profile's own Facebook content surfaces over feed
+        # ranking/search indexing. Published requires a canonical Group permalink;
+        # pending is terminal evidence but never grants comment authority.
         if target_type == "group":
+            clean_href = _search_group_my_posted_by_content(page, target=target, content=content)
+            if clean_href:
+                return _published(clean_href, "Đã tìm thấy bài trong Nội dung của bạn / Đã đăng.")
+            if _search_group_pending_by_content(page, target=target, content=content):
+                record_posted_link(target, fallback_url, content, note="Đang chờ admin duyệt (pending-content match)",
+                                   account_id=account_id, url_type="group", publish_state="pending")
+                return ActionResult(True, "POST_PENDING", "Bài đăng đang chờ admin duyệt.", state="pending",
+                                    target_url=target, url_type="group",
+                                    metadata={"evidence_source": "facebook_my_pending_content"})
             clean_href = _search_group_post_by_content(page, target=target, content=content)
             if clean_href:
                 return _published(clean_href, "Đã tìm thấy bài bằng group-search và xác minh permalink.")
