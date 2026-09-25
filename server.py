@@ -86,7 +86,7 @@ AUTH_STATUS_FILE = str(DATA_DIR / "auth_status.json")
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_COMMANDS = {"auth", "group", "page", "thread", "interact", "scrape", "comment", "join-group", "create-page", "reconcile-post"}
 APP_VERSION = get_version()
-BUILD_TIME = "2026-09-25 v6.1.31"
+BUILD_TIME = "2026-09-25 v6.1.32"
 
 
 def app_build_info():
