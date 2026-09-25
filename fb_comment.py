@@ -114,6 +114,35 @@ def _wait_for_permalink_hydration(page, canonical_url, timeout_seconds=24.0):
     return False
 
 
+def _innermost_visible_dialogs(dialogs):
+    """Collapse nested Facebook dialog wrappers while preserving true sibling ambiguity."""
+    if len(dialogs) <= 1:
+        return dialogs
+    handles = []
+    for dialog in dialogs:
+        try:
+            handles.append(dialog.element_handle())
+        except Exception:
+            handles.append(None)
+    keep = []
+    for i, dialog in enumerate(dialogs):
+        contains_visible_child = False
+        for j, handle in enumerate(handles):
+            if i == j or handle is None:
+                continue
+            try:
+                if dialog.evaluate("(outer, inner) => outer !== inner && outer.contains(inner)", handle):
+                    contains_visible_child = True
+                    break
+            except Exception:
+                continue
+        if not contains_visible_child:
+            keep.append(dialog)
+    if keep and len(keep) != len(dialogs):
+        print(f"[Comment Resolver] nested_dialogs collapsed={len(dialogs)}->{len(keep)}")
+    return keep or dialogs
+
+
 def _locate_target_post_article(page, canonical_url):
     """Resolve the exact target-post DOM scope and fail closed on ambiguity."""
     current_url = getattr(page, "url", "") or ""
@@ -172,6 +201,7 @@ def _locate_target_post_article(page, canonical_url):
                 except Exception:
                     continue
             if visible_dialogs:
+                visible_dialogs = _innermost_visible_dialogs(visible_dialogs)
                 ranked = []
                 for dialog_idx, dialog in enumerate(visible_dialogs):
                     try:

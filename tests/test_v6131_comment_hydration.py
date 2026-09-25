@@ -38,3 +38,25 @@ def test_permalink_hydration_never_accepts_loading_shell_or_wrong_route():
     assert fb_comment._wait_for_permalink_hydration(splash, URL, timeout_seconds=0.01) is False
     wrong = _HydrationPage(ready_after_wait=True, exact_route=False)
     assert fb_comment._wait_for_permalink_hydration(wrong, URL, timeout_seconds=0.01) is False
+
+
+class _Dialog:
+    def __init__(self, name, contains=()):
+        self.name = name
+        self.contains = set(contains)
+    def element_handle(self):
+        return self
+    def evaluate(self, script, inner):
+        return inner.name in self.contains
+
+
+def test_nested_dialog_wrappers_collapse_to_innermost_modal():
+    outer = _Dialog("outer", contains={"inner"})
+    inner = _Dialog("inner")
+    assert fb_comment._innermost_visible_dialogs([outer, inner]) == [inner]
+
+
+def test_true_sibling_dialogs_remain_ambiguous():
+    left = _Dialog("left")
+    right = _Dialog("right")
+    assert fb_comment._innermost_visible_dialogs([left, right]) == [left, right]
