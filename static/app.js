@@ -328,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignSelector.innerHTML = '<option value="">Không gắn chiến dịch</option>';
         if (campaignReportList) campaignReportList.innerHTML = '';
         if (!campaigns.length) {
-            if (campaignReportList) campaignReportList.innerHTML = '<span class="empty">Ch?a c? chi?n d?ch.</span>';
+            if (campaignReportList) campaignReportList.innerHTML = '<span class="empty">Chưa có chiến dịch.</span>';
             return;
         }
         campaigns.forEach(campaign => {
