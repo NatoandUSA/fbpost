@@ -2205,8 +2205,17 @@ class V6118SearchLinklessModerationTests(unittest.TestCase):
     def test_executor_known_moderated_path_requires_submit_evidence(self):
         source = Path(__file__).resolve().parents[1].joinpath("services", "job_executor.py").read_text(encoding="utf-8")
         self.assertIn("known_moderated and is_submit_uncertain(structured_result)", source)
+        self.assertIn("current outcome remains SUBMITTED_UNVERIFIED", source)
+        guarded = source.split("if known_moderated and is_submit_uncertain(structured_result):", 1)[1].split("# A submit can succeed", 1)[0]
+        self.assertNotIn('"state": "pending"', guarded)
+        self.assertNotIn('"code": "POST_PENDING"', guarded)
         self.assertIn('reconcile_kind="moderation"', source)
         self.assertIn("defer_first_comment", source)
+        submit_idx = source.index("durable_reconcile_id = None")
+        wait_idx = source.index("for reconcile_attempt, wait_seconds", submit_idx)
+        enqueue_idx = source.index("ReconcileRepository().enqueue(", submit_idx)
+        self.assertLess(enqueue_idx, wait_idx)
+        self.assertIn("READ_ONLY / NO REPOST", source[submit_idx:wait_idx])
 
     def test_spinner_rejects_new_unverified_promotional_claims(self):
         import ai_spinner

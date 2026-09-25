@@ -1155,16 +1155,34 @@ def execute_automation_task(
         if ensure_submit_uncertain_from_runtime_marker(structured_result, submit_runtime_evidence["triggered"]):
             on_line("ACTION_RESULT:" + json.dumps(structured_result, ensure_ascii=False) + "\n")
         if known_moderated and is_submit_uncertain(structured_result):
-            structured_result.update({
-                "success": True, "state": "pending", "code": "POST_PENDING",
-                "message": "Facebook đã nhận submit; Group được ghi nhớ là cần quản trị viên duyệt."
-            })
-            ret = 0
+            # Historical moderation knowledge is context only. It must never
+            # upgrade the current attempt to POST_PENDING without current-run
+            # Facebook evidence. Keep SUBMITTED_UNVERIFIED so read-only
+            # reconciliation can establish published/pending truth.
+            on_line(
+                "[Group Moderation] Historical approval context present; "
+                "current outcome remains SUBMITTED_UNVERIFIED until current "
+                "Facebook pending evidence is observed.\n"
+            )
 
-        # A submit can succeed before Facebook exposes a permalink. Reconcile read-only
-        # before declaring the task unresolved; never resubmit the post here.
+        # A submit can succeed before Facebook exposes a permalink. Persist the
+        # durable read-only reconciliation authority *before* any cancellable
+        # wait so a user cancel after submit can never erase recovery evidence.
         submit_was_triggered = is_submit_uncertain(structured_result)
+        durable_reconcile_id = None
         if cmd in ("group", "page") and submit_was_triggered:
+            try:
+                durable_reconcile_id = ReconcileRepository().enqueue(
+                    target, task_content, curr_acc_id, queue_item_id or None,
+                    delay_seconds=30, origin_job_id=job_id
+                )
+                on_line(
+                    f"[Durable Reconcile] Scheduled before cancellable wait; "
+                    f"id={durable_reconcile_id[:10]}. READ_ONLY / NO REPOST.\n"
+                )
+            except Exception as recon_err:
+                on_line(f"[Durable Reconcile] Cannot persist recovery authority: {recon_err}\n")
+                batch_failed = True
             for reconcile_attempt, wait_seconds in enumerate((5,), 1):
                 on_line(f"🔎 [Immediate Reconcile] Facebook đã nhận submit nhưng chưa có permalink; chờ {wait_seconds}s rồi đối soát read-only một lần.\n")
                 if not sleep_with_cancel(wait_seconds):
@@ -1184,7 +1202,20 @@ def execute_automation_task(
                 if reconciled_state in ("published", "pending"):
                     structured_result.clear(); structured_result.update(reconcile_result)
                     ret = reconcile_ret
-                    on_line(f"✅ [Auto Reconcile] Đã xác định trạng thái Facebook: {reconciled_state}.\n")
+                    if durable_reconcile_id:
+                        try:
+                            ReconcileRepository().finish_attempt(
+                                durable_reconcile_id,
+                                reconciled_state,
+                                reconcile_result.get("result_url") or "",
+                                reconcile_result.get("message") or "",
+                            )
+                        except Exception as durable_finish_err:
+                            on_line(
+                                f"[Durable Reconcile] Immediate resolution could not close "
+                                f"record {durable_reconcile_id[:10]}: {durable_finish_err}\n"
+                            )
+                    on_line(f"[Auto Reconcile] Current Facebook evidence resolved state: {reconciled_state}.\n")
                     break
 
         action_state = str(structured_result.get("state") or "")
@@ -1339,14 +1370,8 @@ def execute_automation_task(
             batch_failed = True
             outcome = "failed_before_submit"
 
-        # Durable reconciliation is created only after a real post submit becomes uncertain.
-        if cmd in ("group", "page") and submit_was_triggered:
-            try:
-                rid = ReconcileRepository().enqueue(target, task_content, curr_acc_id, queue_item_id or None, delay_seconds=30, origin_job_id=job_id)
-                on_line(f"🕒 [Durable Reconcile] Đã lên lịch 30s → 2m → 10m · id={rid[:10]}. Không repost.\n")
-            except Exception as recon_err:
-                on_line(f"⚠️ [Durable Reconcile] Không thể ghi lịch đối soát: {recon_err}\n")
-                batch_failed = True
+        # Durable reconciliation was persisted immediately after submit uncertainty,
+        # before the cancellable immediate-reconcile wait above.
 
         # A scheduled reconcile advances its durable state after every read-only attempt and
         # synchronizes the linked Publication Queue without re-claiming/reposting the item.
