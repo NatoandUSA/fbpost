@@ -70,6 +70,6 @@ def test_duplicate_prebrowser_emits_typed_no_mutation_evidence(monkeypatch):
     assert result["metadata"]["external_mutation"] is False
     assert result["metadata"]["recent_state"] == "published"
     assert result["metadata"]["recent_url"].endswith("/1391877076350479")
-    # V31 contract is intentionally unchanged: unsupported 3h resolves fail-closed to 24h.
-    assert result["metadata"]["retry_window_hours"] == 24
+    # Current contract accepts 3h directly; duplicate evidence must preserve the resolved window.
+    assert result["metadata"]["retry_window_hours"] == 3
     assert "RUN_RESULT:finished\n" in lines

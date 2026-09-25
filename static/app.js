@@ -326,9 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
         campaignCache = campaigns;
         const selected = campaignSelector.value;
         campaignSelector.innerHTML = '<option value="">Không gắn chiến dịch</option>';
-        campaignReportList.innerHTML = '';
+        if (campaignReportList) campaignReportList.innerHTML = '';
         if (!campaigns.length) {
-            campaignReportList.innerHTML = '<span class="empty">Chưa có chiến dịch.</span>';
+            if (campaignReportList) campaignReportList.innerHTML = '<span class="empty">Ch?a c? chi?n d?ch.</span>';
             return;
         }
         campaigns.forEach(campaign => {
@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 approveAll.addEventListener('click', () => approveCampaignDrafts(campaign.id));
                 row.appendChild(approveAll);
             }
-            campaignReportList.appendChild(row);
+            if (campaignReportList) campaignReportList.appendChild(row);
         });
         campaignSelector.value = selected;
     }
@@ -369,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/campaigns');
             renderCampaigns(await response.json());
         } catch (_) {
-            campaignReportList.textContent = 'Không thể tải chiến dịch.';
+            if (campaignReportList) campaignReportList.textContent = 'Không thể tải chiến dịch.';
         }
     }
 
@@ -3265,8 +3265,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const skipDuplicateOpt = document.getElementById('skip-duplicate-24h-opt');
             payload.skipDuplicate24h = skipDuplicateOpt ? skipDuplicateOpt.checked : true;
             const duplicateWindowSelect = document.getElementById('duplicate-window-hours');
-            const duplicateWindowHours = Number(duplicateWindowSelect ? duplicateWindowSelect.value : 24);
-            payload.skipDuplicateHours = [4, 8, 12, 16, 24].includes(duplicateWindowHours) ? duplicateWindowHours : 24;
+            const duplicateWindowHours = Number.parseFloat(duplicateWindowSelect ? duplicateWindowSelect.value : '3');
+            payload.skipDuplicateHours = [0.5, 1, 2, 3, 4, 5, 6, 7, 8].includes(duplicateWindowHours) ? duplicateWindowHours : 3;
 
             const cleanExifOpt = document.getElementById('clean-exif-opt');
             payload.cleanExif = cleanExifOpt ? cleanExifOpt.checked : true;

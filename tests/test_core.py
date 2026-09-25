@@ -2124,15 +2124,15 @@ class V6010JoinDispatchRegressionTests(unittest.TestCase):
 class V617ConfigurablePostingFlowTests(unittest.TestCase):
     def test_duplicate_window_accepts_only_supported_choices(self):
         from services.job_executor import resolve_duplicate_window_hours
-        for hours in (4, 8, 12, 16, 24):
+        for hours in (0.5, 1, 2, 3, 4, 5, 6, 7, 8):
             self.assertEqual(resolve_duplicate_window_hours(hours), hours)
-        for invalid in (None, "", 3, 25, "bad"):
-            self.assertEqual(resolve_duplicate_window_hours(invalid), 24)
+        for invalid in (None, "", -1, 9, 12, 16, 24, 25, "bad"):
+            self.assertEqual(resolve_duplicate_window_hours(invalid), 3)
 
     def test_ui_wires_configurable_duplicate_window(self):
         html = Path("static/index.html").read_text(encoding="utf-8")
         app = Path("static/app.js").read_text(encoding="utf-8")
-        for hours in (4, 8, 12, 16, 24):
+        for hours in (0.5, 1, 2, 3, 4, 5, 6, 7, 8):
             self.assertIn(f'<option value="{hours}"', html)
         self.assertIn("payload.skipDuplicateHours", app)
         self.assertIn("hours=float(skip_duplicate_hours)", Path("services/job_executor.py").read_text(encoding="utf-8"))

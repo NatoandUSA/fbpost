@@ -29,7 +29,8 @@ from repositories.reconcile_repo import ReconcileRepository
 from repositories.moderation_repo import ModerationRepository
 from services.workflow_runtime import start_task as workflow_start_task, finish_task as workflow_finish_task, add_event as workflow_add_event
 
-DUPLICATE_WINDOW_HOURS = (4, 8, 12, 16, 24)
+DUPLICATE_WINDOW_HOURS = (0.5, 1, 2, 3, 4, 5, 6, 7, 8)
+DEFAULT_DUPLICATE_WINDOW_HOURS = 3
 SUBMIT_UNCERTAIN_CODES = frozenset(("POST_SUBMITTED_UNVERIFIED", "SUBMIT_TRIGGERED_UNVERIFIED"))
 POST_PENDING_CODES = frozenset(("POST_PENDING", "RECONCILE_PENDING"))
 SUBMIT_TRIGGERED_MARKER = "SUBMIT_TRIGGERED_MARKER:POST_BUTTON_ACTIVATED"
@@ -73,12 +74,15 @@ def is_post_pending(result: Dict[str, Any]) -> bool:
     )
 
 
-def resolve_duplicate_window_hours(value) -> int:
+def resolve_duplicate_window_hours(value) -> float:
     try:
-        hours = int(value)
+        hours = float(value)
     except (TypeError, ValueError):
-        return 24
-    return hours if hours in DUPLICATE_WINDOW_HOURS else 24
+        return DEFAULT_DUPLICATE_WINDOW_HOURS
+    return next(
+        (supported for supported in DUPLICATE_WINDOW_HOURS if hours == float(supported)),
+        DEFAULT_DUPLICATE_WINDOW_HOURS,
+    )
 
 
 def load_config():
