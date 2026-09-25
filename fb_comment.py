@@ -59,6 +59,61 @@ def _post_identity(url):
     m = re.search(r"[?&](?:story_fbid|fbid)=(\d+)", value, re.IGNORECASE)
     return {"group_id": "", "post_id": m.group(1)} if m else {"group_id": "", "post_id": ""}
 
+def _wait_for_permalink_hydration(page, canonical_url, timeout_seconds=24.0):
+    """Wait read-only for Facebook to leave the loading shell on an exact permalink route."""
+    ident = _post_identity(canonical_url)
+    post_id = (ident.get("post_id") or "").strip()
+    if not post_id:
+        return False
+    deadline = time.monotonic() + max(0.5, float(timeout_seconds))
+    while time.monotonic() < deadline:
+        try:
+            current_url = (getattr(page, "url", "") or "")
+            on_exact_route = post_id in current_url
+            exact_link = False
+            article_count = 0
+            ready_dialog = False
+            if on_exact_route:
+                try:
+                    exact_link = page.locator(f"a[href*='{post_id}']").count() > 0
+                except Exception:
+                    exact_link = False
+                try:
+                    article_count = page.locator("div[role='article']").count()
+                except Exception:
+                    article_count = 0
+                try:
+                    dialogs = page.locator("div[role='dialog']")
+                    for idx in range(min(dialogs.count(), 8)):
+                        dialog = dialogs.nth(idx)
+                        try:
+                            if not dialog.is_visible(timeout=250):
+                                continue
+                            text_len = len((dialog.inner_text(timeout=700) or "").strip())
+                            nested_articles = dialog.locator("div[role='article']").count()
+                            if text_len >= 80 or nested_articles:
+                                ready_dialog = True
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    ready_dialog = False
+            if on_exact_route and (exact_link or article_count or ready_dialog):
+                print(
+                    f"[Comment Resolver] hydration_ready=1 post_id={post_id} "
+                    f"link={int(exact_link)} articles={article_count} dialog={int(ready_dialog)}"
+                )
+                return True
+        except Exception:
+            pass
+        try:
+            page.wait_for_timeout(700)
+        except Exception:
+            time.sleep(0.7)
+    print(f"[Comment Resolver] hydration_ready=0 post_id={post_id}")
+    return False
+
+
 def _locate_target_post_article(page, canonical_url):
     """Resolve the exact target-post DOM scope and fail closed on ambiguity."""
     current_url = getattr(page, "url", "") or ""
@@ -390,7 +445,9 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 if "facebook.com" not in current or body_chars < 20:
                     raise
                 print(f"⚠️ Navigation timeout nhưng Facebook DOM đã tải ({body_chars} chars); tiếp tục tìm comment box: {nav_err}")
-            time.sleep(random.uniform(3.0, 5.0))
+            if account and account.get("type") == "gpm":
+                _wait_for_permalink_hydration(page, canonical_url, timeout_seconds=24.0)
+            time.sleep(random.uniform(1.0, 2.0))
 
             # Cuộn trang nhẹ nhàng mô phỏng hành vi đọc bài viết
             safe_mouse_wheel(page, 0, random.randint(250, 550))
@@ -405,7 +462,10 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
                 try:
                     print("[Comment Resolver] exact post not hydrated; one read-only reload recovery")
                     page.reload(wait_until="domcontentloaded", timeout=35000)
-                    page.wait_for_timeout(4500)
+                    if account and account.get("type") == "gpm":
+                        _wait_for_permalink_hydration(page, canonical_url, timeout_seconds=24.0)
+                    else:
+                        page.wait_for_timeout(4500)
                     post_scope = _locate_target_post_article(page, canonical_url)
                 except Exception as reload_err:
                     print(f"[Comment Resolver] reload recovery failed: {reload_err}")
@@ -576,7 +636,10 @@ def comment_on_post(post_url, comment_content, account_id=None, gpm_api_url=None
             if comment_verified and check_snippet:
                 try:
                     page.goto(canonical_url, wait_until="domcontentloaded", timeout=35000)
-                    page.wait_for_timeout(3500)
+                    if account and account.get("type") == "gpm":
+                        _wait_for_permalink_hydration(page, canonical_url, timeout_seconds=24.0)
+                    else:
+                        page.wait_for_timeout(3500)
                     persisted_scope = _locate_target_post_article(page, canonical_url)
                     if persisted_scope is not None:
                         persisted_roots = _comment_search_roots(page, persisted_scope, canonical_url)
