@@ -88,7 +88,7 @@ class ActivityRepository(BaseRepository):
                 """
                 SELECT id, url, target, content, note, account_id, status, created_at, url_type, publish_state
                 FROM posted_links
-                ORDER BY id DESC
+                ORDER BY created_at DESC, id DESC
                 LIMIT ?
                 """,
                 (limit,),
@@ -110,10 +110,21 @@ class ActivityRepository(BaseRepository):
     ) -> None:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self.transaction() as conn:
-            existing = conn.execute(
-                "SELECT id FROM posted_links WHERE target = ? AND url = ? ORDER BY id DESC LIMIT 1",
-                (target, post_url),
-            ).fetchone()
+            if publish_state == "published" and url_type == "post":
+                existing = conn.execute(
+                    "SELECT id FROM posted_links WHERE target = ? AND url = ? ORDER BY id DESC LIMIT 1",
+                    (target, post_url),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    """
+                    SELECT id FROM posted_links
+                    WHERE target = ? AND url = ? AND COALESCE(account_id,'') = COALESCE(?,'')
+                      AND content = ?
+                    ORDER BY created_at DESC, id DESC LIMIT 1
+                    """,
+                    (target, post_url, account_id, content),
+                ).fetchone()
             if not existing and publish_state == "published" and url_type == "post":
                 existing = conn.execute(
                     """
@@ -126,8 +137,8 @@ class ActivityRepository(BaseRepository):
                 ).fetchone()
             if existing:
                 conn.execute(
-                    "UPDATE posted_links SET url = ?, content = ?, note = ?, status = ?, url_type = ?, publish_state = ?, created_at = ? WHERE id = ?",
-                    (post_url, content, note, status, url_type, publish_state, now_str, existing["id"]),
+                    "UPDATE posted_links SET url = ?, content = ?, note = ?, account_id = ?, status = ?, url_type = ?, publish_state = ?, created_at = ? WHERE id = ?",
+                    (post_url, content, note, account_id, status, url_type, publish_state, now_str, existing["id"]),
                 )
             else:
                 conn.execute(
