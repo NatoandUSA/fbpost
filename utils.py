@@ -2279,6 +2279,8 @@ def _search_group_my_posted_by_content(page, target="", content="") -> str:
         # Facebook My Content may expose group-root anchors carrying
         # ?multi_permalinks=<post_id> instead of /posts/<id>. Accept only when a
         # bounded ancestor also matches the expected submitted content.
+        expected_words = re.sub(r"\s+", " ", content).strip().split()
+        leading_fingerprint = " ".join(expected_words[:12]).casefold()
         multi_links = page.locator("a[href*='multi_permalinks=']")
         for idx in range(min(multi_links.count(), 40)):
             anchor = multi_links.nth(idx)
@@ -2292,7 +2294,11 @@ def _search_group_my_posted_by_content(page, target="", content="") -> str:
                     candidate_text = node.inner_text(timeout=800) or ""
                 except Exception:
                     continue
-                if text_similarity_match(content, candidate_text):
+                candidate_norm = re.sub(r"\s+", " ", candidate_text).strip().casefold()
+                card_matches = text_similarity_match(content, candidate_text)
+                if not card_matches and len(leading_fingerprint) >= 40:
+                    card_matches = leading_fingerprint in candidate_norm
+                if card_matches:
                     print(f"[PublicationIdentity] my_posted_search:match=1 source=multi_permalinks url={canonical}")
                     return canonical
 
@@ -2303,7 +2309,17 @@ def _search_group_my_posted_by_content(page, target="", content="") -> str:
             anchor = link.locator("xpath=ancestor::a[1]")
             if not anchor.count():
                 continue
-            href = canonical_facebook_post_url(anchor.first.get_attribute("href") or "")
+            raw_href = anchor.first.get_attribute("href") or ""
+            href = canonical_facebook_post_url(raw_href)
+            if not href:
+                try:
+                    parsed = urllib.parse.urlparse(urllib.parse.urljoin("https://www.facebook.com", raw_href))
+                    post_ids = urllib.parse.parse_qs(parsed.query).get("multi_permalinks") or []
+                    post_id = str(post_ids[0]).strip() if post_ids else ""
+                    if post_id.isdigit():
+                        href = f"https://www.facebook.com/groups/{group_key}/posts/{post_id}"
+                except Exception:
+                    href = ""
             if not href or _group_key_from_url(href) != group_key:
                 continue
             for depth in range(1, 11):
@@ -2311,7 +2327,11 @@ def _search_group_my_posted_by_content(page, target="", content="") -> str:
                     candidate_text = link.locator("xpath=" + "/.." * depth).inner_text(timeout=800) or ""
                 except Exception:
                     continue
-                if text_similarity_match(content, candidate_text):
+                candidate_norm = re.sub(r"\s+", " ", candidate_text).strip().casefold()
+                card_matches = text_similarity_match(content, candidate_text)
+                if not card_matches and len(leading_fingerprint) >= 40:
+                    card_matches = leading_fingerprint in candidate_norm
+                if card_matches:
                     print(f"[PublicationIdentity] my_posted_search:match=1 source=view_in_group url={href}")
                     return href
         print("[PublicationIdentity] my_posted_search:match=0")

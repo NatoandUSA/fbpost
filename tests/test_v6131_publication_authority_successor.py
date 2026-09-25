@@ -187,3 +187,72 @@ def test_multi_permalink_rejects_wrong_group_or_invalid_id():
         "/groups/rivewdulichtphue/?multi_permalinks=not-a-post",
         "rivewdulichtphue",
     ) == ""
+
+
+class _ViewAnchor:
+    def __init__(self, href, card_text=""):
+        self.href = href
+        self.card_text = card_text
+    @property
+    def first(self): return self
+    def count(self): return 1
+    def get_attribute(self, name): return self.href if name == "href" else ""
+    def inner_text(self, timeout=None): return self.card_text
+    def locator(self, xpath):
+        if xpath.startswith("xpath="):
+            return _ViewParent(self.card_text)
+        raise AssertionError(xpath)
+
+
+class _ViewParent:
+    def __init__(self, text): self.text = text
+    def inner_text(self, timeout=None): return self.text
+
+
+class _ViewLink:
+    def __init__(self, href, card_text):
+        self.href = href
+        self.card_text = card_text
+    def locator(self, xpath):
+        if xpath == "xpath=ancestor::a[1]":
+            return _ViewAnchor(self.href)
+        if xpath.startswith("xpath="):
+            return _ViewParent(self.card_text)
+        raise AssertionError(xpath)
+
+
+class _ViewLinks:
+    def __init__(self, link): self.link = link
+    def count(self): return 1
+    def nth(self, idx): return self.link
+
+
+class _MyPostedPage:
+    def __init__(self, raw_href, card_text):
+        self.raw_href = raw_href
+        self.card_text = card_text
+    def goto(self, *args, **kwargs): return None
+    def locator(self, selector):
+        if selector == "div[role='article']":
+            return _EmptyArticles()
+        if selector == "a[href*='multi_permalinks=']":
+            return _ViewLinks(_ViewAnchor(self.raw_href, self.card_text))
+        raise AssertionError(selector)
+    def get_by_text(self, text, exact=False):
+        assert text == "Xem trong nhóm"
+        assert exact is True
+        return _ViewLinks(_ViewLink(self.raw_href, self.card_text))
+
+
+def test_my_posted_multi_permalink_card_resolves_canonical_post():
+    content = "Một chuyến Huế ngắn ngày sẽ dễ chịu hơn khi chỗ nghỉ riêng tư, gọn gàng và thuận tiện di chuyển. Phần sau bị Facebook thu gọn."
+    card = "Một chuyến Huế ngắn ngày sẽ dễ chịu hơn khi chỗ nghỉ riêng tư, gọn gàng và thuận tiện di chuyển.… Xem thêm Xem trong nhóm"
+    page = _MyPostedPage(
+        "/groups/810669206690066/?multi_permalinks=1729259494831028&__tn__=-R",
+        card,
+    )
+    with patch.object(utils.time, "sleep", return_value=None):
+        result = utils._search_group_my_posted_by_content(
+            page, "https://www.facebook.com/groups/810669206690066", content
+        )
+    assert result == "https://www.facebook.com/groups/810669206690066/posts/1729259494831028"
