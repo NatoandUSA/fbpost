@@ -899,6 +899,28 @@ def execute_automation_task(
                 labels={"published":"đã xuất bản","pending":"đang chờ Facebook duyệt","submitted_unverified":"có thể đã gửi nhưng chưa xác minh permalink"}
                 on_line(f"\n========== [Mục tiêu {i+1}/{total}] ==========\n")
                 on_line(f"⏭️ [Khóa retry {skip_duplicate_hours}h] {target}: {labels.get(recent_state,recent_state)} lúc {posted_at} ({hours_ago}h trước). Không gửi lại tự động.\n")
+                duplicate_result = {
+                    "success": False,
+                    "code": "SKIPPED_DUPLICATE",
+                    "message": f"Duplicate protection active for {skip_duplicate_hours}h; no submit attempted.",
+                    "state": "skipped_duplicate",
+                    "target_url": target,
+                    "result_url": "",
+                    "url_type": "unknown",
+                    "metadata": {
+                        "retry_window_hours": skip_duplicate_hours,
+                        "recent_state": recent_state,
+                        "posted_at": posted_at,
+                        "hours_ago": hours_ago,
+                        "recent_url": recent_row.get("url") or recent_row.get("result_url") or "",
+                        "prebrowser_noop": True,
+                        "external_mutation": False,
+                    },
+                    "data": {},
+                }
+                # Evidence-only durability: the duplicate decision and routing remain unchanged.
+                # JobManager persists typed ACTION_RESULT even though ProcessRunner/browser is never opened.
+                on_line("ACTION_RESULT:" + json.dumps(duplicate_result, ensure_ascii=False) + "\n")
                 if queue_item_id and recent_state in ("published", "pending", "submitted_unverified"):
                     synced_state = {"published": "published", "pending": "pending", "submitted_unverified": "unverified"}[recent_state]
                     try:
